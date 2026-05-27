@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">QCRC logo</title>
+  <desc id="desc">QCRC logo with orange crown, black C, crossed oars, and QCRC wordmark.</desc>
+  <defs>
+    <style>
+      .orange { fill: #f94b23; stroke: #f94b23; }
+      .black-fill { fill: #0a0a0a; }
+      .black-stroke { stroke: #0a0a0a; stroke-linecap: round; }
+      .white { fill: #ffffff; stroke: #0a0a0a; stroke-width: 1; stroke-linejoin: round; }
+      .word { font: 900 30px 'Avenir Next', 'Trebuchet MS', sans-serif; letter-spacing: 1px; }
+    </style>
+  </defs>
+
+  <g transform="translate(128 128)">
+    <g transform="translate(0 -28)">
+      <circle class="orange" cx="-52" cy="-66" r="8" />
+      <path
+        class="orange"
+        d="M-95 -32c0-16 12-29 28-29 9 0 17 4 23 11 6-10 17-16 29-16 12 0 22 6 28 15 6-9 16-15 28-15 19 0 33 15 33 35 0 11-4 20-11 27l-11-9c4-5 7-10 7-17 0-10-7-18-17-18-12 0-19 9-19 22v20h-15v-22c0-12-8-20-18-20-12 0-19 9-19 22v21h-14v-22c0-12-8-20-18-20-11 0-20 9-20 20 0 6 3 12 8 16l-11 10c-10-7-16-18-16-31z" />
+      <path class="orange" d="M-90 -4 68 -54" stroke="#f94b23" stroke-width="11" stroke-linecap="round" fill="none" />
+      <path
+        class="black-fill"
+        d="M11 -10c-31 0-57 25-57 57s26 57 57 57c16 0 31-6 43-18l-18-16c-7 7-15 11-24 11-19 0-33-15-33-34s14-34 33-34c9 0 18 4 25 11l18-13C43 -4 28 -10 11 -10z" />
+    </g>
+
+    <g transform="translate(0 20)">
+      <line class="black-stroke" x1="-100" y1="20" x2="0" y2="-24" stroke-width="5.5" />
+      <line class="black-stroke" x1="100" y1="20" x2="0" y2="-24" stroke-width="5.5" />
+      <polygon class="orange" points="-114,11 -96,2 -82,11 -100,19" />
+      <polygon class="orange" points="114,11 96,2 82,11 100,19" />
+      <polygon class="white" points="-100,19 -82,11 -74,16 -92,24" />
+      <polygon class="white" points="100,19 82,11 74,16 92,24" />
+    </g>
+
+    <text class="orange word" x="0" y="96" text-anchor="middle">QCRC</text>
+  </g>
+</svg>
