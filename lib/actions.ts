@@ -79,6 +79,41 @@ function normalizeCsvDate(value: string | undefined) {
   return raw || null;
 }
 
+function normalizeMeetupTime(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return "";
+
+  const twentyFourHourMatch = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHourMatch) {
+    const hour = Number(twentyFourHourMatch[1]);
+    const minute = Number(twentyFourHourMatch[2]);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+  }
+
+  const twelveHourMatch = raw.match(/^(\d{1,2})(?::?(\d{2}))?\s*([ap]m)$/);
+  if (twelveHourMatch) {
+    const hourRaw = Number(twelveHourMatch[1]);
+    const minute = Number(twelveHourMatch[2] ?? "0");
+    const meridiem = twelveHourMatch[3];
+    if (hourRaw >= 1 && hourRaw <= 12 && minute >= 0 && minute <= 59) {
+      const normalizedHour = hourRaw % 12 + (meridiem === "pm" ? 12 : 0);
+      return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+  }
+
+  const hourOnlyMatch = raw.match(/^(\d{1,2})$/);
+  if (hourOnlyMatch) {
+    const hour = Number(hourOnlyMatch[1]);
+    if (hour >= 0 && hour <= 23) {
+      return `${String(hour).padStart(2, "0")}:00`;
+    }
+  }
+
+  throw new Error("Please enter times like 6:00, 06:00, 6am, or 6:30pm.");
+}
+
 type WeekdayNumber = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 function weekdayNumberFromCode(value: string): WeekdayNumber | null {
@@ -1245,8 +1280,8 @@ export async function saveRowingMeetupMembershipAction(formData: FormData) {
 export async function addRowingMeetupAvailabilityAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const weekday = Number(formData.get("weekday") ?? -1);
-  const startTime = String(formData.get("start_time") ?? "");
-  const endTime = String(formData.get("end_time") ?? "");
+  const startTime = normalizeMeetupTime(formData.get("start_time"));
+  const endTime = normalizeMeetupTime(formData.get("end_time"));
 
   const { data: membership, error: membershipError } = await supabase
     .from("rowing_meetup_members")

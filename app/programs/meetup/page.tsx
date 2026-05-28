@@ -11,6 +11,39 @@ import {
 import { getRowingMeetupState } from "@/lib/queries";
 
 const weekdayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const meetupTimeOptions = [
+  "5:00 AM",
+  "5:30 AM",
+  "6:00 AM",
+  "6:30 AM",
+  "7:00 AM",
+  "7:30 AM",
+  "8:00 AM",
+  "8:30 AM",
+  "9:00 AM",
+  "9:30 AM",
+  "10:00 AM",
+  "10:30 AM",
+  "11:00 AM",
+  "11:30 AM",
+  "12:00 PM",
+  "12:30 PM",
+  "1:00 PM",
+  "1:30 PM",
+  "2:00 PM",
+  "2:30 PM",
+  "3:00 PM",
+  "3:30 PM",
+  "4:00 PM",
+  "4:30 PM",
+  "5:00 PM",
+  "5:30 PM",
+  "6:00 PM",
+  "6:30 PM",
+  "7:00 PM",
+  "7:30 PM",
+  "8:00 PM",
+];
 
 function formatTimeLabel(value: string) {
   const [hourRaw, minuteRaw] = value.split(":");
@@ -81,6 +114,11 @@ export default async function RowingMeetupPage() {
           <Card className="stack">
             <h3>My Availability</h3>
             <form action={addRowingMeetupAvailabilityAction} className="form-grid">
+              <datalist id="meetup-time-options">
+                {meetupTimeOptions.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
               <div className="row">
                 <Field label="Weekday">
                   <select name="weekday" defaultValue="1">
@@ -92,12 +130,25 @@ export default async function RowingMeetupPage() {
                   </select>
                 </Field>
                 <Field label="Start Time">
-                  <input name="start_time" type="time" required />
+                  <input
+                    name="start_time"
+                    list="meetup-time-options"
+                    placeholder="7:00 AM"
+                    autoComplete="off"
+                    required
+                  />
                 </Field>
                 <Field label="End Time">
-                  <input name="end_time" type="time" required />
+                  <input
+                    name="end_time"
+                    list="meetup-time-options"
+                    placeholder="8:30 AM"
+                    autoComplete="off"
+                    required
+                  />
                 </Field>
               </div>
+              <p className="muted">Pick a suggested time or type a quick value like 6, 6:30, 6am, or 6:30pm.</p>
               <Button type="submit" variant="secondary">
                 Add Availability Slot
               </Button>
