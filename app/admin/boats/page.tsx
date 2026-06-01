@@ -3,9 +3,14 @@ import { getBoats } from "@/lib/queries";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { addBoatAdminAction, updateBoatAdminAction } from "@/lib/actions";
+import { Card } from "@/components/ui/Card";
+import { FlashNotice } from "@/components/ui/FlashNotice";
+import { addBoatAdminAction, importBoatsCsvAdminAction, updateBoatAdminAction } from "@/lib/actions";
 
-export default async function AdminBoatsPage() {
+type SearchParams = Promise<{ import_status?: string; import_message?: string }>;
+
+export default async function AdminBoatsPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
   const boats = await getBoats();
 
   return (
@@ -13,6 +18,35 @@ export default async function AdminBoatsPage() {
       <TopNav />
       <main className="stack">
         <PageTitle title="Admin: Boats" subtitle="Add boats and set out-of-service status." />
+
+        {params.import_status && params.import_message ? (
+          <FlashNotice
+            status={params.import_status === "success" ? "success" : "error"}
+            message={params.import_message}
+          />
+        ) : null}
+
+        <form action={importBoatsCsvAdminAction} className="card form-grid">
+          <h3>Import Boats from Spreadsheet</h3>
+          <p className="muted">
+            Upload a CSV exported from Excel or Google Sheets. Existing boats are matched by boat name and updated.
+            New boat names are added automatically.
+          </p>
+          <Field label="CSV File">
+            <input name="file" type="file" accept=".csv,text/csv" required />
+          </Field>
+          <Card subtle className="stack">
+            <strong>Expected column names</strong>
+            <p className="muted">
+              `name`, `boat_number`, `boat_class_id`, `boat_type`, `photo_url`, `required_skill_level`,
+              `weight_class`, `status`, `rigging_notes`
+            </p>
+            <p className="muted">
+              `boat_class_id` defaults to `1x` if blank. `status` accepts `available`, `maintenance`, or `locked`.
+            </p>
+          </Card>
+          <Button type="submit">Import CSV</Button>
+        </form>
 
         <form action={addBoatAdminAction} className="card form-grid">
           <h3>Add Boat</h3>
