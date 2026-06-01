@@ -8,6 +8,19 @@ import { Button } from "@/components/ui/Button";
 const TRACKING_STORAGE_KEY = "rowing-live-sharing-reservation-id";
 const INTENT_STORAGE_KEY = "rowing-live-sharing-intent-reservation-id";
 
+function geolocationErrorMessage(error: GeolocationPositionError) {
+  if (error.code === error.PERMISSION_DENIED) {
+    return "Location access was denied. You can still launch without live tracking.";
+  }
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return "Your location is currently unavailable. Check Safari location permissions and macOS Location Services, then try again.";
+  }
+  if (error.code === error.TIMEOUT) {
+    return "Location lookup timed out. Safari may still be trying to get a GPS fix. You can retry or continue without live tracking.";
+  }
+  return error.message || "Location access was blocked or unavailable.";
+}
+
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
   const canCheckin = reservation.status === "checked_out";
@@ -31,15 +44,19 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
       await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 15000,
+          timeout: 30000,
           maximumAge: 0,
         });
       });
       window.localStorage.setItem(INTENT_STORAGE_KEY, reservation.id);
       event.currentTarget.submit();
-    } catch {
+    } catch (error) {
+      const detail =
+        typeof error === "object" && error && "code" in error
+          ? geolocationErrorMessage(error as GeolocationPositionError)
+          : "Location access was blocked or unavailable.";
       const shouldContinue = window.confirm(
-        "Location access was blocked or unavailable. Launch anyway without live tracking?",
+        `${detail}\n\nLaunch anyway without live tracking?`,
       );
       if (shouldContinue) {
         continueWithoutTracking();
