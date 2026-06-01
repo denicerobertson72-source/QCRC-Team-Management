@@ -1,6 +1,12 @@
+"use client";
+
+import type { FormEvent } from "react";
 import { checkinAction, checkoutAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
+
+const TRACKING_STORAGE_KEY = "rowing-live-sharing-reservation-id";
+const INTENT_STORAGE_KEY = "rowing-live-sharing-intent-reservation-id";
 
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
@@ -8,12 +14,54 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
   if (!canCheckout && !canCheckin) return null;
 
+  async function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!navigator.geolocation) {
+      window.localStorage.removeItem(INTENT_STORAGE_KEY);
+      return;
+    }
+
+    event.preventDefault();
+
+    const continueWithoutTracking = () => {
+      window.localStorage.removeItem(INTENT_STORAGE_KEY);
+      event.currentTarget.submit();
+    };
+
+    try {
+      await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        });
+      });
+      window.localStorage.setItem(INTENT_STORAGE_KEY, reservation.id);
+      event.currentTarget.submit();
+    } catch {
+      const shouldContinue = window.confirm(
+        "Location access was blocked or unavailable. Launch anyway without live tracking?",
+      );
+      if (shouldContinue) {
+        continueWithoutTracking();
+      }
+    }
+  }
+
+  function handleCheckinSubmit() {
+    if (window.localStorage.getItem(TRACKING_STORAGE_KEY) === reservation.id) {
+      window.localStorage.removeItem(TRACKING_STORAGE_KEY);
+    }
+    if (window.localStorage.getItem(INTENT_STORAGE_KEY) === reservation.id) {
+      window.localStorage.removeItem(INTENT_STORAGE_KEY);
+    }
+  }
+
   return (
     <details className="card-subtle">
       <summary>{canCheckout ? "Show launching options" : "Show return options"}</summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
         {canCheckout ? (
-          <form action={checkoutAction} className="inline-form">
+          <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
             <select name="location" defaultValue={reservation.checkout_location ?? "OH"} required>
               <option value="OH">OH</option>
@@ -28,7 +76,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         ) : null}
 
         {canCheckin ? (
-          <form action={checkinAction} className="inline-form">
+          <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
             <select name="gate_status" defaultValue={reservation.gate_status ?? "locked"} required>
               <option value="locked">Gate locked</option>

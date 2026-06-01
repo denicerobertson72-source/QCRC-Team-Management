@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { formatEasternDateTime } from "@/lib/time";
+import { ensureProfile } from "@/lib/auth";
+import { ReservationTrackingManager } from "@/components/reservations/ReservationTrackingManager";
 
 type SearchParams = Promise<{
   reservation_status?: string;
@@ -18,7 +20,7 @@ function formatDateTime(value: string) {
 
 export default async function ReservationsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const reservations = await getMyReservations();
+  const [reservations, { user }] = await Promise.all([getMyReservations(), ensureProfile()]);
   const activeCount = reservations.filter((reservation) => reservation.status === "reserved" || reservation.status === "checked_out").length;
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;
   const reservationMessage = params.reservation_message ?? "";
@@ -41,6 +43,10 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
         </section>
 
         {reservationStatus && reservationMessage ? <FlashNotice status={reservationStatus} message={reservationMessage} /> : null}
+        <ReservationTrackingManager
+          currentUserId={user.id}
+          reservations={reservations.map((reservation) => ({ id: reservation.id, status: reservation.status }))}
+        />
 
         <div className="stack">
           {reservations.length === 0 ? <Card subtle>No reservations yet.</Card> : null}
