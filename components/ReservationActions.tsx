@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { FormEvent } from "react";
 import { checkinAction, checkoutAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
@@ -39,10 +40,16 @@ function describeUnknownLocationError(error: unknown) {
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
   const canCheckin = reservation.status === "checked_out";
+  const resumeSubmitRef = useRef(false);
 
   if (!canCheckout && !canCheckin) return null;
 
   async function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
+    if (resumeSubmitRef.current) {
+      resumeSubmitRef.current = false;
+      return;
+    }
+
     if (!navigator.geolocation) {
       window.localStorage.removeItem(INTENT_STORAGE_KEY);
       return;
@@ -53,7 +60,8 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
     const continueWithoutTracking = () => {
       window.localStorage.removeItem(INTENT_STORAGE_KEY);
-      form.submit();
+      resumeSubmitRef.current = true;
+      form.requestSubmit();
     };
 
     try {
@@ -65,7 +73,8 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         });
       });
       window.localStorage.setItem(INTENT_STORAGE_KEY, reservation.id);
-      form.submit();
+      resumeSubmitRef.current = true;
+      form.requestSubmit();
     } catch (error) {
       const detail =
         typeof error === "object" && error && "code" in error
