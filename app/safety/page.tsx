@@ -13,6 +13,9 @@ export default async function SafetyPage() {
     getPublishedSafetyResources(),
     ensureProfile(),
   ]);
+  const staticMapUrl =
+    process.env.MAPBOX_STATIC_IMAGE_URL ?? process.env.NEXT_PUBLIC_MAPBOX_STATIC_IMAGE_URL ?? null;
+  const weatherRadarUrl = process.env.WEATHER_RADAR_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_URL ?? null;
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const canManageSafety = profile?.role === "admin" || profile?.role === "coach" || profile?.role === "equipment_manager";
   const overdue = onWater.filter((entry) => entry.is_overdue);
@@ -76,6 +79,40 @@ export default async function SafetyPage() {
         </Card>
 
         <div className="grid">
+          <Card className="stack">
+            <div className="page-title">
+              <h3>River Map & Radar</h3>
+              <span className="muted">Quick visual reference for route context and weather.</span>
+            </div>
+            {staticMapUrl ? (
+              <a href={staticMapUrl} target="_blank" rel="noreferrer">
+                <img
+                  src={staticMapUrl}
+                  alt="Static map of the rowing route area"
+                  style={{ width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }}
+                />
+              </a>
+            ) : (
+              <p className="muted">Map preview is not configured yet.</p>
+            )}
+            <div className="quick-links">
+              {staticMapUrl ? (
+                <a href={staticMapUrl} target="_blank" rel="noreferrer" className="cta-link">
+                  Open Static Map
+                </a>
+              ) : null}
+              {weatherRadarUrl ? (
+                <a href={weatherRadarUrl} target="_blank" rel="noreferrer" className="cta-link">
+                  Open Weather Radar
+                </a>
+              ) : null}
+            </div>
+            <p className="muted">
+              Active launches: {onWater.length}. Overdue boats: {overdue.length}. Use the radar before launch and during
+              changing conditions.
+            </p>
+          </Card>
+
           <Card className="stack">
             <h3>Currently On The Water</h3>
             {onWater.length === 0 ? <p className="muted">No active launches right now.</p> : null}
