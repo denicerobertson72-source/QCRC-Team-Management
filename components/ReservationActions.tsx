@@ -21,6 +21,21 @@ function geolocationErrorMessage(error: GeolocationPositionError) {
   return error.message || "Location access was blocked or unavailable.";
 }
 
+function describeUnknownLocationError(error: unknown) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  if (typeof error === "object" && error) {
+    const details = {
+      name: "name" in error ? String((error as { name?: unknown }).name ?? "") : "",
+      code: "code" in error ? String((error as { code?: unknown }).code ?? "") : "",
+      message: "message" in error ? String((error as { message?: unknown }).message ?? "") : "",
+    };
+    return JSON.stringify(details);
+  }
+  return String(error);
+}
+
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
   const canCheckin = reservation.status === "checked_out";
@@ -54,7 +69,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
       const detail =
         typeof error === "object" && error && "code" in error
           ? geolocationErrorMessage(error as GeolocationPositionError)
-          : "Location access was blocked or unavailable.";
+          : `Location access was blocked or unavailable. Debug: ${describeUnknownLocationError(error)}`;
       const shouldContinue = window.confirm(
         `${detail}\n\nLaunch anyway without live tracking?`,
       );
