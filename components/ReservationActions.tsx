@@ -49,10 +49,11 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     }
 
     event.preventDefault();
+    const form = event.currentTarget;
 
     const continueWithoutTracking = () => {
       window.localStorage.removeItem(INTENT_STORAGE_KEY);
-      event.currentTarget.submit();
+      form.submit();
     };
 
     try {
@@ -64,7 +65,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         });
       });
       window.localStorage.setItem(INTENT_STORAGE_KEY, reservation.id);
-      event.currentTarget.submit();
+      form.submit();
     } catch (error) {
       const detail =
         typeof error === "object" && error && "code" in error
