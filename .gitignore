@@ -2,3 +2,4 @@
 .next/
 node_modules/
 .env.local
+QCRC-App-scaffold/
