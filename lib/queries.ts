@@ -363,7 +363,7 @@ export async function getSafetyDashboard() {
   const { supabase } = await ensureProfile();
   const { data, error } = await supabase
     .from("reservations")
-    .select("id, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, boats(name), profiles!reservations_created_by_fkey(full_name)")
+    .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, boats(name), profiles!reservations_created_by_fkey(full_name)")
     .in("status", ["checked_out", "checked_in"])
     .order("checked_out_at", { ascending: false })
     .limit(40);
@@ -378,6 +378,7 @@ export async function getSafetyDashboard() {
 
     return {
       id: row.id,
+      created_by: row.created_by,
       boat_name: boat?.name ?? row.id,
       rower_name: profile?.full_name ?? "Unknown",
       start_time: row.start_time,

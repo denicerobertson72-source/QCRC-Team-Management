@@ -54,6 +54,7 @@ export type Reservation = {
 export type SafetyEntry = {
   id: string;
   boat_name: string;
+  created_by?: string;
   rower_name: string;
   start_time: string;
   end_time: string;
@@ -64,6 +65,35 @@ export type SafetyEntry = {
   gate_status: string | null;
   status: string;
   is_overdue: boolean;
+};
+
+export type RowingLocationPoint = {
+  id: string;
+  reservation_id: string;
+  member_id: string;
+  latitude: number;
+  longitude: number;
+  accuracy_meters: number | null;
+  recorded_at: string;
+};
+
+export type SafetyTrackedOuting = {
+  reservation_id: string;
+  member_id: string;
+  boat_name: string;
+  rower_name: string;
+  checked_out_at: string | null;
+  checkout_location: string | null;
+  river_direction: string | null;
+  is_overdue: boolean;
+  latest_point: RowingLocationPoint | null;
+  track_points: RowingLocationPoint[];
+};
+
+export type SafetyLiveMapState = {
+  can_manage_all_boats: boolean;
+  my_active_reservation_id: string | null;
+  outings: SafetyTrackedOuting[];
 };
 
 export type SafetyResource = {

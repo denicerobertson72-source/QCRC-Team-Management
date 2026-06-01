@@ -6,6 +6,8 @@ import { getPublishedSafetyResources, getSafetyDashboard } from "@/lib/queries";
 import { formatEasternDateTime } from "@/lib/time";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { ensureProfile } from "@/lib/auth";
+import { getSafetyLiveMapState } from "@/lib/safety-live";
+import { SafetyLiveMap } from "@/components/safety/SafetyLiveMap";
 
 export default async function SafetyPage() {
   const [{ onWater, recentLog }, resources, { supabase, user }] = await Promise.all([
@@ -13,12 +15,19 @@ export default async function SafetyPage() {
     getPublishedSafetyResources(),
     ensureProfile(),
   ]);
-  const staticMapUrl =
-    process.env.MAPBOX_STATIC_IMAGE_URL ?? process.env.NEXT_PUBLIC_MAPBOX_STATIC_IMAGE_URL ?? null;
-  const weatherRadarUrl = process.env.WEATHER_RADAR_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_URL ?? null;
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const canManageSafety = profile?.role === "admin" || profile?.role === "coach" || profile?.role === "equipment_manager";
   const overdue = onWater.filter((entry) => entry.is_overdue);
+  const visibleOnWater = canManageSafety ? onWater : onWater.filter((entry) => entry.created_by === user.id);
+  const visibleOverdue = canManageSafety ? overdue : overdue.filter((entry) => entry.created_by === user.id);
+  const visibleRecentLog = canManageSafety ? recentLog : recentLog.filter((entry) => entry.created_by === user.id);
+  const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
+  const mapboxAccessToken = process.env.MAPBOX_ACCESS_TOKEN ?? process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? null;
+  const mapboxStyleUrl = process.env.MAPBOX_STYLE_URL ?? process.env.NEXT_PUBLIC_MAPBOX_STYLE_URL ?? null;
+  const weatherRadarTileUrl =
+    process.env.WEATHER_RADAR_TILE_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_URL ?? null;
+  const weatherRadarAttribution =
+    process.env.WEATHER_RADAR_ATTRIBUTION ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_ATTRIBUTION ?? null;
 
   return (
     <>
@@ -81,42 +90,23 @@ export default async function SafetyPage() {
         <div className="grid">
           <Card className="stack">
             <div className="page-title">
-              <h3>River Map & Radar</h3>
-              <span className="muted">Quick visual reference for route context and weather.</span>
+              <h3>Live Outing Map</h3>
+              <span className="muted">Track your active outing or monitor all active boats if you manage safety.</span>
             </div>
-            {staticMapUrl ? (
-              <a href={staticMapUrl} target="_blank" rel="noreferrer">
-                <img
-                  src={staticMapUrl}
-                  alt="Static map of the rowing route area"
-                  style={{ width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }}
-                />
-              </a>
-            ) : (
-              <p className="muted">Map preview is not configured yet.</p>
-            )}
-            <div className="quick-links">
-              {staticMapUrl ? (
-                <a href={staticMapUrl} target="_blank" rel="noreferrer" className="cta-link">
-                  Open Static Map
-                </a>
-              ) : null}
-              {weatherRadarUrl ? (
-                <a href={weatherRadarUrl} target="_blank" rel="noreferrer" className="cta-link">
-                  Open Weather Radar
-                </a>
-              ) : null}
-            </div>
-            <p className="muted">
-              Active launches: {onWater.length}. Overdue boats: {overdue.length}. Use the radar before launch and during
-              changing conditions.
-            </p>
+            <SafetyLiveMap
+              initialState={liveMapState}
+              currentUserId={user.id}
+              mapboxAccessToken={mapboxAccessToken}
+              mapboxStyleUrl={mapboxStyleUrl}
+              weatherRadarTileUrl={weatherRadarTileUrl}
+              weatherRadarAttribution={weatherRadarAttribution}
+            />
           </Card>
 
           <Card className="stack">
             <h3>Currently On The Water</h3>
-            {onWater.length === 0 ? <p className="muted">No active launches right now.</p> : null}
-            {onWater.map((entry) => (
+            {visibleOnWater.length === 0 ? <p className="muted">No active launches right now.</p> : null}
+            {visibleOnWater.map((entry) => (
               <Card key={entry.id} subtle>
                 <div className="page-title">
                   <h4>{entry.boat_name}</h4>
@@ -136,8 +126,8 @@ export default async function SafetyPage() {
 
           <Card className="stack">
             <h3>Overdue Boats</h3>
-            {overdue.length === 0 ? <p className="muted">No overdue boats.</p> : null}
-            {overdue.map((entry) => (
+            {visibleOverdue.length === 0 ? <p className="muted">No overdue boats.</p> : null}
+            {visibleOverdue.map((entry) => (
               <Card key={entry.id} subtle>
                 <h4>{entry.boat_name}</h4>
                 <p className="muted">{entry.rower_name}</p>
@@ -149,7 +139,7 @@ export default async function SafetyPage() {
 
         <Card className="stack">
           <h3>Recent Launch / Return Log</h3>
-          {recentLog.length === 0 ? <p className="muted">No launch or return activity yet.</p> : null}
+          {visibleRecentLog.length === 0 ? <p className="muted">No launch or return activity yet.</p> : null}
           <table>
             <thead>
               <tr>
@@ -163,7 +153,7 @@ export default async function SafetyPage() {
               </tr>
             </thead>
             <tbody>
-              {recentLog.map((entry) => (
+              {visibleRecentLog.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.boat_name}</td>
                   <td>{entry.rower_name}</td>
