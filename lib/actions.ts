@@ -114,6 +114,12 @@ function normalizeMeetupTime(value: FormDataEntryValue | null) {
   throw new Error("Please enter times like 6:00, 06:00, 6am, or 6:30pm.");
 }
 
+function resolveMeetupTime(formData: FormData, inputName: string, presetName: string) {
+  const typedValue = String(formData.get(inputName) ?? "").trim();
+  const presetValue = String(formData.get(presetName) ?? "").trim();
+  return normalizeMeetupTime(typedValue || presetValue);
+}
+
 type WeekdayNumber = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 function weekdayNumberFromCode(value: string): WeekdayNumber | null {
@@ -1280,8 +1286,8 @@ export async function saveRowingMeetupMembershipAction(formData: FormData) {
 export async function addRowingMeetupAvailabilityAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const weekday = Number(formData.get("weekday") ?? -1);
-  const startTime = normalizeMeetupTime(formData.get("start_time"));
-  const endTime = normalizeMeetupTime(formData.get("end_time"));
+  const startTime = resolveMeetupTime(formData, "start_time", "start_time_preset");
+  const endTime = resolveMeetupTime(formData, "end_time", "end_time_preset");
 
   const { data: membership, error: membershipError } = await supabase
     .from("rowing_meetup_members")

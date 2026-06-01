@@ -114,11 +114,6 @@ export default async function RowingMeetupPage() {
           <Card className="stack">
             <h3>My Availability</h3>
             <form action={addRowingMeetupAvailabilityAction} className="form-grid">
-              <datalist id="meetup-time-options">
-                {meetupTimeOptions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
               <div className="row">
                 <Field label="Weekday">
                   <select name="weekday" defaultValue="1">
@@ -130,25 +125,31 @@ export default async function RowingMeetupPage() {
                   </select>
                 </Field>
                 <Field label="Start Time">
-                  <input
-                    name="start_time"
-                    list="meetup-time-options"
-                    placeholder="7:00 AM"
-                    autoComplete="off"
-                    required
-                  />
+                  <div className="stack" style={{ gap: "0.55rem" }}>
+                    <select name="start_time_preset" defaultValue="7:00 AM">
+                      {meetupTimeOptions.map((option) => (
+                        <option key={`start-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <input name="start_time" placeholder="Or type a custom time" autoComplete="off" />
+                  </div>
                 </Field>
                 <Field label="End Time">
-                  <input
-                    name="end_time"
-                    list="meetup-time-options"
-                    placeholder="8:30 AM"
-                    autoComplete="off"
-                    required
-                  />
+                  <div className="stack" style={{ gap: "0.55rem" }}>
+                    <select name="end_time_preset" defaultValue="8:30 AM">
+                      {meetupTimeOptions.map((option) => (
+                        <option key={`end-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <input name="end_time" placeholder="Or type a custom time" autoComplete="off" />
+                  </div>
                 </Field>
               </div>
-              <p className="muted">Pick a suggested time or type a quick value like 6, 6:30, 6am, or 6:30pm.</p>
+              <p className="muted">Use the dropdowns as-is, or type a custom time like 6, 6:30, 6am, or 6:30pm.</p>
               <Button type="submit" variant="secondary">
                 Add Availability Slot
               </Button>
