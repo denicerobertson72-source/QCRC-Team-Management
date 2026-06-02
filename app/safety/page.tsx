@@ -93,6 +93,10 @@ export default async function SafetyPage() {
               <h3>Live Outing Map</h3>
               <span className="muted">Track your active outing or monitor all active boats if you manage safety.</span>
             </div>
+            <p className="muted">
+              Mapbox token present: {mapboxAccessToken ? "yes" : "no"} | Style present: {mapboxStyleUrl ? "yes" : "no"} |
+              Radar tiles present: {weatherRadarTileUrl ? "yes" : "no"}
+            </p>
             <SafetyLiveMap
               initialState={liveMapState}
               currentUserId={user.id}
