@@ -22,8 +22,15 @@ export default async function SafetyPage() {
   const visibleOverdue = canManageSafety ? overdue : overdue.filter((entry) => entry.created_by === user.id);
   const visibleRecentLog = canManageSafety ? recentLog : recentLog.filter((entry) => entry.created_by === user.id);
   const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
-  const mapboxAccessToken = process.env.MAPBOX_ACCESS_TOKEN ?? process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? null;
-  const mapboxStyleUrl = process.env.MAPBOX_STYLE_URL ?? process.env.NEXT_PUBLIC_MAPBOX_STYLE_URL ?? null;
+  const mapboxAccessToken =
+    process.env.MAPBOX_MAIN_KEY ??
+    process.env.MAPBOX_ACCESS_TOKEN ??
+    process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ??
+    null;
+  const mapboxStyleUrl =
+    process.env.MAPBOX_STYLE_URL ??
+    process.env.NEXT_PUBLIC_MAPBOX_STYLE_URL ??
+    "mapbox://styles/mapbox/outdoors-v12";
   const weatherRadarTileUrl =
     process.env.WEATHER_RADAR_TILE_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_URL ?? null;
   const weatherRadarAttribution =
