@@ -14,6 +14,22 @@ declare global {
 const MAPBOX_GL_VERSION = "v3.23.1";
 const DEFAULT_CENTER: [number, number] = [-84.512, 39.1031];
 
+function formatPointTimestamp(value: string) {
+  return new Date(value).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatAccuracy(value: number | null) {
+  if (value === null || Number.isNaN(value)) return "unknown";
+  if (value < 1000) return `${Math.round(value)} m`;
+  return `${(value / 1000).toFixed(1)} km`;
+}
+
 function loadMapboxGl() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Mapbox GL JS can only load in the browser."));
@@ -90,6 +106,7 @@ function buildPointGeoJson(state: SafetyLiveMapState) {
           direction: outing.river_direction ?? "Direction not set",
           isMine: outing.reservation_id === state.my_active_reservation_id,
           isOverdue: outing.is_overdue,
+          lastRecordedAt: outing.latest_point?.recorded_at ?? "",
         },
         geometry: {
           type: "Point",
@@ -133,6 +150,7 @@ export function SafetyLiveMap({
   const [state, setState] = useState(initialState);
   const [sharingEnabled, setSharingEnabled] = useState(false);
   const [sharingMessage, setSharingMessage] = useState<string | null>(null);
+  const [sharingMessageKind, setSharingMessageKind] = useState<"success" | "error">("success");
   const [radarVisible, setRadarVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -224,6 +242,23 @@ export function SafetyLiveMap({
               "circle-stroke-width": 2,
             },
           });
+          map.addLayer({
+            id: "outing-point-labels-layer",
+            type: "symbol",
+            source: "outing-points",
+            layout: {
+              "text-field": ["get", "boatName"],
+              "text-size": 12,
+              "text-offset": [0, 1.25],
+              "text-anchor": "top",
+              "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+            },
+            paint: {
+              "text-color": "#140f0d",
+              "text-halo-color": "#fff7f2",
+              "text-halo-width": 1.6,
+            },
+          });
 
           if (weatherRadarTileUrl) {
             map.addSource("weather-radar", {
@@ -255,9 +290,30 @@ export function SafetyLiveMap({
             );
             map.fitBounds(bounds, { padding: 40, maxZoom: 14, duration: 0 });
           }
+
+          map.on("click", "outing-points-layer", (event: any) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const coordinates = feature.geometry.coordinates.slice();
+            const properties = feature.properties ?? {};
+            new mapboxgl.Popup({ closeButton: false, offset: 14 })
+              .setLngLat(coordinates)
+              .setHTML(
+                `<strong>${properties.boatName ?? "Boat"}</strong><br/>${properties.rowerName ?? "Unknown rower"}<br/>${properties.locationLabel ?? ""}${properties.direction ? ` | ${properties.direction}` : ""}<br/>Last point: ${properties.lastRecordedAt ? formatPointTimestamp(properties.lastRecordedAt) : "unknown"}`,
+              )
+              .addTo(map);
+          });
+
+          map.on("mouseenter", "outing-points-layer", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "outing-points-layer", () => {
+            map.getCanvas().style.cursor = "";
+          });
         });
       })
       .catch((error: unknown) => {
+        setSharingMessageKind("error");
         setSharingMessage(error instanceof Error ? error.message : "Could not load the map.");
       });
 
@@ -319,8 +375,23 @@ export function SafetyLiveMap({
     ? state.outings.find((outing) => outing.reservation_id === myActiveReservationId) ?? null
     : null;
 
+  function fitMapToOutings() {
+    const map = mapRef.current;
+    if (!map || state.outings.length === 0 || !window.mapboxgl) return;
+    const coordinates = state.outings.flatMap((outing) =>
+      outing.track_points.map((point) => [point.longitude, point.latitude] as [number, number]),
+    );
+    if (coordinates.length === 0) return;
+    const bounds = coordinates.reduce(
+      (accumulator, coordinate) => accumulator.extend(coordinate),
+      new window.mapboxgl.LngLatBounds(coordinates[0], coordinates[0]),
+    );
+    map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 700 });
+  }
+
   async function startSharing() {
     if (!myActiveReservationId || !navigator.geolocation) {
+      setSharingMessageKind("error");
       setSharingMessage("Location sharing is unavailable on this device.");
       return;
     }
@@ -330,6 +401,7 @@ export function SafetyLiveMap({
     }
 
     setSharingEnabled(true);
+    setSharingMessageKind("success");
     setSharingMessage("Location sharing active.");
     geolocateRef.current?.trigger?.();
 
@@ -361,11 +433,16 @@ export function SafetyLiveMap({
         });
 
         if (error) {
+          setSharingMessageKind("error");
           setSharingMessage(`Location upload failed: ${error.message}`);
+        } else {
+          setSharingMessageKind("success");
+          setSharingMessage("Live location sharing is active for your current outing.");
         }
       },
       (error) => {
         setSharingEnabled(false);
+        setSharingMessageKind("error");
         setSharingMessage(error.message || "Location sharing was denied.");
       },
       {
@@ -382,6 +459,7 @@ export function SafetyLiveMap({
       watchIdRef.current = null;
     }
     setSharingEnabled(false);
+    setSharingMessageKind("success");
     setSharingMessage("Location sharing paused.");
   }
 
@@ -401,6 +479,11 @@ export function SafetyLiveMap({
           </span>
         </div>
         <div className="quick-links">
+          {state.outings.length > 0 ? (
+            <button type="button" onClick={fitMapToOutings}>
+              Fit Active Boats
+            </button>
+          ) : null}
           {weatherRadarTileUrl ? (
             <button type="button" onClick={() => setRadarVisible((current) => !current)}>
               {radarVisible ? "Hide Radar" : "Show Radar"}
@@ -425,7 +508,35 @@ export function SafetyLiveMap({
         }}
       />
 
-      {sharingMessage ? <p className="muted">{sharingMessage}</p> : null}
+      <div className="grid">
+        <div className="card-subtle stack">
+          <strong>{state.can_manage_all_boats ? "Safety Dashboard View" : "My Live Outing"}</strong>
+          <p className="muted">
+            {state.can_manage_all_boats
+              ? `${state.outings.length} active boat${state.outings.length === 1 ? "" : "s"} visible on the river map.`
+              : myOuting
+                ? `Tracking ${myOuting.boat_name} while you are checked out.`
+                : "Launch a reservation to begin live sharing and route capture."}
+          </p>
+          {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
+          {!weatherRadarTileUrl ? <p className="muted">Radar overlay not configured yet.</p> : null}
+        </div>
+
+        {myOuting ? (
+          <div className="card-subtle stack">
+            <strong>{sharingEnabled ? "Live Sharing Active" : "Live Sharing Ready"}</strong>
+            <p className="muted">
+              {myOuting.latest_point
+                ? `Last point recorded ${formatPointTimestamp(myOuting.latest_point.recorded_at)}. Accuracy ${formatAccuracy(myOuting.latest_point.accuracy_meters)}.`
+                : "No GPS point recorded yet for this outing."}
+            </p>
+            <p className="muted">
+              {myOuting.checkout_location ?? "Location not set"}
+              {myOuting.river_direction ? ` | ${myOuting.river_direction}` : ""}
+            </p>
+          </div>
+        ) : null}
+      </div>
 
       <div className="grid">
         {state.outings.length === 0 ? <p className="muted">No active tracked outings yet.</p> : null}
@@ -433,7 +544,9 @@ export function SafetyLiveMap({
           <div key={outing.reservation_id} className="card-subtle stack">
             <div className="page-title">
               <h4>{outing.boat_name}</h4>
-              <span className="muted">{outing.is_overdue ? "Overdue" : "On Water"}</span>
+              <span className="muted">
+                {outing.reservation_id === state.my_active_reservation_id ? "Your outing" : outing.is_overdue ? "Overdue" : "On Water"}
+              </span>
             </div>
             <p className="muted">{outing.rower_name}</p>
             <p>
@@ -441,6 +554,11 @@ export function SafetyLiveMap({
                 ? `Last point: ${outing.latest_point.latitude.toFixed(5)}, ${outing.latest_point.longitude.toFixed(5)}`
                 : "No GPS point captured yet."}
             </p>
+            {outing.latest_point ? (
+              <p className="muted">
+                Updated {formatPointTimestamp(outing.latest_point.recorded_at)} | Accuracy {formatAccuracy(outing.latest_point.accuracy_meters)}
+              </p>
+            ) : null}
             <p className="muted">
               {outing.checkout_location ?? "Location not set"}
               {outing.river_direction ? ` | ${outing.river_direction}` : ""}
