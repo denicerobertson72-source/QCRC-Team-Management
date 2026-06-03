@@ -23,6 +23,7 @@ export default async function SafetyPage() {
   const visibleRecentLog = canManageSafety ? recentLog : recentLog.filter((entry) => entry.created_by === user.id);
   const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
   const mapboxAccessToken =
+    process.env.ROWING_MAP_KEY ??
     process.env.MAPBOX_MAIN_KEY ??
     process.env.MAPBOX_ACCESS_TOKEN ??
     process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ??
