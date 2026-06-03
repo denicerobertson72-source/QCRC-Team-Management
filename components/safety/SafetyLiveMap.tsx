@@ -137,14 +137,14 @@ export function SafetyLiveMap({
   currentUserId,
   mapboxAccessToken,
   mapboxStyleUrl,
-  weatherRadarTileUrl,
+  weatherRadarSources,
   weatherRadarAttribution,
 }: {
   initialState: SafetyLiveMapState;
   currentUserId: string;
   mapboxAccessToken: string | null;
   mapboxStyleUrl: string | null;
-  weatherRadarTileUrl: string | null;
+  weatherRadarSources: Array<{ id: string; label: string; tileUrl: string | null }>;
   weatherRadarAttribution: string | null;
 }) {
   const [state, setState] = useState(initialState);
@@ -152,6 +152,7 @@ export function SafetyLiveMap({
   const [sharingMessage, setSharingMessage] = useState<string | null>(null);
   const [sharingMessageKind, setSharingMessageKind] = useState<"success" | "error">("success");
   const [radarVisible, setRadarVisible] = useState(false);
+  const [selectedRadarId, setSelectedRadarId] = useState(weatherRadarSources[0]?.id ?? "");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const geolocateRef = useRef<any>(null);
@@ -163,9 +164,18 @@ export function SafetyLiveMap({
     supabaseRef.current = createClient();
   }
 
+  const selectedRadarSource = weatherRadarSources.find((source) => source.id === selectedRadarId) ?? weatherRadarSources[0] ?? null;
+  const weatherRadarTileUrl = selectedRadarSource?.tileUrl ?? null;
+
   useEffect(() => {
     setState(initialState);
   }, [initialState]);
+
+  useEffect(() => {
+    if (!weatherRadarSources.some((source) => source.id === selectedRadarId)) {
+      setSelectedRadarId(weatherRadarSources[0]?.id ?? "");
+    }
+  }, [selectedRadarId, weatherRadarSources]);
 
   useEffect(() => {
     if (!mapboxAccessToken || !containerRef.current) return;
@@ -484,6 +494,15 @@ export function SafetyLiveMap({
               Fit Active Boats
             </button>
           ) : null}
+          {weatherRadarSources.length > 1 ? (
+            <select value={selectedRadarId} onChange={(event) => setSelectedRadarId(event.target.value)}>
+              {weatherRadarSources.map((source) => (
+                <option key={source.id} value={source.id}>
+                  {source.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {weatherRadarTileUrl ? (
             <button type="button" onClick={() => setRadarVisible((current) => !current)}>
               {radarVisible ? "Hide Radar" : "Show Radar"}
@@ -519,7 +538,13 @@ export function SafetyLiveMap({
                 : "Launch a reservation to begin live sharing and route capture."}
           </p>
           {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
-          {!weatherRadarTileUrl ? <p className="muted">Radar overlay not configured yet.</p> : null}
+          {weatherRadarTileUrl ? (
+            <p className="muted">
+              Radar source: {selectedRadarSource?.label ?? "Configured radar"}
+            </p>
+          ) : (
+            <p className="muted">Radar overlay not configured yet.</p>
+          )}
         </div>
 
         {myOuting ? (

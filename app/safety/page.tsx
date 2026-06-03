@@ -32,8 +32,18 @@ export default async function SafetyPage() {
     process.env.MAPBOX_STYLE_URL ??
     process.env.NEXT_PUBLIC_MAPBOX_STYLE_URL ??
     "mapbox://styles/mapbox/outdoors-v12";
-  const weatherRadarTileUrl =
-    process.env.WEATHER_RADAR_TILE_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_URL ?? null;
+  const weatherRadarSources = [
+    {
+      id: "ILN",
+      label: "ILN (Wilmington/Cincinnati)",
+      tileUrl: process.env.WEATHER_RADAR_TILE_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_URL ?? null,
+    },
+    {
+      id: "LVX",
+      label: "LVX (Louisville)",
+      tileUrl: process.env.WEATHER_RADAR_TILE_LVX ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_LVX ?? null,
+    },
+  ].filter((source) => source.tileUrl);
   const weatherRadarAttribution =
     process.env.WEATHER_RADAR_ATTRIBUTION ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_ATTRIBUTION ?? null;
 
@@ -106,7 +116,7 @@ export default async function SafetyPage() {
               currentUserId={user.id}
               mapboxAccessToken={mapboxAccessToken}
               mapboxStyleUrl={mapboxStyleUrl}
-              weatherRadarTileUrl={weatherRadarTileUrl}
+              weatherRadarSources={weatherRadarSources}
               weatherRadarAttribution={weatherRadarAttribution}
             />
           </Card>
