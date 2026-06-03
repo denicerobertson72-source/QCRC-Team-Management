@@ -36,6 +36,7 @@ export default async function SafetyPage() {
     process.env.WEATHER_RADAR_TILE_URL ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_TILE_URL ?? null;
   const weatherRadarAttribution =
     process.env.WEATHER_RADAR_ATTRIBUTION ?? process.env.NEXT_PUBLIC_WEATHER_RADAR_ATTRIBUTION ?? null;
+  const debugPlainText = process.env.DEBUG_PLAIN_TEXT ?? null;
 
   return (
     <>
@@ -103,7 +104,7 @@ export default async function SafetyPage() {
             </div>
             <p className="muted">
               Mapbox token present: {mapboxAccessToken ? "yes" : "no"} | Style present: {mapboxStyleUrl ? "yes" : "no"} |
-              Radar tiles present: {weatherRadarTileUrl ? "yes" : "no"}
+              Radar tiles present: {weatherRadarTileUrl ? "yes" : "no"} | Debug plain text present: {debugPlainText ? "yes" : "no"}
             </p>
             <SafetyLiveMap
               initialState={liveMapState}
