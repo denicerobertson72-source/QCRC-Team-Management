@@ -25,32 +25,52 @@ export async function getSafetyLiveMapState(
   if (reservationIds.length === 0) {
     return {
       can_manage_all_boats: canManageAllBoats,
-      my_active_reservation_id: null,
+      my_active_outing_id: null,
       outings: [],
     };
   }
 
   const cutoffIso = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-  const pointsQuery = supabase
-    .from("rowing_location_points")
-    .select("id, reservation_id, member_id, latitude, longitude, accuracy_meters, recorded_at")
-    .in("reservation_id", reservationIds)
-    .gte("recorded_at", cutoffIso)
-    .order("recorded_at", { ascending: true });
-  const { data: pointsData, error: pointsError } = await pointsQuery;
-  if (pointsError) throw pointsError;
+  const reservationIdsByKind = {
+    reservation: activeReservations.filter((entry) => entry.outing_kind === "reservation").map((entry) => entry.id),
+    private_boat: activeReservations.filter((entry) => entry.outing_kind === "private_boat").map((entry) => entry.id),
+  };
+  const pointQueries = await Promise.all([
+    reservationIdsByKind.reservation.length > 0
+      ? supabase
+          .from("rowing_location_points")
+          .select("id, reservation_id, private_outing_id, member_id, latitude, longitude, accuracy_meters, recorded_at")
+          .in("reservation_id", reservationIdsByKind.reservation)
+          .gte("recorded_at", cutoffIso)
+          .order("recorded_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    reservationIdsByKind.private_boat.length > 0
+      ? supabase
+          .from("rowing_location_points")
+          .select("id, reservation_id, private_outing_id, member_id, latitude, longitude, accuracy_meters, recorded_at")
+          .in("private_outing_id", reservationIdsByKind.private_boat)
+          .gte("recorded_at", cutoffIso)
+          .order("recorded_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const [reservationPoints, privateBoatPoints] = pointQueries;
+  if (reservationPoints.error) throw reservationPoints.error;
+  if (privateBoatPoints.error) throw privateBoatPoints.error;
 
   const pointsByReservation = new Map<string, RowingLocationPoint[]>();
-  for (const point of (pointsData ?? []) as RowingLocationPoint[]) {
-    const existing = pointsByReservation.get(point.reservation_id) ?? [];
+  for (const point of [...((reservationPoints.data ?? []) as RowingLocationPoint[]), ...((privateBoatPoints.data ?? []) as RowingLocationPoint[])]) {
+    const pointId = point.reservation_id ?? point.private_outing_id;
+    if (!pointId) continue;
+    const existing = pointsByReservation.get(pointId) ?? [];
     existing.push(point);
-    pointsByReservation.set(point.reservation_id, existing);
+    pointsByReservation.set(pointId, existing);
   }
 
   const outings: SafetyTrackedOuting[] = activeReservations.map((entry) => {
     const trackPoints = pointsByReservation.get(entry.id) ?? [];
     return {
-      reservation_id: entry.id,
+      outing_id: entry.id,
+      outing_kind: entry.outing_kind,
       member_id: entry.created_by ?? "",
       boat_name: entry.boat_name,
       rower_name: entry.rower_name,
@@ -65,7 +85,7 @@ export async function getSafetyLiveMapState(
 
   return {
     can_manage_all_boats: canManageAllBoats,
-    my_active_reservation_id: outings.find((outing) => outing.member_id === userId)?.reservation_id ?? null,
+    my_active_outing_id: outings.find((outing) => outing.member_id === userId)?.outing_id ?? null,
     outings,
   };
 }

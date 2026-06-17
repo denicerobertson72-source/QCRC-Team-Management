@@ -55,7 +55,7 @@ export function DamageReportForm({
         />
       </Field>
       <Field label="Upload photos (optional)">
-        <input name="photos" type="file" accept="image/*" capture="environment" multiple />
+        <input name="photos" type="file" accept="image/*" multiple />
       </Field>
       <Button type="submit">Submit Damage</Button>
     </form>

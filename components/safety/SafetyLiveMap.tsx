@@ -77,10 +77,11 @@ function buildTrackGeoJson(state: SafetyLiveMapState) {
       .map((outing) => ({
         type: "Feature",
         properties: {
-          reservationId: outing.reservation_id,
+          outingId: outing.outing_id,
+          outingKind: outing.outing_kind,
           boatName: outing.boat_name,
           rowerName: outing.rower_name,
-          isMine: outing.reservation_id === state.my_active_reservation_id,
+          isMine: outing.outing_id === state.my_active_outing_id,
           isOverdue: outing.is_overdue,
         },
         geometry: {
@@ -99,12 +100,13 @@ function buildPointGeoJson(state: SafetyLiveMapState) {
       .map((outing) => ({
         type: "Feature",
         properties: {
-          reservationId: outing.reservation_id,
+          outingId: outing.outing_id,
+          outingKind: outing.outing_kind,
           boatName: outing.boat_name,
           rowerName: outing.rower_name,
           locationLabel: outing.checkout_location ?? "Launch location not set",
           direction: outing.river_direction ?? "Direction not set",
-          isMine: outing.reservation_id === state.my_active_reservation_id,
+          isMine: outing.outing_id === state.my_active_outing_id,
           isOverdue: outing.is_overdue,
           lastRecordedAt: outing.latest_point?.recorded_at ?? "",
         },
@@ -116,11 +118,11 @@ function buildPointGeoJson(state: SafetyLiveMapState) {
   };
 }
 
-function withMyLatestPoint(state: SafetyLiveMapState, reservationId: string, memberId: string, point: RowingLocationPoint) {
+function withMyLatestPoint(state: SafetyLiveMapState, outingId: string, memberId: string, point: RowingLocationPoint) {
   return {
     ...state,
     outings: state.outings.map((outing) => {
-      if (outing.reservation_id !== reservationId) return outing;
+      if (outing.outing_id !== outingId) return outing;
       const existingWithoutLatest = outing.track_points.filter((entry) => entry.id !== point.id);
       return {
         ...outing,
@@ -358,14 +360,14 @@ export function SafetyLiveMap({
       if (!response.ok) return;
       const nextState = (await response.json()) as SafetyLiveMapState;
       setState((current) => {
-        if (!sharingEnabled || !current.my_active_reservation_id) {
+        if (!sharingEnabled || !current.my_active_outing_id) {
           return nextState;
         }
-        const myOuting = current.outings.find((outing) => outing.reservation_id === current.my_active_reservation_id);
+        const myOuting = current.outings.find((outing) => outing.outing_id === current.my_active_outing_id);
         if (!myOuting?.latest_point) {
           return nextState;
         }
-        return withMyLatestPoint(nextState, current.my_active_reservation_id, currentUserId, myOuting.latest_point);
+        return withMyLatestPoint(nextState, current.my_active_outing_id, currentUserId, myOuting.latest_point);
       });
     }, 30000);
 
@@ -380,9 +382,9 @@ export function SafetyLiveMap({
     };
   }, []);
 
-  const myActiveReservationId = state.my_active_reservation_id;
-  const myOuting = myActiveReservationId
-    ? state.outings.find((outing) => outing.reservation_id === myActiveReservationId) ?? null
+  const myActiveOutingId = state.my_active_outing_id;
+  const myOuting = myActiveOutingId
+    ? state.outings.find((outing) => outing.outing_id === myActiveOutingId) ?? null
     : null;
 
   function fitMapToOutings() {
@@ -400,7 +402,7 @@ export function SafetyLiveMap({
   }
 
   async function startSharing() {
-    if (!myActiveReservationId || !navigator.geolocation) {
+    if (!myOuting || !myActiveOutingId || !navigator.geolocation) {
       setSharingMessageKind("error");
       setSharingMessage("Location sharing is unavailable on this device.");
       return;
@@ -419,7 +421,8 @@ export function SafetyLiveMap({
       async (position) => {
         const point: RowingLocationPoint = {
           id: `local-${position.timestamp}`,
-          reservation_id: myActiveReservationId,
+          reservation_id: myOuting.outing_kind === "reservation" ? myActiveOutingId : null,
+          private_outing_id: myOuting.outing_kind === "private_boat" ? myActiveOutingId : null,
           member_id: currentUserId,
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
@@ -427,14 +430,15 @@ export function SafetyLiveMap({
           recorded_at: new Date(position.timestamp).toISOString(),
         };
 
-        setState((current) => withMyLatestPoint(current, myActiveReservationId, currentUserId, point));
+        setState((current) => withMyLatestPoint(current, myActiveOutingId, currentUserId, point));
 
         const now = Date.now();
         if (now - lastUploadAtRef.current < 30000) return;
         lastUploadAtRef.current = now;
 
         const { error } = await supabaseRef.current!.from("rowing_location_points").insert({
-          reservation_id: myActiveReservationId,
+          reservation_id: myOuting.outing_kind === "reservation" ? myActiveOutingId : null,
+          private_outing_id: myOuting.outing_kind === "private_boat" ? myActiveOutingId : null,
           member_id: currentUserId,
           latitude: point.latitude,
           longitude: point.longitude,
@@ -535,7 +539,7 @@ export function SafetyLiveMap({
               ? `${state.outings.length} active boat${state.outings.length === 1 ? "" : "s"} visible on the river map.`
               : myOuting
                 ? `Tracking ${myOuting.boat_name} while you are checked out.`
-                : "Launch a reservation to begin live sharing and route capture."}
+                : "Launch an outing to begin live sharing and route capture."}
           </p>
           {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
           {weatherRadarTileUrl ? (
@@ -566,11 +570,11 @@ export function SafetyLiveMap({
       <div className="grid">
         {state.outings.length === 0 ? <p className="muted">No active tracked outings yet.</p> : null}
         {state.outings.map((outing) => (
-          <div key={outing.reservation_id} className="card-subtle stack">
+          <div key={outing.outing_id} className="card-subtle stack">
             <div className="page-title">
               <h4>{outing.boat_name}</h4>
               <span className="muted">
-                {outing.reservation_id === state.my_active_reservation_id ? "Your outing" : outing.is_overdue ? "Overdue" : "On Water"}
+                {outing.outing_id === state.my_active_outing_id ? "Your outing" : outing.is_overdue ? "Overdue" : "On Water"}
               </span>
             </div>
             <p className="muted">{outing.rower_name}</p>

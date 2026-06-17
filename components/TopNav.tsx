@@ -48,7 +48,7 @@ export async function TopNav() {
           <Link href="/boats">Boats</Link>
           <Link href="/damage/new">Damage</Link>
           {isAdmin ? <Link href="/admin">Admin</Link> : null}
-          <Link href="/account/security">Security</Link>
+          <Link href="/account/security">Account Setting</Link>
         </nav>
         <form action={signOutAction}>
           <Button type="submit" variant="secondary">

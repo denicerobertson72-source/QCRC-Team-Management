@@ -598,6 +598,101 @@ export async function checkinAction(formData: FormData) {
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
+export async function privateBoatLaunchAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const privateOutingId = String(formData.get("private_outing_id") ?? "");
+  const location = String(formData.get("location") ?? "");
+  const direction = String(formData.get("river_direction") ?? "");
+  const destination = new URL("/reservations", "http://local");
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("full_name, status, owns_private_boat, boat_storage_fee_ok")
+    .eq("id", user.id)
+    .single();
+  if (profileError) throw profileError;
+
+  if (!profile?.owns_private_boat) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Your account is not marked as a private boat owner.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (!profile.boat_storage_fee_ok) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Private boat launch is unavailable until boat storage dues are current.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: existingOuting, error: existingOutingError } = await supabase
+    .from("private_boat_outings")
+    .select("id")
+    .eq("member_id", user.id)
+    .eq("status", "checked_out")
+    .maybeSingle();
+  if (existingOutingError) throw existingOutingError;
+
+  if (existingOuting) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "You already have an active private boat outing.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await supabase.from("private_boat_outings").insert({
+    id: privateOutingId || undefined,
+    member_id: user.id,
+    status: "checked_out",
+    checked_out_at: new Date().toISOString(),
+    checkout_location: location || null,
+    river_direction: direction || null,
+    notes: null,
+  });
+
+  if (error) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", error.message || "Unable to launch private boat.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/reservations");
+  revalidatePath("/safety");
+  destination.searchParams.set("reservation_status", "success");
+  destination.searchParams.set("reservation_message", "Private boat launch recorded.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function privateBoatReturnAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const privateOutingId = String(formData.get("private_outing_id") ?? "");
+  const notes = String(formData.get("notes") ?? "");
+  const gateStatus = String(formData.get("gate_status") ?? "");
+  const destination = new URL("/reservations", "http://local");
+
+  const { error } = await supabase
+    .from("private_boat_outings")
+    .update({
+      status: "checked_in",
+      checked_in_at: new Date().toISOString(),
+      gate_status: gateStatus || null,
+      notes: notes || null,
+    })
+    .eq("id", privateOutingId)
+    .eq("member_id", user.id)
+    .eq("status", "checked_out");
+
+  if (error) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", error.message || "Unable to mark private boat returned.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/reservations");
+  revalidatePath("/safety");
+  destination.searchParams.set("reservation_status", "success");
+  destination.searchParams.set("reservation_message", "Private boat return recorded.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
 export async function submitDamageAction(formData: FormData) {
   const destination = new URL("/damage/new", "http://local");
   try {
@@ -789,6 +884,8 @@ export async function updateMemberAdminAction(formData: FormData) {
   const boatStorageFeeRenewalDate = ownsPrivateBoat ? boatStorageFeeRenewalDateRaw || null : null;
   const skillLevel = String(formData.get("skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "Mid-weight");
+  const trainingGroupRaw = String(formData.get("training_group") ?? "").trim();
+  const trainingGroup = trainingGroupRaw === "beginner_intermediate" || trainingGroupRaw === "advanced" ? trainingGroupRaw : null;
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from("profiles")
@@ -825,6 +922,25 @@ export async function updateMemberAdminAction(formData: FormData) {
     .eq("id", memberId);
 
   if (error) throw error;
+
+  if (trainingGroup) {
+    const { error: signupError } = await supabase.from("program_signups").upsert(
+      {
+        member_id: memberId,
+        program_type: "coached_training",
+        training_group: trainingGroup,
+      },
+      { onConflict: "member_id,program_type" },
+    );
+    if (signupError) throw signupError;
+  } else {
+    const { error: deleteError } = await supabase
+      .from("program_signups")
+      .delete()
+      .eq("member_id", memberId)
+      .eq("program_type", "coached_training");
+    if (deleteError) throw deleteError;
+  }
 
   const paymentLines: string[] = [];
   if (duesOk && !existingMember.dues_ok) {
@@ -1583,6 +1699,27 @@ export async function toggleSessionSignupAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const sessionId = String(formData.get("session_id") ?? "");
   const signedUp = String(formData.get("signed_up") ?? "true") === "true";
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("session_type")
+    .eq("id", sessionId)
+    .single();
+  if (sessionError) throw sessionError;
+
+  if (session.session_type === "coached_training_beginner_intermediate" || session.session_type === "coached_training_advanced") {
+    const requiredGroup =
+      session.session_type === "coached_training_beginner_intermediate" ? "beginner_intermediate" : "advanced";
+    const { data: assignment, error: assignmentError } = await supabase
+      .from("program_signups")
+      .select("training_group")
+      .eq("member_id", user.id)
+      .eq("program_type", "coached_training")
+      .maybeSingle();
+    if (assignmentError) throw assignmentError;
+    if (assignment?.training_group !== requiredGroup) {
+      throw new Error("You are not assigned to this coached training group.");
+    }
+  }
 
   if (signedUp) {
     const { error } = await supabase.from("session_signups").upsert(

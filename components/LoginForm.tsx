@@ -73,7 +73,7 @@ export function LoginForm({ initialError = null }: { initialError?: string | nul
       if (storageKey) window.localStorage.setItem(storageKey, "1");
       setPreferPassword(true);
       setMessage(
-        "If this is a new account, confirm email once. If you already had an account, sign in via magic link once and set password under Security.",
+        "If this is a new account, confirm email once. If you already had an account, sign in via magic link once and set password under Account Setting.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected sign-up error");

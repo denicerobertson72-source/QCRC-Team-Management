@@ -22,6 +22,7 @@ type MemberAdminFormProps = {
     boat_storage_fee_renewal_date: string | null;
     skill_level: string;
     weight_class: string;
+    training_group?: string | null;
   };
 };
 
@@ -131,6 +132,14 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
           <option value="Lightweight">Lightweight</option>
           <option value="Mid-weight">Mid-weight</option>
           <option value="Heavyweight">Heavyweight</option>
+        </select>
+      </Field>
+
+      <Field label="Coached Training Group">
+        <select name="training_group" defaultValue={member.training_group ?? ""}>
+          <option value="">Not assigned</option>
+          <option value="beginner_intermediate">Beginner/Intermediate</option>
+          <option value="advanced">Advanced</option>
         </select>
       </Field>
 

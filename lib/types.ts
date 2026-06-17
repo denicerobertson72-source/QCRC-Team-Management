@@ -33,6 +33,7 @@ export type ProfileSummary = {
   membership_type: string;
   skill_level: "Beginner" | "Intermediate" | "Advanced" | "Elite" | string;
   weight_class: "Lightweight" | "Mid-weight" | "Heavyweight" | string;
+  training_group?: "beginner_intermediate" | "advanced" | null | string;
 };
 
 export type Reservation = {
@@ -51,8 +52,27 @@ export type Reservation = {
   boats?: { name: string } | null;
 };
 
+export type PrivateBoatOuting = {
+  id: string;
+  member_id: string;
+  status: string;
+  checked_out_at: string;
+  checked_in_at: string | null;
+  checkout_location: string | null;
+  river_direction: string | null;
+  gate_status: string | null;
+  notes: string | null;
+};
+
+export type TrackableOuting = {
+  id: string;
+  kind: "reservation" | "private_boat";
+  status: string;
+};
+
 export type SafetyEntry = {
   id: string;
+  outing_kind: "reservation" | "private_boat";
   boat_name: string;
   created_by?: string;
   rower_name: string;
@@ -69,7 +89,8 @@ export type SafetyEntry = {
 
 export type RowingLocationPoint = {
   id: string;
-  reservation_id: string;
+  reservation_id?: string | null;
+  private_outing_id?: string | null;
   member_id: string;
   latitude: number;
   longitude: number;
@@ -78,7 +99,8 @@ export type RowingLocationPoint = {
 };
 
 export type SafetyTrackedOuting = {
-  reservation_id: string;
+  outing_id: string;
+  outing_kind: "reservation" | "private_boat";
   member_id: string;
   boat_name: string;
   rower_name: string;
@@ -92,7 +114,7 @@ export type SafetyTrackedOuting = {
 
 export type SafetyLiveMapState = {
   can_manage_all_boats: boolean;
-  my_active_reservation_id: string | null;
+  my_active_outing_id: string | null;
   outings: SafetyTrackedOuting[];
 };
 

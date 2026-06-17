@@ -4,6 +4,7 @@ import type {
   BoatAvailabilityBlock,
   NotificationEvent,
   OverdueBoatAlert,
+  PrivateBoatOuting,
   ProfileSummary,
   ProgramSession,
   Reservation,
@@ -21,6 +22,23 @@ function profileNameFromRelation(profileRelation: unknown) {
   }
   if (profileRelation && typeof profileRelation === "object") {
     return (profileRelation as { full_name?: string }).full_name ?? "Unknown";
+  }
+  return "Unknown";
+}
+
+function rowerNameFromRelation(profileRelation: unknown) {
+  const profile = Array.isArray(profileRelation) ? profileRelation[0] : profileRelation;
+  if (profile && typeof profile === "object") {
+    const { full_name: fullName, email } = profile as { full_name?: string | null; email?: string | null };
+    const trimmedName = fullName?.trim() ?? "";
+    if (trimmedName && !trimmedName.includes("@")) {
+      return trimmedName;
+    }
+
+    const emailName = email?.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+    if (emailName) {
+      return emailName.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
   }
   return "Unknown";
 }
@@ -47,6 +65,19 @@ export async function getMyReservations() {
   }));
 
   return rows;
+}
+
+export async function getMyPrivateBoatOutings() {
+  const { supabase, user } = await ensureProfile();
+  const { data, error } = await supabase
+    .from("private_boat_outings")
+    .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes")
+    .eq("member_id", user.id)
+    .eq("status", "checked_out")
+    .order("checked_out_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as PrivateBoatOuting[];
 }
 
 export async function getBoats() {
@@ -109,6 +140,19 @@ export async function getProgramSignupState() {
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function getMyTrainingGroupAssignment() {
+  const { supabase, user } = await ensureProfile();
+  const { data, error } = await supabase
+    .from("program_signups")
+    .select("training_group")
+    .eq("member_id", user.id)
+    .eq("program_type", "coached_training")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.training_group ?? null;
 }
 
 export async function getRaceEventsWithMySignup() {
@@ -361,26 +405,36 @@ export async function getUnreadNotificationCount() {
 
 export async function getSafetyDashboard() {
   const { supabase } = await ensureProfile();
-  const { data, error } = await supabase
-    .from("reservations")
-    .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, boats(name), profiles!reservations_created_by_fkey(full_name)")
-    .in("status", ["checked_out", "checked_in"])
-    .order("checked_out_at", { ascending: false })
-    .limit(40);
+  const [{ data: reservationData, error: reservationError }, { data: privateOutings, error: privateOutingError }] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, boats(name), profiles!reservations_created_by_fkey(full_name,email)")
+      .in("status", ["checked_out", "checked_in"])
+      .order("checked_out_at", { ascending: false })
+      .limit(40),
+    supabase
+      .from("private_boat_outings")
+      .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, profiles!private_boat_outings_member_id_fkey(full_name,email)")
+      .in("status", ["checked_out", "checked_in"])
+      .order("checked_out_at", { ascending: false })
+      .limit(40),
+  ]);
 
-  if (error) throw error;
+  if (reservationError) throw reservationError;
+  if (privateOutingError) throw privateOutingError;
 
   const now = Date.now();
-  const rows = (data ?? []).map((row: any) => {
+  const reservationRows = (reservationData ?? []).map((row: any) => {
     const boat = Array.isArray(row.boats) ? row.boats[0] : row.boats;
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     const checkedOutTime = row.checked_out_at ? new Date(row.checked_out_at).getTime() : null;
 
     return {
       id: row.id,
+      outing_kind: "reservation",
       created_by: row.created_by,
       boat_name: boat?.name ?? row.id,
-      rower_name: profile?.full_name ?? "Unknown",
+      rower_name: rowerNameFromRelation(profile),
       start_time: row.start_time,
       end_time: row.end_time,
       checked_out_at: row.checked_out_at,
@@ -391,6 +445,34 @@ export async function getSafetyDashboard() {
       status: row.status,
       is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
     } satisfies SafetyEntry;
+  });
+
+  const privateBoatRows = (privateOutings ?? []).map((row: any) => {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    const checkedOutTime = row.checked_out_at ? new Date(row.checked_out_at).getTime() : null;
+
+    return {
+      id: row.id,
+      outing_kind: "private_boat",
+      created_by: row.member_id,
+      boat_name: "Private Boat",
+      rower_name: rowerNameFromRelation(profile),
+      start_time: row.checked_out_at,
+      end_time: row.checked_in_at ?? row.checked_out_at,
+      checked_out_at: row.checked_out_at,
+      checked_in_at: row.checked_in_at,
+      checkout_location: row.checkout_location,
+      river_direction: row.river_direction,
+      gate_status: row.gate_status,
+      status: row.status,
+      is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
+    } satisfies SafetyEntry;
+  });
+
+  const rows = [...reservationRows, ...privateBoatRows].sort((a, b) => {
+    const aTime = a.checked_out_at ? new Date(a.checked_out_at).getTime() : 0;
+    const bTime = b.checked_out_at ? new Date(b.checked_out_at).getTime() : 0;
+    return bTime - aTime;
   });
 
   return {

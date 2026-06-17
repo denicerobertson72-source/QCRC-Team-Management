@@ -16,7 +16,7 @@ export default async function AccountSecurityPage({ searchParams }: { searchPara
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Account Security" subtitle={subtitle} />
+        <PageTitle title="Account Setting" subtitle={subtitle} />
         <SetPasswordForm />
       </main>
     </>

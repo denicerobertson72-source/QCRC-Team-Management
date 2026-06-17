@@ -15,12 +15,19 @@ type SearchParams = Promise<{ import_status?: string; import_message?: string }>
 export default async function AdminMembersPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const { supabase } = await ensureSiteAdmin();
-  const { data } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, email, phone, sms_opt_in, role, status, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, membership_type, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date",
-    )
-    .order("full_name");
+  const [{ data }, { data: trainingAssignments }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select(
+        "id, full_name, email, phone, sms_opt_in, role, status, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, membership_type, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date",
+      )
+      .order("full_name"),
+    supabase
+      .from("program_signups")
+      .select("member_id, training_group")
+      .eq("program_type", "coached_training"),
+  ]);
+  const trainingGroupByMemberId = new Map((trainingAssignments ?? []).map((row) => [row.member_id, row.training_group]));
 
   return (
     <>
@@ -72,7 +79,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                 </div>
               </div>
 
-              <MemberAdminForm member={m} />
+              <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />
             </Card>
           ))}
         </div>

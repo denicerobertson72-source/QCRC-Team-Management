@@ -3,7 +3,7 @@ import { TopNav } from "@/components/TopNav";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { getProgramSessionsForMonth } from "@/lib/queries";
+import { getMyTrainingGroupAssignment, getProgramSessionsForMonth } from "@/lib/queries";
 import { toggleSessionSignupAction } from "@/lib/actions";
 import { formatEasternDateTime, formatEasternMonthLabel } from "@/lib/time";
 
@@ -34,7 +34,25 @@ function prettyDateTime(value: string) {
 
 export default async function TrainingAdvancedPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
+  const trainingGroup = await getMyTrainingGroupAssignment();
   const month = monthBounds(params.month);
+
+  if (trainingGroup !== "advanced") {
+    return (
+      <>
+        <TopNav />
+        <main className="stack">
+          <PageTitle
+            title="Training: Advanced"
+            subtitle="Only members assigned to this coached training group can view these signups."
+          />
+          <Card subtle>If you need access, ask an admin to assign your account to the Advanced coached training group.</Card>
+          <Link href="/programs/training">Back to Groups</Link>
+        </main>
+      </>
+    );
+  }
+
   const sessions = await getProgramSessionsForMonth(
     ["coached_training_advanced"],
     month.start.toISOString(),

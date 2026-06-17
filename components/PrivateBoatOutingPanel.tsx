@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import type { FormEvent } from "react";
-import { checkinAction, checkoutAction } from "@/lib/actions";
-import type { Reservation } from "@/lib/types";
+import { privateBoatLaunchAction, privateBoatReturnAction } from "@/lib/actions";
+import type { PrivateBoatOuting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
 
@@ -24,25 +24,20 @@ function describeUnknownLocationError(error: unknown) {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
   }
-  if (typeof error === "object" && error) {
-    const details = {
-      name: "name" in error ? String((error as { name?: unknown }).name ?? "") : "",
-      code: "code" in error ? String((error as { code?: unknown }).code ?? "") : "",
-      message: "message" in error ? String((error as { message?: unknown }).message ?? "") : "",
-    };
-    return JSON.stringify(details);
-  }
   return String(error);
 }
 
-export function ReservationActions({ reservation }: { reservation: Reservation }) {
-  const canCheckout = reservation.status === "reserved";
-  const canCheckin = reservation.status === "checked_out";
+export function PrivateBoatOutingPanel({
+  canLaunch,
+  activeOuting,
+}: {
+  canLaunch: boolean;
+  activeOuting: PrivateBoatOuting | null;
+}) {
   const resumeSubmitRef = useRef(false);
+  const launchOutingId = useMemo(() => crypto.randomUUID(), []);
 
-  if (!canCheckout && !canCheckin) return null;
-
-  async function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleLaunchSubmit(event: FormEvent<HTMLFormElement>) {
     if (resumeSubmitRef.current) {
       resumeSubmitRef.current = false;
       return;
@@ -55,6 +50,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
     event.preventDefault();
     const form = event.currentTarget;
+    const outingKey = makeOutingKey("private_boat", launchOutingId);
 
     const continueWithoutTracking = () => {
       window.localStorage.removeItem(INTENT_STORAGE_KEY);
@@ -70,7 +66,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
           maximumAge: 0,
         });
       });
-      window.localStorage.setItem(INTENT_STORAGE_KEY, makeOutingKey("reservation", reservation.id));
+      window.localStorage.setItem(INTENT_STORAGE_KEY, outingKey);
       resumeSubmitRef.current = true;
       form.requestSubmit();
     } catch (error) {
@@ -78,17 +74,16 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         typeof error === "object" && error && "code" in error
           ? geolocationErrorMessage(error as GeolocationPositionError)
           : `Location access was blocked or unavailable. Debug: ${describeUnknownLocationError(error)}`;
-      const shouldContinue = window.confirm(
-        `${detail}\n\nLaunch anyway without live tracking?`,
-      );
+      const shouldContinue = window.confirm(`${detail}\n\nLaunch anyway without live tracking?`);
       if (shouldContinue) {
         continueWithoutTracking();
       }
     }
   }
 
-  function handleCheckinSubmit() {
-    const outingKey = makeOutingKey("reservation", reservation.id);
+  function handleReturnSubmit() {
+    if (!activeOuting) return;
+    const outingKey = makeOutingKey("private_boat", activeOuting.id);
     if (window.localStorage.getItem(TRACKING_STORAGE_KEY) === outingKey) {
       window.localStorage.removeItem(TRACKING_STORAGE_KEY);
     }
@@ -97,33 +92,35 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     }
   }
 
+  if (!canLaunch && !activeOuting) return null;
+
   return (
-    <details className="card-subtle">
-      <summary>{canCheckout ? "Show launching options" : "Show return options"}</summary>
+    <details className="card-subtle" open>
+      <summary>{activeOuting ? "Show private boat return options" : "Show private boat launch options"}</summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
-        {canCheckout ? (
-          <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit}>
-            <input type="hidden" name="reservation_id" value={reservation.id} />
-            <select name="location" defaultValue={reservation.checkout_location ?? "OH"} required>
+        {!activeOuting && canLaunch ? (
+          <form action={privateBoatLaunchAction} className="inline-form" onSubmit={handleLaunchSubmit}>
+            <input type="hidden" name="private_outing_id" value={launchOutingId} />
+            <select name="location" defaultValue="OH" required>
               <option value="OH">OH</option>
               <option value="LM">LM</option>
             </select>
-            <select name="river_direction" defaultValue={reservation.river_direction ?? "Upriver"} required>
+            <select name="river_direction" defaultValue="Upriver" required>
               <option value="Upriver">Upriver</option>
               <option value="Downriver">Downriver</option>
             </select>
-            <Button type="submit">Launching</Button>
+            <Button type="submit">Launch Private Boat</Button>
           </form>
         ) : null}
 
-        {canCheckin ? (
-          <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
-            <input type="hidden" name="reservation_id" value={reservation.id} />
-            <select name="gate_status" defaultValue={reservation.gate_status ?? "locked"} required>
+        {activeOuting ? (
+          <form action={privateBoatReturnAction} className="inline-form" onSubmit={handleReturnSubmit}>
+            <input type="hidden" name="private_outing_id" value={activeOuting.id} />
+            <select name="gate_status" defaultValue={activeOuting.gate_status ?? "locked"} required>
               <option value="locked">Gate locked</option>
               <option value="unlocked">Gate left unlocked</option>
             </select>
-            <input name="notes" placeholder="Condition notes" />
+            <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
             <Button type="submit">Returned</Button>
           </form>
         ) : null}
