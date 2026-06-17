@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import type { FormEvent } from "react";
-import { checkinAction, checkoutAction } from "@/lib/actions";
+import { checkinAction, checkoutAction, updateReservationGateStatusAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
@@ -38,9 +38,10 @@ function describeUnknownLocationError(error: unknown) {
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
   const canCheckin = reservation.status === "checked_out";
+  const canUpdateGate = reservation.status === "checked_in";
   const resumeSubmitRef = useRef(false);
 
-  if (!canCheckout && !canCheckin) return null;
+  if (!canCheckout && !canCheckin && !canUpdateGate) return null;
 
   async function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
     if (resumeSubmitRef.current) {
@@ -99,7 +100,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
   return (
     <details className="card-subtle">
-      <summary>{canCheckout ? "Show launching options" : "Show return options"}</summary>
+      <summary>{canCheckout ? "Show launching options" : canCheckin ? "Show return options" : "Show gate options"}</summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
         {canCheckout ? (
           <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit}>
@@ -119,12 +120,22 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         {canCheckin ? (
           <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
+            <input name="notes" placeholder="Condition notes" />
+            <Button type="submit">Mark Returned</Button>
+          </form>
+        ) : null}
+
+        {canUpdateGate ? (
+          <form action={updateReservationGateStatusAction} className="inline-form">
+            <input type="hidden" name="reservation_id" value={reservation.id} />
+            <span className="muted">Gate status</span>
             <select name="gate_status" defaultValue={reservation.gate_status ?? "locked"} required>
               <option value="locked">Gate locked</option>
               <option value="unlocked">Gate left unlocked</option>
             </select>
-            <input name="notes" placeholder="Condition notes" />
-            <Button type="submit">Returned</Button>
+            <Button type="submit" variant="secondary">
+              Save Gate Status
+            </Button>
           </form>
         ) : null}
       </div>

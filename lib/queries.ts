@@ -49,9 +49,9 @@ export async function getMyReservations() {
   const { data, error } = await supabase
     .from("reservations")
     .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, boats(name)")
-    .in("status", ["reserved", "checked_out"])
+    .in("status", ["reserved", "checked_out", "checked_in"])
     .or(`created_by.eq.${user.id}`)
-    .order("start_time", { ascending: true });
+    .order("start_time", { ascending: false });
 
   if (error) throw error;
 
@@ -59,10 +59,17 @@ export async function getMyReservations() {
     boats: { name: string } | { name: string }[] | null;
   };
 
-  const rows = ((data ?? []) as ReservationRow[]).map((row) => ({
-    ...row,
-    boats: Array.isArray(row.boats) ? (row.boats[0] ?? null) : row.boats,
-  }));
+  const rows = ((data ?? []) as ReservationRow[])
+    .map((row) => ({
+      ...row,
+      boats: Array.isArray(row.boats) ? (row.boats[0] ?? null) : row.boats,
+    }))
+    .filter((row) => {
+      if (row.status !== "checked_in") return true;
+      if (!row.gate_status) return true;
+      if (!row.checked_in_at) return false;
+      return Date.now() - new Date(row.checked_in_at).getTime() <= 12 * 60 * 60 * 1000;
+    });
 
   return rows;
 }
@@ -73,11 +80,16 @@ export async function getMyPrivateBoatOutings() {
     .from("private_boat_outings")
     .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes")
     .eq("member_id", user.id)
-    .eq("status", "checked_out")
+    .in("status", ["checked_out", "checked_in"])
     .order("checked_out_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []) as PrivateBoatOuting[];
+  return ((data ?? []) as PrivateBoatOuting[]).filter((row) => {
+    if (row.status !== "checked_in") return true;
+    if (!row.gate_status) return true;
+    if (!row.checked_in_at) return false;
+    return Date.now() - new Date(row.checked_in_at).getTime() <= 12 * 60 * 60 * 1000;
+  });
 }
 
 export async function getBoats() {

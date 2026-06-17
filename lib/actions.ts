@@ -558,6 +558,7 @@ export async function checkoutAction(formData: FormData) {
   }
 
   revalidatePath("/reservations");
+  revalidatePath("/reserve");
   revalidatePath("/safety");
   destination.searchParams.set("reservation_status", "success");
   destination.searchParams.set("reservation_message", "Launch recorded.");
@@ -568,7 +569,6 @@ export async function checkinAction(formData: FormData) {
   const { supabase } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const notes = String(formData.get("notes") ?? "");
-  const gateStatus = String(formData.get("gate_status") ?? "");
   const destination = new URL("/reservations", "http://local");
 
   const { error } = await supabase.rpc("checkin_reservation", {
@@ -582,19 +582,37 @@ export async function checkinAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  if (gateStatus) {
-    const updateResult = await supabase.from("reservations").update({ gate_status: gateStatus }).eq("id", reservationId);
-    if (updateResult.error) {
-      destination.searchParams.set("reservation_status", "error");
-      destination.searchParams.set("reservation_message", updateResult.error.message || "Return recorded, but gate status was not saved.");
-      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-    }
+  revalidatePath("/reservations");
+  revalidatePath("/safety");
+  revalidatePath("/reserve");
+  destination.searchParams.set("reservation_status", "success");
+  destination.searchParams.set("reservation_message", "Return recorded. Update gate status when leaving the marina.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function updateReservationGateStatusAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const reservationId = String(formData.get("reservation_id") ?? "");
+  const gateStatus = String(formData.get("gate_status") ?? "");
+  const destination = new URL("/reservations", "http://local");
+
+  const { error } = await supabase
+    .from("reservations")
+    .update({ gate_status: gateStatus || null })
+    .eq("id", reservationId)
+    .eq("created_by", user.id)
+    .eq("status", "checked_in");
+
+  if (error) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", error.message || "Unable to save gate status.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
   destination.searchParams.set("reservation_status", "success");
-  destination.searchParams.set("reservation_message", "Return recorded.");
+  destination.searchParams.set("reservation_message", "Gate status saved.");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
@@ -665,7 +683,6 @@ export async function privateBoatReturnAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const notes = String(formData.get("notes") ?? "");
-  const gateStatus = String(formData.get("gate_status") ?? "");
   const destination = new URL("/reservations", "http://local");
 
   const { error } = await supabase
@@ -673,7 +690,6 @@ export async function privateBoatReturnAction(formData: FormData) {
     .update({
       status: "checked_in",
       checked_in_at: new Date().toISOString(),
-      gate_status: gateStatus || null,
       notes: notes || null,
     })
     .eq("id", privateOutingId)
@@ -689,7 +705,33 @@ export async function privateBoatReturnAction(formData: FormData) {
   revalidatePath("/reservations");
   revalidatePath("/safety");
   destination.searchParams.set("reservation_status", "success");
-  destination.searchParams.set("reservation_message", "Private boat return recorded.");
+  destination.searchParams.set("reservation_message", "Private boat return recorded. Update gate status when leaving the marina.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function updatePrivateBoatGateStatusAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const privateOutingId = String(formData.get("private_outing_id") ?? "");
+  const gateStatus = String(formData.get("gate_status") ?? "");
+  const destination = new URL("/reservations", "http://local");
+
+  const { error } = await supabase
+    .from("private_boat_outings")
+    .update({ gate_status: gateStatus || null })
+    .eq("id", privateOutingId)
+    .eq("member_id", user.id)
+    .eq("status", "checked_in");
+
+  if (error) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", error.message || "Unable to save private boat gate status.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/reservations");
+  revalidatePath("/safety");
+  destination.searchParams.set("reservation_status", "success");
+  destination.searchParams.set("reservation_message", "Private boat gate status saved.");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
@@ -759,60 +801,62 @@ export async function submitDamageAction(formData: FormData) {
       damageReportId = inserted.id;
     }
 
-    const { data: impactedReservations, error: impactedError } = await supabase
-      .from("reservations")
-      .select("id, start_time, profiles!reservations_created_by_fkey(id,full_name,email,phone,sms_opt_in), boats(name)")
-      .eq("boat_id", boatId)
-      .eq("status", "reserved")
-      .gte("start_time", new Date().toISOString());
-    if (impactedError) throw impactedError;
+    if (severity >= 3) {
+      const { data: impactedReservations, error: impactedError } = await supabase
+        .from("reservations")
+        .select("id, start_time, profiles!reservations_created_by_fkey(id,full_name,email,phone,sms_opt_in), boats(name)")
+        .eq("boat_id", boatId)
+        .eq("status", "reserved")
+        .gte("start_time", new Date().toISOString());
+      if (impactedError) throw impactedError;
 
-    const impactedRows = impactedReservations ?? [];
-    for (const impacted of impactedRows) {
-      const profile = Array.isArray(impacted.profiles) ? impacted.profiles[0] : impacted.profiles;
-      const boat = Array.isArray(impacted.boats) ? impacted.boats[0] : impacted.boats;
-      if (profile?.id) {
-        await supabase.from("notification_events").upsert(
-          {
-            notification_key: `boat-out:${damageReportId}:${impacted.id}`,
-            notification_type: "boat_out_of_service",
-            member_id: profile.id,
-            reservation_id: impacted.id,
-            payload: {
-              boat_name: boat?.name ?? boatId,
-              reservation_start: impacted.start_time,
+      const impactedRows = impactedReservations ?? [];
+      for (const impacted of impactedRows) {
+        const profile = Array.isArray(impacted.profiles) ? impacted.profiles[0] : impacted.profiles;
+        const boat = Array.isArray(impacted.boats) ? impacted.boats[0] : impacted.boats;
+        if (profile?.id) {
+          await supabase.from("notification_events").upsert(
+            {
+              notification_key: `boat-out:${damageReportId}:${impacted.id}`,
+              notification_type: "boat_out_of_service",
+              member_id: profile.id,
+              reservation_id: impacted.id,
+              payload: {
+                boat_name: boat?.name ?? boatId,
+                reservation_start: impacted.start_time,
+              },
             },
-          },
-          { onConflict: "notification_key" },
-        );
-      }
-
-      if (profile?.email) {
-        try {
-          await sendTransactionalEmail({
-            to: profile.email,
-            subject: `QCRC reservation alert: ${boat?.name ?? "Boat"} is out of service`,
-            text: `Your reserved boat ${boat?.name ?? "boat"} is now out of service due to a damage report. Reservation time: ${formatEasternDateTime(
-              impacted.start_time,
-            )} ET. Please reserve another boat.`,
-            html: `<p>Your reserved boat <strong>${boat?.name ?? "boat"}</strong> is now out of service due to a damage report.</p><p><strong>Reservation time:</strong> ${formatEasternDateTime(
-              impacted.start_time,
-            )} ET</p><p>Please reserve another boat.</p>`,
-          });
-        } catch {
-          // Keep damage submission successful even without email delivery.
+            { onConflict: "notification_key" },
+          );
         }
-      }
-      if (profile?.phone && profile?.sms_opt_in) {
-        try {
-          await sendSms({
-            to: profile.phone,
-            body: `QCRC alert: ${boat?.name ?? "Your boat"} is out of service for your reservation at ${formatEasternDateTime(
-              impacted.start_time,
-            )} ET. Please reserve another boat.`,
-          });
-        } catch {
-          // Keep damage submission successful even without SMS delivery.
+
+        if (profile?.email) {
+          try {
+            await sendTransactionalEmail({
+              to: profile.email,
+              subject: `QCRC reservation alert: ${boat?.name ?? "Boat"} is out of service`,
+              text: `Your reserved boat ${boat?.name ?? "boat"} is now out of service due to a damage report. Reservation time: ${formatEasternDateTime(
+                impacted.start_time,
+              )} ET. Please reserve another boat.`,
+              html: `<p>Your reserved boat <strong>${boat?.name ?? "boat"}</strong> is now out of service due to a damage report.</p><p><strong>Reservation time:</strong> ${formatEasternDateTime(
+                impacted.start_time,
+              )} ET</p><p>Please reserve another boat.</p>`,
+            });
+          } catch {
+            // Keep damage submission successful even without email delivery.
+          }
+        }
+        if (profile?.phone && profile?.sms_opt_in) {
+          try {
+            await sendSms({
+              to: profile.phone,
+              body: `QCRC alert: ${boat?.name ?? "Your boat"} is out of service for your reservation at ${formatEasternDateTime(
+                impacted.start_time,
+              )} ET. Please reserve another boat.`,
+            });
+          } catch {
+            // Keep damage submission successful even without SMS delivery.
+          }
         }
       }
     }

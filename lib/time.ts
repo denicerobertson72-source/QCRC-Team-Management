@@ -119,3 +119,7 @@ export function toEasternDateTimeLocalValue(value: string | null | undefined) {
 
   return `${year}-${month}-${day}T${hour}:${minute}`;
 }
+
+export function nowEasternDateTimeLocalValue() {
+  return toEasternDateTimeLocalValue(new Date().toISOString());
+}

@@ -33,6 +33,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;
   const reservationMessage = params.reservation_message ?? "";
   const activePrivateOuting = privateOutings.find((outing) => outing.status === "checked_out") ?? null;
+  const recentReturnedPrivateOuting = privateOutings.find((outing) => outing.status === "checked_in") ?? null;
   const canLaunchPrivateBoat = Boolean(profile.owns_private_boat && profile.boat_storage_fee_ok && !activePrivateOuting);
 
   return (
@@ -72,7 +73,11 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
               {activePrivateOuting?.checked_out_at ? (
                 <p className="muted">Launched: {formatDateTime(activePrivateOuting.checked_out_at)}</p>
               ) : null}
-              <PrivateBoatOutingPanel canLaunch={canLaunchPrivateBoat} activeOuting={activePrivateOuting} />
+              <PrivateBoatOutingPanel
+                canLaunch={canLaunchPrivateBoat}
+                activeOuting={activePrivateOuting}
+                recentReturnedOuting={recentReturnedPrivateOuting}
+              />
             </Card>
           ) : null}
           {reservations.length === 0 ? <Card subtle>No reservations yet.</Card> : null}

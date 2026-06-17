@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternDateTime } from "@/lib/time";
+import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
 
 type ReserveSearchParams = Promise<{
   start?: string;
@@ -17,21 +17,13 @@ type ReserveSearchParams = Promise<{
   reservation_message?: string;
 }>;
 
-function toInputDateTime(value: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
-}
-
 export default async function ReservePage({
   searchParams,
 }: {
   searchParams: ReserveSearchParams;
 }) {
   const params = await searchParams;
-
-  const now = new Date();
-
-  const start = params.start ?? toInputDateTime(now);
+  const start = params.start ?? nowEasternDateTimeLocalValue();
   const end = deriveReservationEndLocal(start);
   const boatClassId = params.boatClassId ?? "";
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;

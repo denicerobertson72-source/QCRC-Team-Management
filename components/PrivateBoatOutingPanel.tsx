@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import type { FormEvent } from "react";
-import { privateBoatLaunchAction, privateBoatReturnAction } from "@/lib/actions";
+import { privateBoatLaunchAction, privateBoatReturnAction, updatePrivateBoatGateStatusAction } from "@/lib/actions";
 import type { PrivateBoatOuting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
@@ -30,9 +30,11 @@ function describeUnknownLocationError(error: unknown) {
 export function PrivateBoatOutingPanel({
   canLaunch,
   activeOuting,
+  recentReturnedOuting,
 }: {
   canLaunch: boolean;
   activeOuting: PrivateBoatOuting | null;
+  recentReturnedOuting: PrivateBoatOuting | null;
 }) {
   const resumeSubmitRef = useRef(false);
   const launchOutingId = useMemo(() => crypto.randomUUID(), []);
@@ -92,11 +94,13 @@ export function PrivateBoatOutingPanel({
     }
   }
 
-  if (!canLaunch && !activeOuting) return null;
+  if (!canLaunch && !activeOuting && !recentReturnedOuting) return null;
 
   return (
     <details className="card-subtle" open>
-      <summary>{activeOuting ? "Show private boat return options" : "Show private boat launch options"}</summary>
+      <summary>
+        {activeOuting ? "Show private boat return options" : recentReturnedOuting ? "Show private boat gate options" : "Show private boat launch options"}
+      </summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
         {!activeOuting && canLaunch ? (
           <form action={privateBoatLaunchAction} className="inline-form" onSubmit={handleLaunchSubmit}>
@@ -116,12 +120,22 @@ export function PrivateBoatOutingPanel({
         {activeOuting ? (
           <form action={privateBoatReturnAction} className="inline-form" onSubmit={handleReturnSubmit}>
             <input type="hidden" name="private_outing_id" value={activeOuting.id} />
-            <select name="gate_status" defaultValue={activeOuting.gate_status ?? "locked"} required>
+            <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
+            <Button type="submit">Mark Returned</Button>
+          </form>
+        ) : null}
+
+        {recentReturnedOuting ? (
+          <form action={updatePrivateBoatGateStatusAction} className="inline-form">
+            <input type="hidden" name="private_outing_id" value={recentReturnedOuting.id} />
+            <span className="muted">Gate status</span>
+            <select name="gate_status" defaultValue={recentReturnedOuting.gate_status ?? "locked"} required>
               <option value="locked">Gate locked</option>
               <option value="unlocked">Gate left unlocked</option>
             </select>
-            <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
-            <Button type="submit">Returned</Button>
+            <Button type="submit" variant="secondary">
+              Save Gate Status
+            </Button>
           </form>
         ) : null}
       </div>
