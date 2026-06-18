@@ -38,8 +38,9 @@ export async function TopNav() {
         <nav>
           <div className="topnav-home">
             <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
-            <Link href="/reservations">Reservations</Link>
+            <Link href="/">Home</Link>
           </div>
+          <Link href="/reservations">Reservations</Link>
           <Link href="/reserve">Reserve</Link>
           <Link href="/safety">Safety</Link>
           <Link href="/programs">Programs</Link>

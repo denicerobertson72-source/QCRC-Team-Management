@@ -8,6 +8,7 @@ import { updateMemberAdminAction } from "@/lib/actions";
 type MemberAdminFormProps = {
   member: {
     id: string;
+    full_name: string;
     role: string;
     status: string;
     membership_type: string;
@@ -32,6 +33,10 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
   return (
     <form action={updateMemberAdminAction} className="form-grid">
       <input type="hidden" name="member_id" value={member.id} />
+
+      <Field label="Full Name">
+        <input name="full_name" defaultValue={member.full_name} required />
+      </Field>
 
       <Field label="Role">
         <select name="role" defaultValue={member.role}>

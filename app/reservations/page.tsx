@@ -44,7 +44,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
           <span className="eyebrow">Boat Desk</span>
           <PageTitle
             title="My Reservations"
-            subtitle={`Active outings: ${activeCount}. Returned and cancelled outings drop off this list but remain saved in club history.`}
+            subtitle={`Active outings: ${activeCount}. Returned outings stay here only until gate status is saved, then they drop off this list while staying in club history.`}
             actions={
               <Link href="/reserve" className="cta-link">
                 Create a reservation

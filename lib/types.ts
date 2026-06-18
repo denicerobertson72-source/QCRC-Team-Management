@@ -83,6 +83,7 @@ export type SafetyEntry = {
   checkout_location: string | null;
   river_direction: string | null;
   gate_status: string | null;
+  notes: string | null;
   status: string;
   is_overdue: boolean;
 };
@@ -134,7 +135,6 @@ export type SafetyResource = {
 export type RowingMeetupMember = {
   member_id: string;
   full_name: string;
-  email: string;
   skill_level: string;
   wants_2x: boolean;
   wants_4x: boolean;
@@ -190,4 +190,14 @@ export type ProgramSession = {
   cancelled_reason: string | null;
   my_signed_up: boolean;
   signup_count: number;
+};
+
+export type TeamAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_published: boolean;
+  created_at: string;
 };

@@ -137,6 +137,7 @@ export default async function SafetyPage() {
                 <p>
                   {entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}
                 </p>
+                {entry.notes ? <p>Comments: {entry.notes}</p> : null}
                 <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
               </Card>
             ))}
@@ -150,6 +151,7 @@ export default async function SafetyPage() {
                 <h4>{entry.boat_name}</h4>
                 <p className="muted">{entry.rower_name}</p>
                 <p>Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET</p>
+                {entry.notes ? <p>Comments: {entry.notes}</p> : null}
               </Card>
             ))}
           </Card>
@@ -168,6 +170,7 @@ export default async function SafetyPage() {
                 <th>Return</th>
                 <th>Route</th>
                 <th>Gate</th>
+                <th>Comments</th>
               </tr>
             </thead>
             <tbody>
@@ -184,6 +187,7 @@ export default async function SafetyPage() {
                   <td>
                     {entry.gate_status === "locked" ? "Locked" : entry.gate_status === "unlocked" ? "Unlocked" : "-"}
                   </td>
+                  <td>{entry.notes ?? "-"}</td>
                 </tr>
               ))}
             </tbody>

@@ -224,6 +224,88 @@ function normalizeBoatStatus(value: string | undefined) {
   return "available";
 }
 
+async function listAllAuthUsersByEmail(admin: ReturnType<typeof createAdminClient>) {
+  const byEmail = new Map<string, string>();
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+    if (error) throw error;
+
+    const users = data.users ?? [];
+    for (const user of users) {
+      const email = user.email?.trim().toLowerCase();
+      if (email) {
+        byEmail.set(email, user.id);
+      }
+    }
+
+    if (users.length < 200) break;
+    page += 1;
+  }
+
+  return byEmail;
+}
+
+async function generateAndSendMemberAuthLink(
+  admin: ReturnType<typeof createAdminClient>,
+  {
+    email,
+    fullName,
+    type,
+  }: {
+    email: string;
+    fullName: string;
+    type: "invite" | "magiclink";
+  },
+) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://qcrc-team-management.vercel.app";
+  const { data, error } = await admin.auth.admin.generateLink({
+    type,
+    email,
+    options: {
+      data: { full_name: fullName },
+      redirectTo: `${appUrl}/auth/confirm?next=/reservations`,
+    },
+  });
+
+  if (error || !data.properties.action_link || !data.user?.id) {
+    throw new Error(error?.message || `Unable to create a ${type} link for ${email}.`);
+  }
+
+  const sendResult = await sendTransactionalEmail({
+    to: email,
+    subject: type === "invite" ? "QCRC invitation link" : "QCRC sign-in link",
+    text:
+      type === "invite"
+        ? `Hello ${fullName},\n\nYou have been invited to join QCRC Team Management. Use this secure link to get started:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`
+        : `Hello ${fullName},\n\nUse this secure link to sign in to QCRC Team Management:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
+    html:
+      type === "invite"
+        ? `<p>Hello ${fullName},</p><p>You have been invited to join QCRC Team Management.</p><p><a href="${data.properties.action_link}">Accept Invitation</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`
+        : `<p>Hello ${fullName},</p><p>Use this secure link to sign in to QCRC Team Management:</p><p><a href="${data.properties.action_link}">Open QCRC Team Management</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+  });
+
+  if (!sendResult.sent) {
+    return {
+      userId: data.user.id,
+      delivery: "manual" as const,
+      actionLink: data.properties.action_link,
+      reason: sendResult.reason || "Email provider not configured",
+    };
+  }
+
+  return {
+    userId: data.user.id,
+    delivery: "email" as const,
+    actionLink: data.properties.action_link,
+    reason: null,
+  };
+}
+
 export async function reserveBoatAction(formData: FormData) {
   const { supabase } = await ensureProfile();
 
@@ -257,9 +339,11 @@ export async function reserveBoatAction(formData: FormData) {
 
   if (result.error) {
     const rawMessage = result.error.message || "Reservation failed.";
-    const message = rawMessage.includes("Reservation blocked")
-      ? "Reservation blocked. Check dues, waiver, skill tier, weight class, or boat availability."
-      : rawMessage;
+    const message = rawMessage.includes("another active or reserved outing within 90 minutes")
+      ? "You already have a reservation or active outing in this time block."
+      : rawMessage.includes("Reservation blocked")
+        ? "Reservation blocked. Check dues status, waiver, skill tier, weight class, or boat availability."
+        : rawMessage;
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", message);
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
@@ -392,15 +476,16 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     redirect("/admin/members?import_status=error&import_message=The%20CSV%20file%20did%20not%20contain%20any%20rows.");
   }
 
-  const emails = [...new Set(records.map((record) => (record.email ?? "").trim().toLowerCase()).filter(Boolean))];
-  const { data: existingProfiles, error: existingProfilesError } = await admin
-    .from("profiles")
-    .select("id, email")
-    .in("email", emails);
+  const { data: existingProfiles, error: existingProfilesError } = await admin.from("profiles").select("id, email");
   if (existingProfilesError) throw existingProfilesError;
 
-  const existingByEmail = new Map((existingProfiles ?? []).map((profile) => [profile.email.toLowerCase(), profile.id]));
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://qcrc-team-management.vercel.app";
+  const existingByEmail = new Map(
+    (existingProfiles ?? [])
+      .filter((profile) => profile.email)
+      .map((profile) => [profile.email.toLowerCase(), profile.id]),
+  );
+  const existingEmailSet = new Set(existingByEmail.keys());
+  const authUsersByEmail = await listAllAuthUsersByEmail(admin);
 
   let imported = 0;
   let invited = 0;
@@ -415,21 +500,25 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     }
 
     const fullName = (record.full_name ?? record.name ?? "").trim() || email;
-    let profileId = existingByEmail.get(email) ?? null;
+    let profileId = existingByEmail.get(email) ?? authUsersByEmail.get(email) ?? null;
 
     if (!profileId) {
-      const inviteResult = await admin.auth.admin.inviteUserByEmail(email, {
-        data: { full_name: fullName },
-        redirectTo: `${appUrl}/auth/confirm?next=/reservations`,
-      });
-
-      if (inviteResult.error || !inviteResult.data.user?.id) {
-        errors.push(`Could not invite ${email}: ${inviteResult.error?.message ?? "unknown error"}`);
+      try {
+        const inviteResult = await generateAndSendMemberAuthLink(admin, {
+          email,
+          fullName,
+          type: "invite",
+        });
+        profileId = inviteResult.userId;
+        if (inviteResult.delivery !== "email") {
+          errors.push(`Imported ${email}, but invite email was not sent: ${inviteResult.reason}`);
+        }
+      } catch (error) {
+        errors.push(`Could not invite ${email}: ${error instanceof Error ? error.message : "unknown error"}`);
         continue;
       }
-
-      profileId = inviteResult.data.user.id;
       existingByEmail.set(email, profileId);
+      authUsersByEmail.set(email, profileId);
       invited += 1;
     }
 
@@ -460,7 +549,7 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     }
 
     imported += 1;
-    if (existingProfiles?.some((profile) => profile.email.toLowerCase() === email)) {
+    if (existingEmailSet.has(email)) {
       updated += 1;
     }
   }
@@ -468,6 +557,127 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   revalidatePath("/admin/members");
   const message = `${imported} row(s) imported. ${updated} updated. ${invited} invited.${errors.length > 0 ? ` ${errors.length} issue(s): ${errors.slice(0, 3).join(" | ")}` : ""}`;
   redirect(`/admin/members?import_status=${errors.length > 0 ? "error" : "success"}&import_message=${encodeURIComponent(message)}`);
+}
+
+export async function sendMemberMagicLinkAdminAction(formData: FormData) {
+  await assertSiteAdmin();
+  const admin = createAdminClient();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const fullName = String(formData.get("full_name") ?? "").trim() || email;
+  const destination = new URL("/admin/members", "http://local");
+
+  if (!email) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set("invite_message", "Member email is required to send a magic link.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  try {
+    const magicLinkResult = await generateAndSendMemberAuthLink(admin, {
+      email,
+      fullName,
+      type: "magiclink",
+    });
+    if (magicLinkResult.delivery !== "email") {
+      destination.searchParams.set("invite_status", "success");
+      destination.searchParams.set(
+        "invite_message",
+        `Email is not configured locally, so the magic link for ${email} was generated but not emailed. Open this link manually: ${magicLinkResult.actionLink}`,
+      );
+      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    }
+  } catch (sendError) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set(
+      "invite_message",
+      sendError instanceof Error ? sendError.message : `Magic link created for ${email}, but the email could not be sent.`,
+    );
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  destination.searchParams.set("invite_status", "success");
+  destination.searchParams.set("invite_message", `Magic link sent to ${email}.`);
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function inviteMemberAdminAction(formData: FormData) {
+  await assertSiteAdmin();
+  const admin = createAdminClient();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const fullName = String(formData.get("full_name") ?? "").trim() || email;
+  const destination = new URL("/admin/members", "http://local");
+
+  if (!email) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set("invite_message", "Member email is required.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const authUsersByEmail = await listAllAuthUsersByEmail(admin);
+
+  if (authUsersByEmail.has(email)) {
+    const magicLinkForm = new FormData();
+    magicLinkForm.set("email", email);
+    magicLinkForm.set("full_name", fullName);
+    await sendMemberMagicLinkAdminAction(magicLinkForm);
+  }
+
+  let invitedUserId = "";
+  try {
+    const inviteResult = await generateAndSendMemberAuthLink(admin, {
+      email,
+      fullName,
+      type: "invite",
+    });
+    invitedUserId = inviteResult.userId;
+
+    if (inviteResult.delivery !== "email") {
+      const { error } = await admin.from("profiles").upsert(
+        {
+          id: invitedUserId,
+          email,
+          full_name: fullName,
+        },
+        { onConflict: "id" },
+      );
+      if (error) {
+        destination.searchParams.set("invite_status", "error");
+        destination.searchParams.set("invite_message", error.message || `Profile setup failed for ${email}.`);
+        redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+      }
+
+      revalidatePath("/admin/members");
+      destination.searchParams.set("invite_status", "success");
+      destination.searchParams.set(
+        "invite_message",
+        `Email is not configured locally, so the invite for ${email} was created but not emailed. Open this link manually: ${inviteResult.actionLink}`,
+      );
+      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    }
+  } catch (error) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set("invite_message", error instanceof Error ? error.message : `Unable to invite ${email}.`);
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await admin.from("profiles").upsert(
+    {
+      id: invitedUserId,
+      email,
+      full_name: fullName,
+    },
+    { onConflict: "id" },
+  );
+  if (error) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set("invite_message", error.message || `Invite sent, but profile setup failed for ${email}.`);
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/admin/members");
+  destination.searchParams.set("invite_status", "success");
+  destination.searchParams.set("invite_message", `Invite sent to ${email}.`);
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
 export async function updateSafetyResourceAdminAction(formData: FormData) {
@@ -909,7 +1119,9 @@ export async function markAllNotificationsReadAction() {
 
 export async function updateMemberAdminAction(formData: FormData) {
   const { supabase } = await assertSiteAdmin();
+  const admin = createAdminClient();
   const memberId = String(formData.get("member_id") ?? "");
+  const fullName = String(formData.get("full_name") ?? "").trim();
   const role = String(formData.get("role") ?? "member");
   const status = String(formData.get("status") ?? "active");
   const membershipType = String(formData.get("membership_type") ?? "community");
@@ -939,6 +1151,7 @@ export async function updateMemberAdminAction(formData: FormData) {
   if (existingMemberError) throw existingMemberError;
 
   const updatePayload = {
+    full_name: fullName || existingMember.full_name,
     role,
     status,
     membership_type: membershipType,
@@ -966,6 +1179,14 @@ export async function updateMemberAdminAction(formData: FormData) {
     .eq("id", memberId);
 
   if (error) throw error;
+
+  if (fullName) {
+    await admin.auth.admin.updateUserById(memberId, {
+      user_metadata: {
+        full_name: fullName,
+      },
+    });
+  }
 
   if (trainingGroup) {
     const { error: signupError } = await supabase.from("program_signups").upsert(
@@ -1018,7 +1239,7 @@ export async function addBoatAdminAction(formData: FormData) {
   const name = String(formData.get("name") ?? "");
   const boatNumber = String(formData.get("boat_number") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "");
-  const boatType = String(formData.get("boat_type") ?? "training");
+  const boatType = String(formData.get("boat_type") ?? "").trim();
   const photoUrl = String(formData.get("photo_url") ?? "");
   const requiredSkillLevel = String(formData.get("required_skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "");
@@ -1030,7 +1251,7 @@ export async function addBoatAdminAction(formData: FormData) {
     name,
     boat_number: boatNumber || null,
     boat_class_id: boatClassId,
-    boat_type: boatType,
+    boat_type: boatType || "training",
     photo_url: photoUrl || null,
     required_skill_level: requiredSkillLevel,
     weight_class: weightClass || null,
@@ -1125,7 +1346,7 @@ export async function updateBoatAdminAction(formData: FormData) {
   const name = String(formData.get("name") ?? "");
   const boatNumber = String(formData.get("boat_number") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "");
-  const boatType = String(formData.get("boat_type") ?? "training");
+  const boatType = String(formData.get("boat_type") ?? "").trim();
   const photoUrl = String(formData.get("photo_url") ?? "");
   const requiredSkillLevel = String(formData.get("required_skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "");
@@ -1139,7 +1360,7 @@ export async function updateBoatAdminAction(formData: FormData) {
       name,
       boat_number: boatNumber || null,
       boat_class_id: boatClassId,
-      boat_type: boatType,
+      boat_type: boatType || "training",
       photo_url: photoUrl || null,
       required_skill_level: requiredSkillLevel,
       weight_class: weightClass || null,
@@ -1155,6 +1376,31 @@ export async function updateBoatAdminAction(formData: FormData) {
   revalidatePath("/reserve");
 }
 
+export async function deleteBoatAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const boatId = String(formData.get("boat_id") ?? "");
+  const destination = new URL("/admin/boats", "http://local");
+
+  const { error } = await supabase.from("boats").delete().eq("id", boatId);
+  if (error) {
+    destination.searchParams.set("boat_status", "error");
+    destination.searchParams.set(
+      "boat_message",
+      error.message.includes("violates foreign key")
+        ? "This boat has reservation or damage history and cannot be deleted. Mark it unavailable instead."
+        : error.message || "Unable to delete boat.",
+    );
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/admin/boats");
+  revalidatePath("/boats");
+  revalidatePath("/reserve");
+  destination.searchParams.set("boat_status", "success");
+  destination.searchParams.set("boat_message", "Boat removed from the roster.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
 export async function updateBoatStatusAdminAction(formData: FormData) {
   const { supabase } = await assertAdmin();
   const boatId = String(formData.get("boat_id") ?? "");
@@ -1166,6 +1412,59 @@ export async function updateBoatStatusAdminAction(formData: FormData) {
   revalidatePath("/admin/boats");
   revalidatePath("/boats");
   revalidatePath("/reserve");
+}
+
+export async function addTeamAnnouncementAction(formData: FormData) {
+  const { supabase, user } = await assertSiteAdmin();
+  const title = String(formData.get("title") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const startsAt = String(formData.get("starts_at") ?? "").trim();
+  const endsAt = String(formData.get("ends_at") ?? "").trim();
+  const destination = new URL("/", "http://local");
+
+  if (!title || !body) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", "Announcement title and message are required.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await supabase.from("team_announcements").insert({
+    title,
+    body,
+    starts_at: startsAt ? easternLocalInputToIso(startsAt) : null,
+    ends_at: endsAt ? easternLocalInputToIso(endsAt) : null,
+    is_published: true,
+    created_by: user.id,
+  });
+
+  if (error) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", error.message || "Unable to post announcement.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/");
+  destination.searchParams.set("announcement_status", "success");
+  destination.searchParams.set("announcement_message", "Announcement posted.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function deleteTeamAnnouncementAction(formData: FormData) {
+  const { supabase } = await assertSiteAdmin();
+  const announcementId = String(formData.get("announcement_id") ?? "");
+  const destination = new URL("/", "http://local");
+
+  const { error } = await supabase.from("team_announcements").delete().eq("id", announcementId);
+  if (error) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", error.message || "Unable to remove announcement.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/");
+  destination.searchParams.set("announcement_status", "success");
+  destination.searchParams.set("announcement_message", "Announcement removed.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
 export async function updateClearanceAdminAction(formData: FormData) {

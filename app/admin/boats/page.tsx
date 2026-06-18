@@ -5,9 +5,11 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FlashNotice } from "@/components/ui/FlashNotice";
-import { addBoatAdminAction, importBoatsCsvAdminAction, updateBoatAdminAction } from "@/lib/actions";
+import { addBoatAdminAction, deleteBoatAdminAction, importBoatsCsvAdminAction, updateBoatAdminAction } from "@/lib/actions";
 
-type SearchParams = Promise<{ import_status?: string; import_message?: string }>;
+type SearchParams = Promise<{ import_status?: string; import_message?: string; boat_status?: string; boat_message?: string }>;
+
+const BOAT_BRANDS = ["Hudson", "Kaschper", "Wintech", "Sykes", "Fluid", "Dirigo"];
 
 export default async function AdminBoatsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
@@ -23,6 +25,12 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
           <FlashNotice
             status={params.import_status === "success" ? "success" : "error"}
             message={params.import_message}
+          />
+        ) : null}
+        {params.boat_status && params.boat_message ? (
+          <FlashNotice
+            status={params.boat_status === "success" ? "success" : "error"}
+            message={params.boat_message}
           />
         ) : null}
 
@@ -42,6 +50,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               `weight_class`, `status`, `rigging_notes`
             </p>
             <p className="muted">
+              `boat_type` can store the boat brand or type, such as `Hudson`, `Kaschper`, `Wintech`, `Sykes`, `Fluid`, or `Dirigo`.
               `boat_class_id` defaults to `1x` if blank. `status` accepts `available`, `maintenance`, or `locked`.
             </p>
           </Card>
@@ -63,8 +72,8 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               <option value="4x">4x</option>
             </select>
           </Field>
-          <Field label="Boat type">
-            <input name="boat_type" defaultValue="training" />
+          <Field label="Boat brand / type">
+            <input name="boat_type" list="boat-brand-options" placeholder="Hudson" />
           </Field>
           <Field label="Photo URL">
             <input name="photo_url" placeholder="https://..." />
@@ -119,8 +128,8 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
                   <option value="4x">4x</option>
                 </select>
               </Field>
-              <Field label="Boat type">
-                <input name="boat_type" defaultValue={boat.boat_type} />
+              <Field label="Boat brand / type">
+                <input name="boat_type" list="boat-brand-options" defaultValue={boat.boat_type} />
               </Field>
               <Field label="Photo URL">
                 <input name="photo_url" defaultValue={boat.photo_url ?? ""} placeholder="https://..." />
@@ -154,9 +163,17 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               <Button type="submit" variant="secondary">
                 Save Boat
               </Button>
+              <Button type="submit" formAction={deleteBoatAdminAction} variant="secondary">
+                Delete Boat
+              </Button>
             </form>
           ))}
         </div>
+        <datalist id="boat-brand-options">
+          {BOAT_BRANDS.map((brand) => (
+            <option key={brand} value={brand} />
+          ))}
+        </datalist>
       </main>
     </>
   );
