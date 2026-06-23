@@ -49,6 +49,7 @@ export type Reservation = {
   river_direction?: string | null;
   gate_status?: string | null;
   notes: string | null;
+  crew_names?: string[];
   boats?: { name: string } | null;
 };
 
@@ -84,6 +85,7 @@ export type SafetyEntry = {
   river_direction: string | null;
   gate_status: string | null;
   notes: string | null;
+  crew_names: string[];
   status: string;
   is_overdue: boolean;
 };

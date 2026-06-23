@@ -12,6 +12,13 @@ import { formatEasternDateTime } from "@/lib/time";
 export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: string; returnTo: string }) {
   const [startTime, setStartTime] = useState(start);
   const end = useMemo(() => deriveReservationEndLocal(startTime), [startTime]);
+  const additionalSeats = boat.boat_class_id === "4x" ? 3 : boat.boat_class_id === "2x" ? 1 : 0;
+  const crewLabel =
+    additionalSeats === 0
+      ? null
+      : additionalSeats === 1
+        ? "Other rower"
+        : `Other rowers (${additionalSeats})`;
 
   return (
     <form action={reserveBoatAction} className="card form-grid">
@@ -48,9 +55,15 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
       <p className="muted">
         {end ? `End time will be set automatically to ${formatEasternDateTime(end)} ET.` : "Choose a start time that stays within the same day."}
       </p>
-      <Field label="Crew Names (optional)">
-        <input name="crew_names" placeholder="Jane Doe, Sam Smith" />
-      </Field>
+      {crewLabel ? (
+        <Field label={crewLabel}>
+          <textarea
+            name="crew_names"
+            rows={additionalSeats + 1}
+            placeholder={additionalSeats === 1 ? "Enter the other rower's full name" : "Enter one full name per line"}
+          />
+        </Field>
+      ) : null}
       <Field label="Location">
         <input name="checkout_location" placeholder="Main Dock" />
       </Field>

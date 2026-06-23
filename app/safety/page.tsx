@@ -131,6 +131,7 @@ export default async function SafetyPage() {
                   <StatusChip label={entry.is_overdue ? "overdue" : "on water"} kind={entry.is_overdue ? "reserved" : "checked_out"} />
                 </div>
                 <p className="muted">{entry.rower_name}</p>
+                {entry.crew_names.length > 0 ? <p>Boat roster: {[entry.rower_name, ...entry.crew_names].join(", ")}</p> : null}
                 <p>
                   Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET
                 </p>
@@ -150,6 +151,7 @@ export default async function SafetyPage() {
               <Card key={entry.id} subtle>
                 <h4>{entry.boat_name}</h4>
                 <p className="muted">{entry.rower_name}</p>
+                {entry.crew_names.length > 0 ? <p>Boat roster: {[entry.rower_name, ...entry.crew_names].join(", ")}</p> : null}
                 <p>Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET</p>
                 {entry.notes ? <p>Comments: {entry.notes}</p> : null}
               </Card>
@@ -166,6 +168,7 @@ export default async function SafetyPage() {
                 <th>Boat</th>
                 <th>Rower</th>
                 <th>Status</th>
+                <th>Crew</th>
                 <th>Launch</th>
                 <th>Return</th>
                 <th>Route</th>
@@ -179,6 +182,7 @@ export default async function SafetyPage() {
                   <td>{entry.boat_name}</td>
                   <td>{entry.rower_name}</td>
                   <td>{entry.status === "checked_out" ? "On Water" : "Returned"}</td>
+                  <td>{entry.crew_names.length > 0 ? [entry.rower_name, ...entry.crew_names].join(", ") : entry.rower_name}</td>
                   <td>{entry.checked_out_at ? `${formatEasternDateTime(entry.checked_out_at)} ET` : "-"}</td>
                   <td>{entry.checked_in_at ? `${formatEasternDateTime(entry.checked_in_at)} ET` : "-"}</td>
                   <td>

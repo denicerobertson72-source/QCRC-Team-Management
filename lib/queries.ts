@@ -15,6 +15,7 @@ import type {
   TeamAnnouncement,
 } from "@/lib/types";
 import { getEasternDateKey } from "@/lib/time";
+import { splitNotesAndCrew } from "@/lib/crew";
 
 function profileNameFromRelation(profileRelation: unknown) {
   if (Array.isArray(profileRelation)) {
@@ -63,6 +64,7 @@ export async function getMyReservations() {
   const rows = ((data ?? []) as ReservationRow[])
     .map((row) => ({
       ...row,
+      ...splitNotesAndCrew(row.notes),
       boats: Array.isArray(row.boats) ? (row.boats[0] ?? null) : row.boats,
     }))
     .filter((row) => {
@@ -437,6 +439,7 @@ export async function getSafetyDashboard() {
     const boat = Array.isArray(row.boats) ? row.boats[0] : row.boats;
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     const checkedOutTime = row.checked_out_at ? new Date(row.checked_out_at).getTime() : null;
+    const parsed = splitNotesAndCrew(row.notes);
 
     return {
       id: row.id,
@@ -451,7 +454,8 @@ export async function getSafetyDashboard() {
       checkout_location: row.checkout_location,
       river_direction: row.river_direction,
       gate_status: row.gate_status,
-      notes: row.notes ?? null,
+      notes: parsed.notes,
+      crew_names: parsed.crewNames,
       status: row.status,
       is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
     } satisfies SafetyEntry;
@@ -475,6 +479,7 @@ export async function getSafetyDashboard() {
       river_direction: row.river_direction,
       gate_status: row.gate_status,
       notes: row.notes ?? null,
+      crew_names: [],
       status: row.status,
       is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
     } satisfies SafetyEntry;

@@ -10,6 +10,7 @@ import { formatCurrencyStatusLine, sendTransactionalEmail } from "@/lib/email";
 import { formatEasternDateTime } from "@/lib/time";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { sendSms } from "@/lib/sms";
+import { appendCrewNamesToNotes } from "@/lib/crew";
 
 function skillLevelToClearance(level: string) {
   switch (level) {
@@ -55,14 +56,6 @@ function parseCrew(value: FormDataEntryValue | null) {
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);
-}
-
-function appendCrewNamesToNotes(notes: string, crewNames: string) {
-  const trimmedNotes = notes.trim();
-  const trimmedCrew = crewNames.trim();
-  if (!trimmedCrew) return trimmedNotes;
-  const crewLine = `Crew: ${trimmedCrew}`;
-  return trimmedNotes ? `${trimmedNotes}\n${crewLine}` : crewLine;
 }
 
 function sanitizeStorageFileName(name: string) {
@@ -1089,6 +1082,38 @@ export async function signOutAction() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
   redirect("/login");
+}
+
+export async function updateMyFullNameAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const admin = createAdminClient();
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const destination = new URL("/account/security", "http://local");
+
+  if (!fullName) {
+    destination.searchParams.set("profile_status", "error");
+    destination.searchParams.set("profile_message", "Full name is required.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id);
+  if (error) {
+    destination.searchParams.set("profile_status", "error");
+    destination.searchParams.set("profile_message", error.message || "Unable to save your full name.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  await admin.auth.admin.updateUserById(user.id, {
+    user_metadata: {
+      full_name: fullName,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/account/security");
+  destination.searchParams.set("profile_status", "success");
+  destination.searchParams.set("profile_message", "Full name updated.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
 export async function markNotificationReadAction(formData: FormData) {
