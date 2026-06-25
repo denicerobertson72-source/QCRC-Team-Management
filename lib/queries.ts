@@ -14,7 +14,7 @@ import type {
   SafetyResource,
   TeamAnnouncement,
 } from "@/lib/types";
-import { getEasternDateKey } from "@/lib/time";
+import { easternLocalInputToIso, getEasternDateKey } from "@/lib/time";
 import { splitNotesAndCrew } from "@/lib/crew";
 
 function profileNameFromRelation(profileRelation: unknown) {
@@ -121,9 +121,16 @@ export async function getMyProfileSummary() {
 
 export async function getAvailableBoats(start: string, end: string, boatClassId?: string) {
   const { supabase } = await ensureProfile();
+  const startIso = easternLocalInputToIso(start);
+  const endIso = easternLocalInputToIso(end);
+
+  if (!startIso || !endIso) {
+    return [];
+  }
+
   const { data, error } = await supabase.rpc("available_boats_for_window", {
-    p_start_time: start,
-    p_end_time: end,
+    p_start_time: startIso,
+    p_end_time: endIso,
     p_boat_class_id: boatClassId || null,
   });
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
+import { formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/time";
 
 type ReserveSearchParams = Promise<{
   start?: string;
@@ -67,9 +67,7 @@ export default async function ReservePage({
               <option value="4x">4x</option>
             </select>
           </Field>
-          <p className="muted">
-            {end ? `End time will be set automatically to ${formatEasternDateTime(end)} ET.` : "Choose a start time that stays within the same day."}
-          </p>
+          <p className="muted">{end ? `End time will be set automatically to ${formatEasternLocalInput(end)} ET.` : "Choose a start time that stays within the same day."}</p>
           <Button type="submit">Find Eligible Boats</Button>
         </form>
 

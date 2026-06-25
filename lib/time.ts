@@ -96,6 +96,11 @@ export function easternLocalInputToIso(value: string) {
   return toEasternLocalIso(year, month - 1, day, hour, minute);
 }
 
+export function formatEasternLocalInput(value: string) {
+  const iso = easternLocalInputToIso(value);
+  return iso ? formatEasternDateTime(iso) : "";
+}
+
 export function toEasternDateTimeLocalValue(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);

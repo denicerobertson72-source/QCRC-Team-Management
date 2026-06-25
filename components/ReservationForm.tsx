@@ -7,7 +7,7 @@ import { StatusChip } from "@/components/ui/StatusChip";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternDateTime } from "@/lib/time";
+import { formatEasternLocalInput } from "@/lib/time";
 
 export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: string; returnTo: string }) {
   const [startTime, setStartTime] = useState(start);
@@ -52,9 +52,7 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
         />
       </Field>
       <input type="hidden" name="end_time" value={end ?? ""} />
-      <p className="muted">
-        {end ? `End time will be set automatically to ${formatEasternDateTime(end)} ET.` : "Choose a start time that stays within the same day."}
-      </p>
+      <p className="muted">{end ? `End time will be set automatically to ${formatEasternLocalInput(end)} ET.` : "Choose a start time that stays within the same day."}</p>
       {crewLabel ? (
         <Field label={crewLabel}>
           <textarea

@@ -319,10 +319,20 @@ export async function reserveBoatAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
+  const startTimeIso = easternLocalInputToIso(startTime);
+  const endTimeIso = easternLocalInputToIso(endTime);
+
+  if (!startTimeIso || !endTimeIso) {
+    const destination = new URL(returnTo, "http://local");
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Reservation time could not be understood. Please choose the time again.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
   const result = await supabase.rpc("reserve_boat", {
     p_boat_id: boatId,
-    p_start_time: startTime,
-    p_end_time: endTime,
+    p_start_time: startTimeIso,
+    p_end_time: endTimeIso,
     p_checkout_location: checkoutLocation || null,
     p_notes: finalNotes || null,
     p_crew: crew,
@@ -358,12 +368,21 @@ export async function updateReservationAction(formData: FormData) {
   const notes = String(formData.get("notes") ?? "");
   const crewNames = String(formData.get("crew_names") ?? "");
   const finalNotes = appendCrewNamesToNotes(notes, crewNames);
+  const startTimeIso = easternLocalInputToIso(startTime);
+  const endTimeIso = easternLocalInputToIso(endTime);
+
+  if (!startTimeIso || !endTimeIso) {
+    const destination = new URL("/reservations", "http://local");
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Reservation time could not be understood. Please choose the time again.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
 
   const { error } = await supabase
     .from("reservations")
     .update({
-      start_time: startTime,
-      end_time: endTime,
+      start_time: startTimeIso,
+      end_time: endTimeIso,
       checkout_location: checkoutLocation || null,
       notes: finalNotes || null,
     })
