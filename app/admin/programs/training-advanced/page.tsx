@@ -51,7 +51,7 @@ export default async function AdminProgramsAdvancedPage({ searchParams }: { sear
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Training Advanced Schedule" subtitle={`Manage ${month.label} (Tue/Thu 6:30 AM ET default).`} />
+        <PageTitle title="Admin: Training Advanced Schedule" subtitle={`Manage ${month.label} (Tue/Thu 6:30-7:30 AM ET default).`} />
 
         <div className="row">
           <Link href="/admin/programs">Back</Link>

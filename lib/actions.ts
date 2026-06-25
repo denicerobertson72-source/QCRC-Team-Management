@@ -2297,7 +2297,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
           session_type: "coached_training_beginner_intermediate",
           starts_at: startsAt,
           ends_at: easternLocalInputToIso(
-            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T18:45`,
+            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T18:30`,
           ) as string,
           created_by: user.id,
           is_cancelled: false,
@@ -2316,7 +2316,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
           session_type: "coached_training_advanced",
           starts_at: startsAt,
           ends_at: easternLocalInputToIso(
-            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T07:45`,
+            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T07:30`,
           ) as string,
           created_by: user.id,
           is_cancelled: false,
@@ -2345,9 +2345,9 @@ function defaultSessionTimesByType(sessionType: string) {
     return { start: "08:30", end: "10:00" };
   }
   if (sessionType === "coached_training_beginner_intermediate") {
-    return { start: "17:30", end: "18:45" };
+    return { start: "17:30", end: "18:30" };
   }
-  return { start: "06:30", end: "07:45" };
+  return { start: "06:30", end: "07:30" };
 }
 
 export async function resetProgramMonthToDefaultTimesAction(formData: FormData) {

@@ -51,7 +51,7 @@ export default async function AdminProgramsBIPage({ searchParams }: { searchPara
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Training BI Schedule" subtitle={`Manage ${month.label} (Mon/Thu 5:30 PM ET default).`} />
+        <PageTitle title="Admin: Training BI Schedule" subtitle={`Manage ${month.label} (Mon/Thu 5:30-6:30 PM ET default).`} />
 
         <div className="row">
           <Link href="/admin/programs">Back</Link>
