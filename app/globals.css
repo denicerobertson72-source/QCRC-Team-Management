@@ -259,6 +259,52 @@ a:hover {
   line-height: 1.52;
 }
 
+.member-collapsible {
+  display: grid;
+  gap: 0;
+}
+
+.member-collapsible summary {
+  list-style: none;
+}
+
+.member-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.member-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.member-summary-main {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.member-summary-side {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: end;
+}
+
+.member-summary-hint {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.member-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
 .eyebrow,
 .section-kicker {
   display: inline-flex;

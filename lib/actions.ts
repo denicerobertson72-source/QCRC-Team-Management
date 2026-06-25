@@ -502,12 +502,13 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   let imported = 0;
   let invited = 0;
   let updated = 0;
+  const warnings: string[] = [];
   const errors: string[] = [];
 
   for (const record of records) {
     const email = (record.email ?? "").trim().toLowerCase();
     if (!email) {
-      errors.push("Skipped a row with no email.");
+      warnings.push("Skipped a row with no email.");
       continue;
     }
 
@@ -523,7 +524,7 @@ export async function importMembersCsvAdminAction(formData: FormData) {
         });
         profileId = inviteResult.userId;
         if (inviteResult.delivery !== "email") {
-          errors.push(`Imported ${email}, but invite email was not sent: ${inviteResult.reason}`);
+          warnings.push(`Imported ${email}, but no invite email was sent: ${inviteResult.reason}`);
         }
       } catch (error) {
         errors.push(`Could not invite ${email}: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -567,7 +568,14 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   }
 
   revalidatePath("/admin/members");
-  const message = `${imported} row(s) imported. ${updated} updated. ${invited} invited.${errors.length > 0 ? ` ${errors.length} issue(s): ${errors.slice(0, 3).join(" | ")}` : ""}`;
+  const parts = [`${imported} row(s) imported.`, `${updated} updated.`, `${invited} invited.`];
+  if (warnings.length > 0) {
+    parts.push(`${warnings.length} warning(s): ${warnings.slice(0, 3).join(" | ")}`);
+  }
+  if (errors.length > 0) {
+    parts.push(`${errors.length} error(s): ${errors.slice(0, 3).join(" | ")}`);
+  }
+  const message = parts.join(" ");
   redirect(`/admin/members?import_status=${errors.length > 0 ? "error" : "success"}&import_message=${encodeURIComponent(message)}`);
 }
 

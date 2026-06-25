@@ -18,6 +18,7 @@ type SearchParams = Promise<{
   invite_status?: string;
   invite_message?: string;
   auth_filter?: string;
+  q?: string;
 }>;
 
 async function listAuthUsersByEmail() {
@@ -60,6 +61,8 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const authFilter =
     params.auth_filter === "invite_pending" || params.auth_filter === "activated" ? params.auth_filter : "all";
+  const query = (params.q ?? "").trim().toLowerCase();
+  const emailDeliveryConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
   const { supabase } = await ensureSiteAdmin();
   const [{ data }, { data: trainingAssignments }, authUsersByEmail] = await Promise.all([
     supabase
@@ -88,7 +91,12 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
       authState,
     };
   });
-  const visibleMembers = membersWithAuth.filter((member) => authFilter === "all" || member.authState === authFilter);
+  const visibleMembers = membersWithAuth.filter((member) => {
+    if (authFilter !== "all" && member.authState !== authFilter) return false;
+    if (!query) return true;
+    const haystack = [member.full_name, member.email, member.status, member.membership_type].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
 
   return (
     <>
@@ -113,6 +121,9 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
 
         <form method="get" className="card form-grid">
           <h3>Filter Members</h3>
+          <Field label="Search">
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search by name, email, or status" />
+          </Field>
           <Field label="Invite Status">
             <select name="auth_filter" defaultValue={authFilter}>
               <option value="all">All</option>
@@ -136,6 +147,14 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <p className="muted">
             Upload a CSV exported from Excel or Google Sheets. Existing members are matched by email and updated. New emails are invited into the app automatically.
           </p>
+          {!emailDeliveryConfigured ? (
+            <Card subtle className="stack">
+              <strong>Email delivery is not configured in this environment.</strong>
+              <p className="muted">
+                New members can still be imported and auth links can still be created, but invite emails will not send until `RESEND_API_KEY` and `EMAIL_FROM` are configured.
+              </p>
+            </Card>
+          ) : null}
           <Field label="CSV File">
             <input name="file" type="file" accept=".csv,text/csv" required />
           </Field>
@@ -155,39 +174,43 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
 
         <div className="stack">
           {visibleMembers.map((m) => (
-            <Card key={m.id} className="stack">
-              <div className="page-title">
-                <div className="stack" style={{ gap: "0.35rem" }}>
+            <details key={m.id} className="card member-collapsible">
+              <summary className="member-summary">
+                <div className="member-summary-main">
                   <h3>{m.full_name}</h3>
-                  <span className="muted">{m.email}</span>
-                  {m.authUser ? (
-                    <span className="muted">
-                      {m.hasSignedIn
+                  <p className="muted">{m.email}</p>
+                  <p className="muted">
+                    {m.authUser
+                      ? m.hasSignedIn
                         ? `Activated: ${formatEasternDateTime(m.authUser.last_sign_in_at as string)} ET`
                         : m.lastInviteAt
                           ? `Invite pending. Last sent: ${formatEasternDateTime(m.lastInviteAt)} ET`
-                          : "Auth record exists but no sign-in yet."}
-                    </span>
-                  ) : (
-                    <span className="muted">No auth account found yet.</span>
-                  )}
+                          : "Auth record exists but no sign-in yet."
+                      : "No auth account found yet."}
+                  </p>
                 </div>
-                <div className="row">
-                  {m.owns_private_boat ? <StatusChip label="Private Boat Owner" kind="checked_out" /> : null}
-                  {m.hasSignedIn ? <StatusChip label="Activated" kind="checked_out" /> : <StatusChip label="Invite Pending" kind="reserved" />}
+                <div className="member-summary-side">
+                  <div className="row">
+                    <StatusChip label={m.status} kind={m.status === "active" ? "checked_out" : "reserved"} />
+                    {m.owns_private_boat ? <StatusChip label="Private Boat Owner" kind="checked_out" /> : null}
+                    {m.hasSignedIn ? <StatusChip label="Activated" kind="checked_out" /> : <StatusChip label="Invite Pending" kind="reserved" />}
+                  </div>
+                  <span className="member-summary-hint">Click to expand</span>
                 </div>
+              </summary>
+
+              <div className="member-details stack">
+                <form action={sendMemberMagicLinkAdminAction} className="row">
+                  <input type="hidden" name="email" value={m.email} />
+                  <input type="hidden" name="full_name" value={m.full_name} />
+                  <Button type="submit" variant="secondary">
+                    Send Magic Link
+                  </Button>
+                </form>
+
+                <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />
               </div>
-
-              <form action={sendMemberMagicLinkAdminAction} className="row">
-                <input type="hidden" name="email" value={m.email} />
-                <input type="hidden" name="full_name" value={m.full_name} />
-                <Button type="submit" variant="secondary">
-                  Send Magic Link
-                </Button>
-              </form>
-
-              <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />
-            </Card>
+            </details>
           ))}
         </div>
       </main>
