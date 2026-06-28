@@ -1393,7 +1393,7 @@ export async function updateMemberAdminAction(formData: FormData) {
   }
 
   if (trainingGroup) {
-    const { error: signupError } = await supabase.from("program_signups").upsert(
+    const { error: signupError } = await admin.from("program_signups").upsert(
       {
         member_id: memberId,
         program_type: "coached_training",
@@ -1403,7 +1403,7 @@ export async function updateMemberAdminAction(formData: FormData) {
     );
     if (signupError) throw signupError;
   } else {
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await admin
       .from("program_signups")
       .delete()
       .eq("member_id", memberId)
