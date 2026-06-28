@@ -305,6 +305,19 @@ a:hover {
   border-top: 1px solid var(--line);
 }
 
+.member-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.94rem;
+  color: var(--muted-strong);
+  line-height: 1.45;
+}
+
+.member-checkbox-row input {
+  margin-top: 0.2rem;
+}
+
 .eyebrow,
 .section-kicker {
   display: inline-flex;

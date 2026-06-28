@@ -8,7 +8,7 @@ import { FlashNotice } from "@/components/ui/FlashNotice";
 import { InviteMemberForm } from "@/components/admin/InviteMemberForm";
 import { MemberAdminForm } from "@/components/admin/MemberAdminForm";
 import { StatusChip } from "@/components/ui/StatusChip";
-import { importMembersCsvAdminAction, sendMemberMagicLinkAdminAction } from "@/lib/actions";
+import { deleteMemberPermanentlyAdminAction, importMembersCsvAdminAction, sendMemberMagicLinkAdminAction } from "@/lib/actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatEasternDateTime } from "@/lib/time";
 
@@ -17,6 +17,8 @@ type SearchParams = Promise<{
   import_message?: string;
   invite_status?: string;
   invite_message?: string;
+  member_status?: string;
+  member_message?: string;
   auth_filter?: string;
   q?: string;
 }>;
@@ -116,6 +118,12 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
             message={params.invite_message}
           />
         ) : null}
+        {params.member_status && params.member_message ? (
+          <FlashNotice
+            status={params.member_status === "success" ? "success" : "error"}
+            message={params.member_message}
+          />
+        ) : null}
 
         <InviteMemberForm />
 
@@ -158,6 +166,10 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <Field label="CSV File">
             <input name="file" type="file" accept=".csv,text/csv" required />
           </Field>
+          <label className="member-checkbox-row">
+            <input name="mark_missing_inactive" type="checkbox" value="true" />
+            <span>Mark active non-admin members missing from this CSV as inactive.</span>
+          </label>
           <Card subtle className="stack">
             <strong>Expected column names</strong>
             <p className="muted">
@@ -209,6 +221,21 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                 </form>
 
                 <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />
+
+                <form action={deleteMemberPermanentlyAdminAction} className="card-subtle form-grid">
+                  <input type="hidden" name="member_id" value={m.id} />
+                  <strong>Permanent delete</strong>
+                  <p className="muted">
+                    Use this only for duplicates, test accounts, or people with no club history. Members with reservations, crew history, damage history, or private outings will be blocked and should be marked inactive instead.
+                  </p>
+                  <label className="member-checkbox-row">
+                    <input name="confirm_delete" type="checkbox" value="true" />
+                    <span>I understand this permanently deletes the member if no protected history exists.</span>
+                  </label>
+                  <div className="row">
+                    <Button type="submit" variant="secondary">Delete Permanently</Button>
+                  </div>
+                </form>
               </div>
             </details>
           ))}

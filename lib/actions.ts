@@ -50,6 +50,60 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
+type ProtectedMemberReference = {
+  label: string;
+  count: number;
+};
+
+async function getProtectedMemberReferences(admin: ReturnType<typeof createAdminClient>, memberId: string) {
+  const [
+    reservations,
+    crewAssignments,
+    reportedDamage,
+    responsibleDamage,
+    damagePhotos,
+    privateBoatOutings,
+    createdSessions,
+    sessionSignups,
+    programSignups,
+    raceSignups,
+  ] = await Promise.all([
+    admin.from("reservations").select("id", { head: true, count: "exact" }).eq("created_by", memberId),
+    admin.from("reservation_crew").select("reservation_id", { head: true, count: "exact" }).eq("member_id", memberId),
+    admin.from("damage_reports").select("id", { head: true, count: "exact" }).eq("reported_by", memberId),
+    admin.from("damage_reports").select("id", { head: true, count: "exact" }).eq("responsible_member_id", memberId),
+    admin.from("damage_photos").select("id", { head: true, count: "exact" }).eq("uploaded_by", memberId),
+    admin.from("private_boat_outings").select("id", { head: true, count: "exact" }).eq("member_id", memberId),
+    admin.from("sessions").select("id", { head: true, count: "exact" }).eq("created_by", memberId),
+    admin.from("session_signups").select("session_id", { head: true, count: "exact" }).eq("member_id", memberId),
+    admin.from("program_signups").select("member_id", { head: true, count: "exact" }).eq("member_id", memberId),
+    admin.from("race_signups").select("member_id", { head: true, count: "exact" }).eq("member_id", memberId),
+  ]);
+
+  const results = [
+    { label: "reservations", result: reservations },
+    { label: "crew assignments", result: crewAssignments },
+    { label: "damage reports filed", result: reportedDamage },
+    { label: "damage reports as responsible member", result: responsibleDamage },
+    { label: "damage photo uploads", result: damagePhotos },
+    { label: "private boat outings", result: privateBoatOutings },
+    { label: "created sessions", result: createdSessions },
+    { label: "session signups", result: sessionSignups },
+    { label: "program signups", result: programSignups },
+    { label: "race signups", result: raceSignups },
+  ];
+
+  for (const entry of results) {
+    if (entry.result.error) {
+      throw entry.result.error;
+    }
+  }
+
+  return results
+    .map((entry) => ({ label: entry.label, count: entry.result.count ?? 0 }))
+    .filter((entry): entry is ProtectedMemberReference => entry.count > 0);
+}
+
 function parseCrew(value: FormDataEntryValue | null) {
   if (!value) return [] as string[];
   return String(value)
@@ -490,6 +544,7 @@ export async function importMembersCsvAdminAction(formData: FormData) {
 
   const { data: existingProfiles, error: existingProfilesError } = await admin.from("profiles").select("id, email");
   if (existingProfilesError) throw existingProfilesError;
+  const markMissingInactive = String(formData.get("mark_missing_inactive") ?? "false") === "true";
 
   const existingByEmail = new Map(
     (existingProfiles ?? [])
@@ -502,8 +557,10 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   let imported = 0;
   let invited = 0;
   let updated = 0;
+  let deactivated = 0;
   const warnings: string[] = [];
   const errors: string[] = [];
+  const seenEmails = new Set<string>();
 
   for (const record of records) {
     const email = (record.email ?? "").trim().toLowerCase();
@@ -511,6 +568,7 @@ export async function importMembersCsvAdminAction(formData: FormData) {
       warnings.push("Skipped a row with no email.");
       continue;
     }
+    seenEmails.add(email);
 
     const fullName = (record.full_name ?? record.name ?? "").trim() || email;
     let profileId = existingByEmail.get(email) ?? authUsersByEmail.get(email) ?? null;
@@ -567,8 +625,31 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     }
   }
 
+  if (markMissingInactive) {
+    const { data: activeProfiles, error: activeProfilesError } = await admin
+      .from("profiles")
+      .select("id, email, role, status")
+      .neq("role", "admin")
+      .neq("role", "equipment_manager")
+      .neq("status", "inactive");
+    if (activeProfilesError) throw activeProfilesError;
+
+    const idsToDeactivate = (activeProfiles ?? [])
+      .filter((profile) => profile.email && !seenEmails.has(profile.email.toLowerCase()))
+      .map((profile) => profile.id);
+
+    if (idsToDeactivate.length > 0) {
+      const { error: deactivateError } = await admin.from("profiles").update({ status: "inactive" }).in("id", idsToDeactivate);
+      if (deactivateError) throw deactivateError;
+      deactivated = idsToDeactivate.length;
+    }
+  }
+
   revalidatePath("/admin/members");
   const parts = [`${imported} row(s) imported.`, `${updated} updated.`, `${invited} invited.`];
+  if (markMissingInactive) {
+    parts.push(`${deactivated} missing member(s) marked inactive.`);
+  }
   if (warnings.length > 0) {
     parts.push(`${warnings.length} warning(s): ${warnings.slice(0, 3).join(" | ")}`);
   }
@@ -617,6 +698,77 @@ export async function sendMemberMagicLinkAdminAction(formData: FormData) {
 
   destination.searchParams.set("invite_status", "success");
   destination.searchParams.set("invite_message", `Magic link sent to ${email}.`);
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function deleteMemberPermanentlyAdminAction(formData: FormData) {
+  const { user } = await assertSiteAdmin();
+  const admin = createAdminClient();
+  const memberId = String(formData.get("member_id") ?? "");
+  const confirmDelete = String(formData.get("confirm_delete") ?? "false") === "true";
+  const destination = new URL("/admin/members", "http://local");
+
+  if (!memberId) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set("member_message", "Member id is required for permanent delete.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (!confirmDelete) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set("member_message", "Check the confirmation box before permanently deleting a member.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (memberId === user.id) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set("member_message", "You cannot permanently delete your own admin account.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: member, error: memberError } = await admin
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .eq("id", memberId)
+    .single();
+  if (memberError) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set("member_message", memberError.message || "Member could not be found.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (member.role === "admin") {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set("member_message", "Admin accounts must be downgraded first; they cannot be permanently deleted from this screen.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const references = await getProtectedMemberReferences(admin, memberId);
+  if (references.length > 0) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set(
+      "member_message",
+      `Permanent delete is blocked for ${member.full_name}. This member still has linked history: ${references
+        .slice(0, 4)
+        .map((entry) => `${entry.label} (${entry.count})`)
+        .join(", ")}. Mark the member inactive instead.`,
+    );
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error: authDeleteError } = await admin.auth.admin.deleteUser(memberId);
+  if (authDeleteError) {
+    destination.searchParams.set("member_status", "error");
+    destination.searchParams.set(
+      "member_message",
+      authDeleteError.message || `Unable to permanently delete ${member.email ?? member.full_name}.`,
+    );
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/admin/members");
+  destination.searchParams.set("member_status", "success");
+  destination.searchParams.set("member_message", `${member.full_name} was permanently deleted.`);
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
