@@ -20,6 +20,7 @@ type SearchParams = Promise<{
   member_status?: string;
   member_message?: string;
   auth_filter?: string;
+  status_filter?: string;
   q?: string;
 }>;
 
@@ -63,6 +64,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const authFilter =
     params.auth_filter === "invite_pending" || params.auth_filter === "activated" ? params.auth_filter : "all";
+  const statusFilter = params.status_filter === "active" || params.status_filter === "inactive" ? params.status_filter : "all";
   const query = (params.q ?? "").trim().toLowerCase();
   const emailDeliveryConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
   const { supabase } = await ensureSiteAdmin();
@@ -95,6 +97,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
   });
   const visibleMembers = membersWithAuth.filter((member) => {
     if (authFilter !== "all" && member.authState !== authFilter) return false;
+    if (statusFilter !== "all" && member.status !== statusFilter) return false;
     if (!query) return true;
     const haystack = [member.full_name, member.email, member.status, member.membership_type].join(" ").toLowerCase();
     return haystack.includes(query);
@@ -137,6 +140,13 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
               <option value="all">All</option>
               <option value="invite_pending">Invite Pending</option>
               <option value="activated">Activated</option>
+            </select>
+          </Field>
+          <Field label="Member Status">
+            <select name="status_filter" defaultValue={statusFilter}>
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </Field>
           <p className="muted">
