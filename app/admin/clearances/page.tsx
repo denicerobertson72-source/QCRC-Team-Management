@@ -21,22 +21,40 @@ function clearanceLabel(level: number) {
   }
 }
 
+function skillLevelToClearance(level: string | null | undefined) {
+  switch (level) {
+    case "Elite":
+      return 4;
+    case "Advanced":
+      return 3;
+    case "Intermediate":
+      return 2;
+    case "LTR":
+    case "Beginner":
+    default:
+      return 1;
+  }
+}
+
 export default async function AdminClearancesPage() {
   const { supabase } = await ensureProfile();
 
   const [{ data: clearances }, { data: members }] = await Promise.all([
     supabase
       .from("member_clearances")
-      .select("id, member_id, boat_class_id, clearance_level, approved_at, profiles!member_clearances_member_id_fkey(full_name)")
+      .select("id, member_id, boat_class_id, clearance_level, approved_at, profiles!member_clearances_member_id_fkey(full_name, skill_level)")
       .order("approved_at", { ascending: false }),
-    supabase.from("profiles").select("id, full_name").order("full_name"),
+    supabase.from("profiles").select("id, full_name, skill_level").order("full_name"),
   ]);
 
   return (
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Clearances" subtitle="Set member access by boat class using named skill tiers." />
+        <PageTitle
+          title="Admin: Clearances"
+          subtitle="Set member access by boat class using named skill tiers. Effective access uses the higher of profile skill level and any boat-class-specific clearance."
+        />
 
         <form action={updateClearanceAdminAction} className="card form-grid">
           <h3>Set Clearance</h3>
@@ -47,7 +65,7 @@ export default async function AdminClearancesPage() {
               </option>
               {(members ?? []).map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.full_name}
+                  {m.full_name} ({m.skill_level})
                 </option>
               ))}
             </select>
@@ -75,8 +93,10 @@ export default async function AdminClearancesPage() {
             <thead>
               <tr>
                 <th>Member</th>
+                <th>Profile Skill</th>
                 <th>Boat Class</th>
-                <th>Skill Tier</th>
+                <th>Boat Clearance</th>
+                <th>Effective Tier</th>
                 <th>Approved At</th>
               </tr>
             </thead>
@@ -84,8 +104,10 @@ export default async function AdminClearancesPage() {
               {(clearances ?? []).map((row: any) => (
                 <tr key={row.id}>
                   <td>{row.profiles?.full_name}</td>
+                  <td>{row.profiles?.skill_level ?? "Beginner"}</td>
                   <td>{row.boat_class_id}</td>
                   <td>{clearanceLabel(row.clearance_level)}</td>
+                  <td>{clearanceLabel(Math.max(row.clearance_level ?? 1, skillLevelToClearance(row.profiles?.skill_level)))}</td>
                   <td>{formatEasternDateTime(row.approved_at)} ET</td>
                 </tr>
               ))}
