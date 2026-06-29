@@ -56,7 +56,7 @@ export default async function NotificationsPage() {
       <main className="stack">
         <PageTitle
           title="Notifications"
-          subtitle="Club alerts, lineup updates, cancellations, and reservation issues."
+          subtitle="Club alerts, lineup updates, cancellations, and reservation issues from the last 24 hours."
           actions={
             notifications.some((item) => item.read_at === null) ? (
               <form action={markAllNotificationsReadAction}>

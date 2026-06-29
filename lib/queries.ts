@@ -45,6 +45,10 @@ function rowerNameFromRelation(profileRelation: unknown) {
   return "Unknown";
 }
 
+function notificationCutoffIso() {
+  return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+}
+
 export async function getMyReservations() {
   const { supabase, user } = await ensureProfile();
 
@@ -400,10 +404,12 @@ export async function getOverdueBoatAlerts() {
 
 export async function getMyNotifications(limit = 50) {
   const { supabase, user } = await ensureProfile();
+  const cutoffIso = notificationCutoffIso();
   const { data, error } = await supabase
     .from("notification_events")
     .select("id, notification_type, payload, sent_at, read_at")
     .eq("member_id", user.id)
+    .gte("sent_at", cutoffIso)
     .order("sent_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -412,10 +418,12 @@ export async function getMyNotifications(limit = 50) {
 
 export async function getUnreadNotificationCount() {
   const { supabase, user } = await ensureProfile();
+  const cutoffIso = notificationCutoffIso();
   const { count, error } = await supabase
     .from("notification_events")
     .select("*", { count: "exact", head: true })
     .eq("member_id", user.id)
+    .gte("sent_at", cutoffIso)
     .is("read_at", null);
   if (error) throw error;
   return count ?? 0;

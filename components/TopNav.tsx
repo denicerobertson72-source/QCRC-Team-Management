@@ -29,6 +29,7 @@ export async function TopNav() {
       startTime: row.start_time,
     }))
     .filter((row) => row.boatStatus !== "available");
+  const unreadBadgeLabel = unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount);
 
   return (
     <>
@@ -45,7 +46,10 @@ export async function TopNav() {
           <Link href="/safety">Safety</Link>
           <Link href="/programs">Programs</Link>
           <Link href="/lineups">Lineups</Link>
-          <Link href="/notifications">Notifications{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ""}</Link>
+          <Link href="/notifications" className="topnav-notification-link">
+            Notifications
+            {unreadNotificationCount > 0 ? <span className="topnav-badge">{unreadBadgeLabel}</span> : null}
+          </Link>
           <Link href="/boats">Boats</Link>
           <Link href="/damage/new">Damage</Link>
           {isAdmin ? <Link href="/admin">Admin</Link> : null}

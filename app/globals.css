@@ -173,6 +173,28 @@ a:hover {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+.topnav-notification-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.topnav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.38rem;
+  border-radius: 999px;
+  background: #fff4ee;
+  color: var(--brand-deep);
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
 .topnav nav a:hover {
   text-decoration: none;
   color: #ffffff;
