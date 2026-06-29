@@ -6,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { InviteMemberForm } from "@/components/admin/InviteMemberForm";
+import { InviteGuidanceButton } from "@/components/admin/InviteGuidanceButton";
 import { MemberAdminForm } from "@/components/admin/MemberAdminForm";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { deleteMemberPermanentlyAdminAction, importMembersCsvAdminAction, sendMemberMagicLinkAdminAction } from "@/lib/actions";
@@ -228,6 +229,14 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                   <Button type="submit" variant="secondary">
                     Send Magic Link
                   </Button>
+                  <InviteGuidanceButton
+                    email={m.email}
+                    fullName={m.full_name}
+                    hasAuthAccount={Boolean(m.authUser)}
+                    hasSignedIn={m.hasSignedIn}
+                    lastInviteAt={m.lastInviteAt}
+                    emailDeliveryConfigured={emailDeliveryConfigured}
+                  />
                 </form>
 
                 <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />

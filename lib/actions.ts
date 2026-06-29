@@ -683,7 +683,7 @@ export async function sendMemberMagicLinkAdminAction(formData: FormData) {
       destination.searchParams.set("invite_status", "success");
       destination.searchParams.set(
         "invite_message",
-        `Email is not configured locally, so the magic link for ${email} was generated but not emailed. Open this link manually: ${magicLinkResult.actionLink}`,
+        `Email delivery is not configured in this environment, so a fresh magic link for ${email} could not be emailed. Use Copy Invite Guidance on the member row for next steps.`,
       );
       redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
     }
@@ -822,7 +822,7 @@ export async function inviteMemberAdminAction(formData: FormData) {
       destination.searchParams.set("invite_status", "success");
       destination.searchParams.set(
         "invite_message",
-        `Email is not configured locally, so the invite for ${email} was created but not emailed. Open this link manually: ${inviteResult.actionLink}`,
+        `Email delivery is not configured in this environment, so the invite for ${email} was created but not emailed. Use Copy Invite Guidance on the member row for next steps.`,
       );
       redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
     }
