@@ -37,7 +37,7 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
         <StatusChip label={boat.boat_class_id} />
       </div>
       <p className="muted">
-        {boat.boat_type} | skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
+        {boat.boat_type ? `${boat.boat_type} | ` : ""}skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
       </p>
 
       <input type="hidden" name="boat_id" value={boat.id} />

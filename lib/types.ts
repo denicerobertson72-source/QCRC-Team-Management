@@ -4,7 +4,7 @@ export type Boat = {
   boat_number: string | null;
   photo_url: string | null;
   boat_class_id: "1x" | "2x" | "4x" | string;
-  boat_type: string;
+  boat_type: string | null;
   required_skill_level: "Beginner" | "Intermediate" | "Advanced" | "Elite" | string;
   weight_class: "Lightweight" | "Mid-weight" | "Heavyweight" | null | string;
   required_clearance: number;

@@ -271,6 +271,16 @@ function normalizeBoatStatus(value: string | undefined) {
   return "available";
 }
 
+function normalizeBoatBrand(value: string | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  if (normalized === "training" || normalized === "performance" || normalized === "stable" || normalized === "race") {
+    return null;
+  }
+  return raw;
+}
+
 async function listAllAuthUsersByEmail(admin: ReturnType<typeof createAdminClient>) {
   const byEmail = new Map<string, string>();
   let page = 1;
@@ -1443,7 +1453,7 @@ export async function addBoatAdminAction(formData: FormData) {
   const name = String(formData.get("name") ?? "");
   const boatNumber = String(formData.get("boat_number") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "");
-  const boatType = String(formData.get("boat_type") ?? "").trim();
+  const boatType = normalizeBoatBrand(String(formData.get("boat_type") ?? ""));
   const photoUrl = String(formData.get("photo_url") ?? "");
   const requiredSkillLevel = String(formData.get("required_skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "");
@@ -1455,7 +1465,7 @@ export async function addBoatAdminAction(formData: FormData) {
     name,
     boat_number: boatNumber || null,
     boat_class_id: boatClassId,
-    boat_type: boatType || "training",
+    boat_type: boatType,
     photo_url: photoUrl || null,
     required_skill_level: requiredSkillLevel,
     weight_class: weightClass || null,
@@ -1510,7 +1520,7 @@ export async function importBoatsCsvAdminAction(formData: FormData) {
       name,
       boat_number: (record.boat_number ?? "").trim() || null,
       boat_class_id: normalizeBoatClassId(record.boat_class_id),
-      boat_type: (record.boat_type ?? "").trim() || "training",
+      boat_type: normalizeBoatBrand(record.boat_type),
       photo_url: (record.photo_url ?? "").trim() || null,
       required_skill_level: requiredSkillLevel,
       weight_class: (record.weight_class ?? "").trim() || null,
@@ -1550,7 +1560,7 @@ export async function updateBoatAdminAction(formData: FormData) {
   const name = String(formData.get("name") ?? "");
   const boatNumber = String(formData.get("boat_number") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "");
-  const boatType = String(formData.get("boat_type") ?? "").trim();
+  const boatType = normalizeBoatBrand(String(formData.get("boat_type") ?? ""));
   const photoUrl = String(formData.get("photo_url") ?? "");
   const requiredSkillLevel = String(formData.get("required_skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "");
@@ -1564,7 +1574,7 @@ export async function updateBoatAdminAction(formData: FormData) {
       name,
       boat_number: boatNumber || null,
       boat_class_id: boatClassId,
-      boat_type: boatType || "training",
+      boat_type: boatType,
       photo_url: photoUrl || null,
       required_skill_level: requiredSkillLevel,
       weight_class: weightClass || null,

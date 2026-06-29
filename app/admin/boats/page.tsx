@@ -50,7 +50,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               `weight_class`, `status`, `rigging_notes`
             </p>
             <p className="muted">
-              `boat_type` can store the boat brand or type, such as `Hudson`, `Kaschper`, `Wintech`, `Sykes`, `Fluid`, or `Dirigo`.
+              `boat_type` now stores the boat brand, such as `Hudson`, `Kaschper`, `Wintech`, `Sykes`, `Fluid`, or `Dirigo`.
               `boat_class_id` defaults to `1x` if blank. `status` accepts `available`, `maintenance`, or `locked`.
             </p>
           </Card>
@@ -129,7 +129,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
                 </select>
               </Field>
               <Field label="Boat brand / type">
-                <input name="boat_type" list="boat-brand-options" defaultValue={boat.boat_type} />
+                <input name="boat_type" list="boat-brand-options" defaultValue={boat.boat_type ?? ""} />
               </Field>
               <Field label="Photo URL">
                 <input name="photo_url" defaultValue={boat.photo_url ?? ""} placeholder="https://..." />

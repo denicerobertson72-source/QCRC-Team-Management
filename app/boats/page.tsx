@@ -65,7 +65,7 @@ export default async function BoatsPage({ searchParams }: { searchParams: BoatsS
                     {boat.boat_number ? ` #${boat.boat_number}` : ""}
                   </h3>
                   <p className="muted">
-                    {boat.boat_class_id} | {boat.boat_type} | skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
+                    {boat.boat_class_id} | {boat.boat_type ? `${boat.boat_type} | ` : ""}skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
                   </p>
                 </div>
                 <div className="boat-summary-side">
