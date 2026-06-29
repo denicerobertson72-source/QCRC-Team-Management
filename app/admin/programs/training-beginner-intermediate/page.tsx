@@ -30,8 +30,8 @@ function monthBounds(monthInput?: string) {
 
   const label = formatEasternMonthLabel(start);
   const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-
-  return { start, end, label, current: fmt(start), prev: fmt(prev), next: fmt(next) };
+  const isCurrentMonth = safeYear === now.getUTCFullYear() && safeMonthIndex === now.getUTCMonth();
+  return { start, end, label, current: fmt(start), prev: fmt(prev), next: fmt(next), queryStart: isCurrentMonth ? now : start };
 }
 
 export default async function AdminProgramsBIPage({ searchParams }: { searchParams: SearchParams }) {
@@ -43,7 +43,7 @@ export default async function AdminProgramsBIPage({ searchParams }: { searchPara
     .from("sessions")
     .select("id, title, starts_at, ends_at, is_cancelled, cancelled_reason")
     .eq("session_type", "coached_training_beginner_intermediate")
-    .gte("starts_at", month.start.toISOString())
+    .gte("starts_at", month.queryStart.toISOString())
     .lt("starts_at", month.end.toISOString())
     .order("starts_at", { ascending: true });
 

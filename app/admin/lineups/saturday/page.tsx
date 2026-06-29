@@ -21,7 +21,8 @@ function monthBounds(monthInput?: string) {
   const next = new Date(Date.UTC(safeYear, safeMonthIndex + 1, 1));
   const label = formatEasternMonthLabel(start);
   const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  return { start, end, label, prev: fmt(prev), next: fmt(next) };
+  const isCurrentMonth = safeYear === now.getUTCFullYear() && safeMonthIndex === now.getUTCMonth();
+  return { start, end, label, prev: fmt(prev), next: fmt(next), queryStart: isCurrentMonth ? now : start };
 }
 
 export default async function AdminSaturdayLineupsPage({ searchParams }: { searchParams: SearchParams }) {
@@ -33,7 +34,7 @@ export default async function AdminSaturdayLineupsPage({ searchParams }: { searc
     .from("sessions")
     .select("id, title, starts_at, is_cancelled")
     .eq("session_type", "saturday_coached_row")
-    .gte("starts_at", month.start.toISOString())
+    .gte("starts_at", month.queryStart.toISOString())
     .lt("starts_at", month.end.toISOString())
     .order("starts_at", { ascending: true });
 
