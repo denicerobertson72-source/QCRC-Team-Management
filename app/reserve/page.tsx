@@ -13,6 +13,8 @@ import { formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/tim
 type ReserveSearchParams = Promise<{
   start?: string;
   boatClassId?: string;
+  boatName?: string;
+  boatNumber?: string;
   reservation_status?: string;
   reservation_message?: string;
 }>;
@@ -26,11 +28,13 @@ export default async function ReservePage({
   const start = params.start ?? nowEasternDateTimeLocalValue();
   const end = deriveReservationEndLocal(start);
   const boatClassId = params.boatClassId ?? "";
+  const boatName = (params.boatName ?? "").trim().toLowerCase();
+  const boatNumber = (params.boatNumber ?? "").trim().toLowerCase();
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;
   const reservationMessage = params.reservation_message ?? "";
   const reserveReturnTo = `/reserve?start=${encodeURIComponent(start)}${
     boatClassId ? `&boatClassId=${encodeURIComponent(boatClassId)}` : ""
-  }`;
+  }${params.boatName ? `&boatName=${encodeURIComponent(params.boatName)}` : ""}${params.boatNumber ? `&boatNumber=${encodeURIComponent(params.boatNumber)}` : ""}`;
 
   const [availableBoats, allBoats, profile] = await Promise.all([
     getAvailableBoats(start, end ?? start, boatClassId || undefined),
@@ -39,7 +43,12 @@ export default async function ReservePage({
   ]);
 
   const availableIds = new Set(availableBoats.map((b) => b.id));
-  const visibleBoats = boatClassId ? allBoats.filter((b) => b.boat_class_id === boatClassId) : allBoats;
+  const visibleBoats = allBoats.filter((b) => {
+    if (boatClassId && b.boat_class_id !== boatClassId) return false;
+    if (boatName && !b.name.toLowerCase().includes(boatName)) return false;
+    if (boatNumber && !(b.boat_number ?? "").toLowerCase().includes(boatNumber)) return false;
+    return true;
+  });
 
   return (
     <>
@@ -59,6 +68,12 @@ export default async function ReservePage({
           <Field label="Start time">
             <input name="start" type="datetime-local" defaultValue={start} required />
           </Field>
+          <Field label="Boat Name">
+            <input name="boatName" defaultValue={params.boatName ?? ""} placeholder="Search by boat name" />
+          </Field>
+          <Field label="Boat Number">
+            <input name="boatNumber" defaultValue={params.boatNumber ?? ""} placeholder="Search by number" />
+          </Field>
           <Field label="Boat Class">
             <select name="boatClassId" defaultValue={boatClassId}>
               <option value="">All</option>
@@ -76,24 +91,49 @@ export default async function ReservePage({
 
           {visibleBoats.map((boat) => {
             const reservable = boat.status === "available" && availableIds.has(boat.id);
-            if (reservable) {
-              return <ReservationForm key={boat.id} boat={boat} start={start} returnTo={reserveReturnTo} />;
-            }
-
             return (
-              <Card key={boat.id} className="stack">
-                <div className="page-title">
-                  <h3>{boat.name}</h3>
-                  <StatusChip label={boat.status === "available" ? "unavailable" : "out of service"} />
+              <details key={boat.id} className="card boat-collapsible">
+                <summary className="boat-summary">
+                  <div className="boat-summary-main">
+                    <h3>
+                      {boat.name}
+                      {boat.boat_number ? ` #${boat.boat_number}` : ""}
+                    </h3>
+                    <p className="muted">
+                      {boat.boat_class_id} | {boat.boat_type} | skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
+                    </p>
+                  </div>
+                  <div className="boat-summary-side">
+                    <div className="row">
+                      <StatusChip label={boat.boat_class_id} />
+                      <StatusChip label={reservable ? "available" : boat.status === "available" ? "unavailable" : "out of service"} kind={reservable ? "checked_out" : "reserved"} />
+                    </div>
+                    <span className="member-summary-hint">{reservable ? "Click to reserve" : "Click for details"}</span>
+                  </div>
+                </summary>
+                <div className="boat-details">
+                  {reservable ? (
+                    <ReservationForm boat={boat} start={start} returnTo={reserveReturnTo} />
+                  ) : (
+                    <Card className="stack">
+                      <div className="page-title">
+                        <h3>
+                          {boat.name}
+                          {boat.boat_number ? ` #${boat.boat_number}` : ""}
+                        </h3>
+                        <StatusChip label={boat.status === "available" ? "unavailable" : "out of service"} />
+                      </div>
+                      <p className="muted">
+                        {boat.boat_class_id} | {boat.boat_type} | skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
+                      </p>
+                      <p>
+                        This boat cannot be reserved right now.
+                        {boat.status !== "available" ? " Marked out of service by admin." : " It is unavailable for this time window."}
+                      </p>
+                    </Card>
+                  )}
                 </div>
-                <p className="muted">
-                  {boat.boat_class_id} | {boat.boat_type} | skill {boat.required_skill_level} | weight {boat.weight_class ?? "Any"}
-                </p>
-                <p>
-                  This boat cannot be reserved right now.
-                  {boat.status !== "available" ? " Marked out of service by admin." : " It is unavailable for this time window."}
-                </p>
-              </Card>
+              </details>
             );
           })}
         </div>

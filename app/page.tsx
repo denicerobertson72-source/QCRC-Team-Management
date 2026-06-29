@@ -74,7 +74,8 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
                     </form>
                   ) : null}
                 </div>
-                <p>{announcement.body}</p>
+                <p className="muted">Posted {formatEasternDateTime(announcement.created_at)} ET</p>
+                <div className="announcement-body">{announcement.body}</div>
                 {announcement.ends_at ? (
                   <p className="muted">Visible until {formatEasternDateTime(announcement.ends_at)} ET</p>
                 ) : null}
