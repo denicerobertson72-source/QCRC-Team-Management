@@ -187,13 +187,13 @@ export async function getRaceEventsWithMySignup() {
 
   const { data: signups, error: signupsError } = await supabase
     .from("race_signups")
-    .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x")
+    .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments")
     .eq("member_id", user.id);
   if (signupsError) throw signupsError;
 
   const signupByRace = new Map<
     string,
-    { birthdate: string; desired_race_count: number; wants_1x: boolean; wants_2x: boolean; wants_4x: boolean; wants_8x: boolean }
+    { birthdate: string; desired_race_count: number; wants_1x: boolean; wants_2x: boolean; wants_4x: boolean; wants_8x: boolean; comments: string | null }
   >();
   for (const signup of signups ?? []) {
     signupByRace.set(signup.race_event_id, {
@@ -203,6 +203,7 @@ export async function getRaceEventsWithMySignup() {
       wants_2x: signup.wants_2x,
       wants_4x: signup.wants_4x,
       wants_8x: signup.wants_8x,
+      comments: signup.comments ?? null,
     });
   }
 
@@ -574,12 +575,12 @@ export async function getRowingMeetupState() {
     await Promise.all([
       supabase
         .from("rowing_meetup_members")
-        .select("member_id, skill_level, wants_2x, wants_4x, notes, created_at")
+        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
         .eq("member_id", user.id)
         .maybeSingle(),
       supabase
         .from("rowing_meetup_members")
-        .select("member_id, skill_level, wants_2x, wants_4x, notes, created_at, profiles(full_name)")
+        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at, profiles(full_name)")
         .order("created_at", { ascending: true }),
       supabase
         .from("rowing_meetup_availability")
@@ -598,6 +599,7 @@ export async function getRowingMeetupState() {
       member_id: row.member_id,
       full_name: profile?.full_name ?? "Unknown",
       skill_level: row.skill_level,
+      wants_1x: row.wants_1x,
       wants_2x: row.wants_2x,
       wants_4x: row.wants_4x,
       notes: row.notes,
@@ -613,6 +615,7 @@ export async function getRowingMeetupState() {
       ? {
           member_id: myMembership.member_id,
           skill_level: myMembership.skill_level,
+          wants_1x: myMembership.wants_1x,
           wants_2x: myMembership.wants_2x,
           wants_4x: myMembership.wants_4x,
           notes: myMembership.notes,

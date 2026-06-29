@@ -1891,6 +1891,7 @@ export async function saveRowingMeetupMembershipAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const joined = String(formData.get("joined") ?? "true") === "true";
   const skillLevel = String(formData.get("skill_level") ?? "Beginner");
+  const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
   const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
   const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
   const notes = String(formData.get("notes") ?? "").trim();
@@ -1910,6 +1911,7 @@ export async function saveRowingMeetupMembershipAction(formData: FormData) {
       {
         member_id: user.id,
         skill_level: skillLevel,
+        wants_1x: wants1x,
         wants_2x: wants2x,
         wants_4x: wants4x,
         notes: notes || null,
@@ -2027,6 +2029,7 @@ export async function saveRaceSignupAction(formData: FormData) {
   const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
   const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
   const wants8x = String(formData.get("wants_8x") ?? "false") === "true";
+  const comments = String(formData.get("comments") ?? "").trim();
 
   if (!attending) {
     const { error } = await supabase
@@ -2046,6 +2049,7 @@ export async function saveRaceSignupAction(formData: FormData) {
         wants_2x: wants2x,
         wants_4x: wants4x,
         wants_8x: wants8x,
+        comments: comments || null,
       },
       { onConflict: "race_event_id,member_id" },
     );

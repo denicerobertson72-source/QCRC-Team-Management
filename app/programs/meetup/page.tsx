@@ -92,6 +92,9 @@ export default async function RowingMeetupPage() {
           <Field label="Boat Preferences">
             <div className="row">
               <label>
+                <input type="checkbox" name="wants_1x" value="true" defaultChecked={myMembership ? myMembership.wants_1x : false} /> 1x
+              </label>
+              <label>
                 <input type="checkbox" name="wants_2x" value="true" defaultChecked={myMembership ? myMembership.wants_2x : true} /> 2x
               </label>
               <label>
@@ -185,7 +188,7 @@ export default async function RowingMeetupPage() {
                   <span className="muted">{member.skill_level}</span>
                 </div>
                 <p className="muted">
-                  Boat preferences: {[member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}
+                  Boat preferences: {[member.wants_1x ? "1x" : null, member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}
                 </p>
                 {member.notes ? <p>{member.notes}</p> : null}
                 <div className="stack" style={{ gap: "0.4rem" }}>

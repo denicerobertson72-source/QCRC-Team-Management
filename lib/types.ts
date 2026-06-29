@@ -138,6 +138,7 @@ export type RowingMeetupMember = {
   member_id: string;
   full_name: string;
   skill_level: string;
+  wants_1x: boolean;
   wants_2x: boolean;
   wants_4x: boolean;
   notes: string | null;

@@ -20,7 +20,7 @@ export default async function AdminRacesPage() {
     ? (
         await supabase
           .from("race_signups")
-          .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, profiles(full_name)")
+          .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(full_name)")
           .in("race_event_id", raceIds)
       ).data ?? []
     : [];
@@ -69,12 +69,13 @@ export default async function AdminRacesPage() {
                       <th>Birthdate</th>
                       <th>Race Count</th>
                       <th>Prefs</th>
+                      <th>Comments</th>
                     </tr>
                   </thead>
                   <tbody>
                     {raceSignups.length === 0 ? (
                       <tr>
-                        <td colSpan={4}>No signups yet.</td>
+                        <td colSpan={5}>No signups yet.</td>
                       </tr>
                     ) : (
                       raceSignups.map((signup, idx) => {
@@ -93,6 +94,7 @@ export default async function AdminRacesPage() {
                             <td>{signup.birthdate}</td>
                             <td>{signup.desired_race_count ?? 1}</td>
                             <td>{prefs || "-"}</td>
+                            <td>{signup.comments ?? "-"}</td>
                           </tr>
                         );
                       })

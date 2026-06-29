@@ -57,6 +57,15 @@ export default async function RacingProgramPage() {
                   </label>
                 </div>
 
+                <Field label="Comments (optional)">
+                  <textarea
+                    name="comments"
+                    rows={3}
+                    defaultValue={event.my_signup?.comments ?? ""}
+                    placeholder="Share lineup preferences, availability constraints, or anything coaches should know."
+                  />
+                </Field>
+
                 <div className="row">
                   <input type="hidden" name="attending" value="true" />
                   <Button type="submit">Save Race Signup</Button>
