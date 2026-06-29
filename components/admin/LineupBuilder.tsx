@@ -37,12 +37,14 @@ export function LineupBuilder({
   boats,
   roster,
   action,
+  removeBoatAction,
   allowMultiSeat = false,
   returnTo,
 }: {
   boats: Boat[];
   roster: RosterMember[];
   action: (formData: FormData) => void;
+  removeBoatAction: (formData: FormData) => void;
   allowMultiSeat?: boolean;
   returnTo?: string;
 }) {
@@ -59,6 +61,10 @@ export function LineupBuilder({
   }, [localBoats]);
 
   const unassigned = allowMultiSeat ? roster : roster.filter((member) => !assignedMemberIds.has(member.id));
+
+  const memberNameById = useMemo(() => {
+    return new Map(roster.map((member) => [member.id, member.full_name]));
+  }, [roster]);
 
   function onDropMember(seatId: string, memberId: string) {
     setLocalBoats((prev) => {
@@ -106,6 +112,16 @@ export function LineupBuilder({
     );
   }
 
+  function seatOptions(currentMemberId: string | null) {
+    const sortedRoster = [...roster].sort((a, b) => a.full_name.localeCompare(b.full_name));
+    const available = sortedRoster.filter((member) => !assignedMemberIds.has(member.id) || member.id === currentMemberId);
+    const assignedElsewhere = allowMultiSeat
+      ? []
+      : sortedRoster.filter((member) => assignedMemberIds.has(member.id) && member.id !== currentMemberId);
+
+    return { available, assignedElsewhere };
+  }
+
   const assignmentsJson = JSON.stringify(
     localBoats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id }))),
   );
@@ -114,7 +130,8 @@ export function LineupBuilder({
     <div className="stack">
       <div className="card stack">
         <h3>Unassigned Rowers</h3>
-        <div className="row">
+        <p className="muted">Use the seat dropdowns on phone or drag-and-drop on desktop. Once a rower is assigned, they disappear from the remaining unassigned options.</p>
+        <div className="row lineup-unassigned-list">
           {unassigned.map((member) => (
             <div
               key={member.id}
@@ -134,14 +151,23 @@ export function LineupBuilder({
 
       <div className="grid">
         {localBoats.map((boat) => (
-          <div key={boat.id} className="card stack">
-            <h3>
-              {boat.boat_name} ({boat.boat_class_id})
-            </h3>
+          <div key={boat.id} className="card stack lineup-boat-card">
+            <div className="page-title lineup-boat-header">
+              <h3>
+                {boat.boat_name} ({boat.boat_class_id})
+              </h3>
+              <form action={removeBoatAction} className="inline-form lineup-boat-remove">
+                <input type="hidden" name="lineup_boat_id" value={boat.id} />
+                {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+                <Button type="submit" variant="secondary">
+                  Remove Boat
+                </Button>
+              </form>
+            </div>
             {boat.seats.map((seat) => (
               <div
                 key={seat.id}
-                className="card-subtle row"
+                className="card-subtle row lineup-seat-card"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
@@ -151,9 +177,38 @@ export function LineupBuilder({
                 }}
                 style={{ justifyContent: "space-between" }}
               >
-                <strong>{seatLabel(boat.boat_class_id, seat.seat_number)}</strong>
-                <span>{seat.member_name ?? "Drop rower here"}</span>
-                <Button type="button" variant="secondary" onClick={() => clearSeat(seat.id)}>
+                <strong className="lineup-seat-label">{seatLabel(boat.boat_class_id, seat.seat_number)}</strong>
+                <div className="stack lineup-seat-controls">
+                  <select
+                    value={seat.member_id ?? ""}
+                    onChange={(event) => {
+                      const nextMemberId = event.target.value;
+                      if (!nextMemberId) {
+                        clearSeat(seat.id);
+                        return;
+                      }
+                      onDropMember(seat.id, nextMemberId);
+                    }}
+                  >
+                    <option value="">Select a rower</option>
+                    {seatOptions(seat.member_id).available.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.full_name}
+                      </option>
+                    ))}
+                    {!allowMultiSeat && seatOptions(seat.member_id).assignedElsewhere.length > 0 ? (
+                      <optgroup label="Move from another boat">
+                        {seatOptions(seat.member_id).assignedElsewhere.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.full_name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                  <span className="muted">{seat.member_id ? `Assigned: ${memberNameById.get(seat.member_id) ?? seat.member_name}` : "No rower assigned yet."}</span>
+                </div>
+                <Button type="button" variant="secondary" className="lineup-seat-clear" onClick={() => clearSeat(seat.id)}>
                   Clear
                 </Button>
               </div>

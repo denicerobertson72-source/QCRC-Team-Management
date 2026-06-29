@@ -10,6 +10,7 @@ import {
   addLineupBoatAdminAction,
   createLineupBoardAdminAction,
   publishLineupBoardAdminAction,
+  removeLineupBoatAdminAction,
   saveLineupAssignmentsAdminAction,
   updateLineupBoatRaceTimeAdminAction,
 } from "@/lib/actions";
@@ -121,6 +122,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             boats={detail.boats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}
+            removeBoatAction={removeLineupBoatAdminAction}
             allowMultiSeat
             returnTo={returnTo}
           />

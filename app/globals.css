@@ -361,6 +361,40 @@ a:hover {
   border-top: 1px solid var(--line);
 }
 
+.lineup-unassigned-list {
+  align-items: stretch;
+}
+
+.lineup-boat-card {
+  align-content: start;
+}
+
+.lineup-boat-header {
+  align-items: center;
+}
+
+.lineup-boat-remove {
+  margin-left: auto;
+}
+
+.lineup-seat-card {
+  align-items: flex-start;
+}
+
+.lineup-seat-label {
+  min-width: 4.75rem;
+  padding-top: 0.78rem;
+}
+
+.lineup-seat-controls {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.lineup-seat-clear {
+  align-self: center;
+}
+
 .eyebrow,
 .section-kicker {
   display: inline-flex;
@@ -739,5 +773,32 @@ tbody tr:last-child td {
   .topnav-logo {
     width: 44px;
     height: 44px;
+  }
+
+  .lineup-boat-header {
+    align-items: flex-start;
+  }
+
+  .lineup-boat-remove {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .lineup-seat-card {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .lineup-seat-label {
+    min-width: 0;
+    padding-top: 0;
+  }
+
+  .lineup-seat-controls {
+    width: 100%;
+  }
+
+  .lineup-seat-clear {
+    width: 100%;
   }
 }

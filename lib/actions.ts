@@ -2252,6 +2252,20 @@ export async function updateLineupBoatRaceTimeAdminAction(formData: FormData) {
   if (returnTo) redirect(returnTo);
 }
 
+export async function removeLineupBoatAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const lineupBoatId = String(formData.get("lineup_boat_id") ?? "");
+  const returnTo = String(formData.get("return_to") ?? "");
+
+  const { error } = await supabase.from("lineup_boats").delete().eq("id", lineupBoatId);
+  if (error) throw error;
+
+  revalidatePath("/admin/races");
+  revalidatePath("/admin/lineups");
+  revalidatePath("/lineups");
+  if (returnTo) redirect(returnTo);
+}
+
 export async function toggleSessionSignupAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const sessionId = String(formData.get("session_id") ?? "");

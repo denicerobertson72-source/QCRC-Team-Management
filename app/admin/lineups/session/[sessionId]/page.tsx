@@ -11,6 +11,7 @@ import {
   addLineupBoatAdminAction,
   createLineupBoardAdminAction,
   publishLineupBoardAdminAction,
+  removeLineupBoatAdminAction,
   saveLineupAssignmentsAdminAction,
 } from "@/lib/actions";
 import { getLineupBoardDetail, getRosterForBoard } from "@/lib/queries";
@@ -115,6 +116,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             boats={detail.boats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}
+            removeBoatAction={removeLineupBoatAdminAction}
             returnTo={returnTo}
           />
         </Card>
