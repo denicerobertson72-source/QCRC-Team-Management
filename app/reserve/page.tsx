@@ -1,6 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { ReservationForm } from "@/components/ReservationForm";
-import { getAvailableBoats, getBoats, getMyProfileSummary } from "@/lib/queries";
+import { getAvailableBoats, getBoatAvailabilityBlocks, getBoats, getMyProfileSummary } from "@/lib/queries";
 import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/time";
+import { easternLocalInputToIso, formatEasternDateTime, formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/time";
 
 type ReserveSearchParams = Promise<{
   start?: string;
   boatClassId?: string;
   boatName?: string;
   boatNumber?: string;
+  onlyAvailable?: string;
   reservation_status?: string;
   reservation_message?: string;
 }>;
@@ -30,25 +31,41 @@ export default async function ReservePage({
   const boatClassId = params.boatClassId ?? "";
   const boatName = (params.boatName ?? "").trim().toLowerCase();
   const boatNumber = (params.boatNumber ?? "").trim().toLowerCase();
+  const onlyAvailable = params.onlyAvailable === "true";
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;
   const reservationMessage = params.reservation_message ?? "";
   const reserveReturnTo = `/reserve?start=${encodeURIComponent(start)}${
     boatClassId ? `&boatClassId=${encodeURIComponent(boatClassId)}` : ""
-  }${params.boatName ? `&boatName=${encodeURIComponent(params.boatName)}` : ""}${params.boatNumber ? `&boatNumber=${encodeURIComponent(params.boatNumber)}` : ""}`;
+  }${params.boatName ? `&boatName=${encodeURIComponent(params.boatName)}` : ""}${params.boatNumber ? `&boatNumber=${encodeURIComponent(params.boatNumber)}` : ""}${onlyAvailable ? "&onlyAvailable=true" : ""}`;
 
-  const [availableBoats, allBoats, profile] = await Promise.all([
+  const [availableBoats, allBoats, profile, availabilityBlocks] = await Promise.all([
     getAvailableBoats(start, end ?? start, boatClassId || undefined),
     getBoats(),
     getMyProfileSummary(),
+    getBoatAvailabilityBlocks(),
   ]);
 
   const availableIds = new Set(availableBoats.map((b) => b.id));
-  const visibleBoats = allBoats.filter((b) => {
+  const filteredBoats = allBoats.filter((b) => {
     if (boatClassId && b.boat_class_id !== boatClassId) return false;
     if (boatName && !b.name.toLowerCase().includes(boatName)) return false;
     if (boatNumber && !(b.boat_number ?? "").toLowerCase().includes(boatNumber)) return false;
     return true;
   });
+  const visibleBoats = onlyAvailable ? filteredBoats.filter((boat) => boat.status === "available" && availableIds.has(boat.id)) : filteredBoats;
+  const startIso = easternLocalInputToIso(start);
+  const endIso = end ? easternLocalInputToIso(end) : null;
+  const matchingBlocks =
+    startIso && endIso
+      ? availabilityBlocks.filter((block) => {
+          const overlaps = new Date(block.starts_at).getTime() < new Date(endIso).getTime() && new Date(block.ends_at).getTime() > new Date(startIso).getTime();
+          if (!overlaps) return false;
+          if (block.applies_to_membership_type && block.applies_to_membership_type !== profile.membership_type) return false;
+          if (block.applies_to_boat_class_id && boatClassId && block.applies_to_boat_class_id !== boatClassId) return false;
+          return true;
+        })
+      : [];
+  const noReservableBoats = filteredBoats.every((boat) => !(boat.status === "available" && availableIds.has(boat.id)));
 
   return (
     <>
@@ -82,9 +99,30 @@ export default async function ReservePage({
               <option value="4x">4x</option>
             </select>
           </Field>
+          <label className="member-checkbox-row">
+            <input name="onlyAvailable" type="checkbox" value="true" defaultChecked={onlyAvailable} />
+            <span>Open only available boats</span>
+          </label>
           <p className="muted">{end ? `End time will be set automatically to ${formatEasternLocalInput(end)} ET.` : "Choose a start time that stays within the same day."}</p>
           <Button type="submit">Find Eligible Boats</Button>
         </form>
+
+        {matchingBlocks.length > 0 && noReservableBoats ? (
+          <Card subtle className="stack">
+            <strong>No boats are currently available for this time window.</strong>
+            <p className="muted">
+              An active availability block is in effect for your search window.
+            </p>
+            <div className="stack">
+              {matchingBlocks.map((block) => (
+                <p key={block.id} className="muted">
+                  <strong>{block.title}</strong>: {formatEasternDateTime(block.starts_at)} ET to {formatEasternDateTime(block.ends_at)} ET
+                  {block.notes ? ` — ${block.notes}` : ""}
+                </p>
+              ))}
+            </div>
+          </Card>
+        ) : null}
 
         <div className="grid">
           {visibleBoats.length === 0 ? <Card subtle>No boats found.</Card> : null}
