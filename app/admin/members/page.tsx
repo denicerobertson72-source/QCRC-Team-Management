@@ -6,7 +6,6 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { InviteMemberForm } from "@/components/admin/InviteMemberForm";
-import { InviteGuidanceButton } from "@/components/admin/InviteGuidanceButton";
 import { MemberAdminForm } from "@/components/admin/MemberAdminForm";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { deleteMemberPermanentlyAdminAction, importMembersCsvAdminAction, sendMemberMagicLinkAdminAction } from "@/lib/actions";
@@ -229,15 +228,15 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                   <Button type="submit" variant="secondary">
                     Send Magic Link
                   </Button>
-                  <InviteGuidanceButton
-                    email={m.email}
-                    fullName={m.full_name}
-                    hasAuthAccount={Boolean(m.authUser)}
-                    hasSignedIn={m.hasSignedIn}
-                    lastInviteAt={m.lastInviteAt}
-                    emailDeliveryConfigured={emailDeliveryConfigured}
-                  />
                 </form>
+                {!emailDeliveryConfigured && !m.hasSignedIn ? (
+                  <Card subtle className="stack">
+                    <strong>Email delivery is not configured for this environment.</strong>
+                    <p className="muted">
+                      {m.full_name} already has an account in invite-pending status, but the app cannot send a fresh sign-in email until `RESEND_API_KEY` and `EMAIL_FROM` are configured in Vercel. The current workaround is to finish the email setup, then resend the magic link from this row.
+                    </p>
+                  </Card>
+                ) : null}
 
                 <MemberAdminForm member={{ ...m, training_group: trainingGroupByMemberId.get(m.id) ?? null }} />
 
