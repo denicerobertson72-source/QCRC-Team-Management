@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { sendPublicMagicLinkAction, sendPublicPasswordRecoveryAction } from "@/lib/actions";
 
 export function LoginForm({
   initialError = null,
@@ -20,6 +19,8 @@ export function LoginForm({
   const [message, setMessage] = useState<string | null>(initialMessage);
   const [error, setError] = useState<string | null>(initialError);
   const [preferPassword, setPreferPassword] = useState(false);
+  const [isSendingEmailLink, setIsSendingEmailLink] = useState(false);
+  const [isSendingRecoveryLink, setIsSendingRecoveryLink] = useState(false);
 
   const storageKey = useMemo(() => {
     if (!email) return "";
@@ -86,8 +87,47 @@ export function LoginForm({
     }
   }
 
+  async function sendPublicEmailLink(mode: "magiclink" | "recovery") {
+    setMessage(null);
+    setError(null);
+
+    if (!email) {
+      setError("Email is required.");
+      return;
+    }
+
+    if (mode === "magiclink") {
+      setIsSendingEmailLink(true);
+    } else {
+      setIsSendingRecoveryLink(true);
+    }
+
+    try {
+      const response = await fetch("/api/auth/email-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, mode }),
+      });
+
+      const payload = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) {
+        setError(payload.error || "Unable to send email link.");
+        return;
+      }
+
+      setMessage(payload.message || "Email sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected email delivery error");
+    } finally {
+      setIsSendingEmailLink(false);
+      setIsSendingRecoveryLink(false);
+    }
+  }
+
   return (
-    <form className="card form-grid">
+    <div className="card form-grid">
       <h1>QCRC Login</h1>
       <p className="muted">Use your club email to get a one-time sign-in link.</p>
       <Field label="Email">
@@ -115,24 +155,33 @@ export function LoginForm({
           Create Password Login
         </Button>
       </div>
-      <input type="hidden" name="email" value={email} />
-      <Button type="submit" variant="secondary" formAction={sendPublicPasswordRecoveryAction} disabled={!email}>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => void sendPublicEmailLink("recovery")}
+        disabled={!email || isSendingRecoveryLink}
+      >
         Forgot / Reset Password
       </Button>
       {!preferPassword ? (
-        <Button type="submit" formAction={sendPublicMagicLinkAction} disabled={!email}>
-          Send Magic Link
+        <Button type="button" onClick={() => void sendPublicEmailLink("magiclink")} disabled={!email || isSendingEmailLink}>
+          {isSendingEmailLink ? "Sending..." : "Send Magic Link"}
         </Button>
       ) : (
         <div className="card-subtle">
           <p className="muted">Password login enabled for this email on this device.</p>
-          <Button type="submit" variant="secondary" formAction={sendPublicMagicLinkAction} disabled={!email}>
-            Use Magic Link Instead
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void sendPublicEmailLink("magiclink")}
+            disabled={!email || isSendingEmailLink}
+          >
+            {isSendingEmailLink ? "Sending..." : "Use Magic Link Instead"}
           </Button>
         </div>
       )}
       {message ? <p className="success">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}
-    </form>
+    </div>
   );
 }
