@@ -127,6 +127,17 @@ function normalizeCsvDate(value: string | undefined) {
   return raw || null;
 }
 
+function csvTextValue(value: string | undefined) {
+  const raw = (value ?? "").trim();
+  return raw.length > 0 ? raw : null;
+}
+
+function csvBooleanValue(value: string | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  return parseBooleanLike(raw);
+}
+
 function normalizeMeetupTime(value: FormDataEntryValue | null) {
   const raw = String(value ?? "").trim().toLowerCase();
   if (!raw) return "";
@@ -553,10 +564,19 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     redirect("/admin/members?import_status=error&import_message=The%20CSV%20file%20did%20not%20contain%20any%20rows.");
   }
 
-  const { data: existingProfiles, error: existingProfilesError } = await admin.from("profiles").select("id, email");
+  const { data: existingProfiles, error: existingProfilesError } = await admin
+    .from("profiles")
+    .select(
+      "id, email, full_name, phone, role, status, membership_type, skill_level, weight_class, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date, sms_opt_in",
+    );
   if (existingProfilesError) throw existingProfilesError;
   const markMissingInactive = String(formData.get("mark_missing_inactive") ?? "false") === "true";
 
+  const existingProfilesByEmail = new Map(
+    (existingProfiles ?? [])
+      .filter((profile) => profile.email)
+      .map((profile) => [profile.email.toLowerCase(), profile]),
+  );
   const existingByEmail = new Map(
     (existingProfiles ?? [])
       .filter((profile) => profile.email)
@@ -581,7 +601,9 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     }
     seenEmails.add(email);
 
-    const fullName = (record.full_name ?? record.name ?? "").trim() || email;
+    const existingProfile = existingProfilesByEmail.get(email) ?? null;
+    const csvFullName = csvTextValue(record.full_name ?? record.name);
+    const fullName = csvFullName ?? existingProfile?.full_name?.trim() ?? email;
     let profileId = existingByEmail.get(email) ?? authUsersByEmail.get(email) ?? null;
 
     if (!profileId) {
@@ -608,20 +630,22 @@ export async function importMembersCsvAdminAction(formData: FormData) {
       id: profileId,
       email,
       full_name: fullName,
-      phone: (record.phone ?? "").trim() || null,
-      role: (record.role ?? "").trim() || "member",
-      status: (record.status ?? "").trim() || "active",
-      membership_type: (record.membership_type ?? "").trim() || "community",
-      skill_level: (record.skill_level ?? "").trim() || "Beginner",
-      weight_class: (record.weight_class ?? "").trim() || "Mid-weight",
-      dues_ok: parseBooleanLike(record.dues_ok),
-      dues_renewal_date: normalizeCsvDate(record.dues_renewal_date),
-      usrowing_membership_date: normalizeCsvDate(record.usrowing_membership_date),
-      safesport_date: normalizeCsvDate(record.safesport_date),
-      owns_private_boat: parseBooleanLike(record.owns_private_boat),
-      boat_storage_fee_ok: parseBooleanLike(record.boat_storage_fee_ok),
-      boat_storage_fee_renewal_date: normalizeCsvDate(record.boat_storage_fee_renewal_date),
-      sms_opt_in: parseBooleanLike(record.sms_opt_in),
+      phone: csvTextValue(record.phone) ?? existingProfile?.phone ?? null,
+      role: csvTextValue(record.role) ?? existingProfile?.role ?? "member",
+      status: csvTextValue(record.status) ?? existingProfile?.status ?? "active",
+      membership_type: csvTextValue(record.membership_type) ?? existingProfile?.membership_type ?? "community",
+      skill_level: csvTextValue(record.skill_level) ?? existingProfile?.skill_level ?? "Beginner",
+      weight_class: csvTextValue(record.weight_class) ?? existingProfile?.weight_class ?? "Mid-weight",
+      dues_ok: csvBooleanValue(record.dues_ok) ?? existingProfile?.dues_ok ?? false,
+      dues_renewal_date: csvTextValue(record.dues_renewal_date) ?? existingProfile?.dues_renewal_date ?? null,
+      usrowing_membership_date:
+        csvTextValue(record.usrowing_membership_date) ?? existingProfile?.usrowing_membership_date ?? null,
+      safesport_date: csvTextValue(record.safesport_date) ?? existingProfile?.safesport_date ?? null,
+      owns_private_boat: csvBooleanValue(record.owns_private_boat) ?? existingProfile?.owns_private_boat ?? false,
+      boat_storage_fee_ok: csvBooleanValue(record.boat_storage_fee_ok) ?? existingProfile?.boat_storage_fee_ok ?? false,
+      boat_storage_fee_renewal_date:
+        csvTextValue(record.boat_storage_fee_renewal_date) ?? existingProfile?.boat_storage_fee_renewal_date ?? null,
+      sms_opt_in: csvBooleanValue(record.sms_opt_in) ?? existingProfile?.sms_opt_in ?? false,
     };
 
     const { error } = await admin.from("profiles").upsert(profilePayload, { onConflict: "id" });
