@@ -17,6 +17,15 @@ cp .env.example .env.local
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL` for local development, such as `http://localhost:3000`
+
+For production email delivery, also configure:
+
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `APP_URL`
+
+See [docs/email-delivery-setup.md](/Users/robertsonde/Documents/New%20project/Coding%20Projects/QCRC%20Team%20Management/docs/email-delivery-setup.md) for the production email setup.
 
 ## Install + run
 ```bash

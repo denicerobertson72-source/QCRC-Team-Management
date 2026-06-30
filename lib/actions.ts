@@ -11,6 +11,7 @@ import { formatEasternDateTime } from "@/lib/time";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { sendSms } from "@/lib/sms";
 import { appendCrewNamesToNotes } from "@/lib/crew";
+import { getAppUrl } from "@/lib/app-url";
 
 function skillLevelToClearance(level: string) {
   switch (level) {
@@ -319,7 +320,7 @@ async function generateAndSendMemberAuthLink(
     type: "invite" | "magiclink";
   },
 ) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://qcrc-team-management.vercel.app";
+  const appUrl = getAppUrl();
   const { data, error } = await admin.auth.admin.generateLink({
     type,
     email,
