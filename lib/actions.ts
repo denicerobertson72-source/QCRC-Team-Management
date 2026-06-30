@@ -334,7 +334,11 @@ async function generateAndSendMemberAuthLink(
   },
 ) {
   const appUrl = getAppUrl();
-  const redirectTo = `${appUrl}/auth/confirm?next=${encodeURIComponent(nextPath ?? "/reservations")}`;
+  const callbackPath = nextPath ?? "/reservations";
+  const redirectTo =
+    type === "recovery"
+      ? `${appUrl}${callbackPath}`
+      : `${appUrl}/auth/confirm?next=${encodeURIComponent(callbackPath)}`;
   const { data, error } =
     type === "recovery"
       ? await admin.auth.admin.generateLink({
