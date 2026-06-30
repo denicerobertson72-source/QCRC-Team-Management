@@ -325,37 +325,62 @@ async function generateAndSendMemberAuthLink(
     email,
     fullName,
     type,
+    nextPath,
   }: {
     email: string;
     fullName: string;
-    type: "invite" | "magiclink";
+    type: "invite" | "magiclink" | "recovery";
+    nextPath?: string;
   },
 ) {
   const appUrl = getAppUrl();
-  const { data, error } = await admin.auth.admin.generateLink({
-    type,
-    email,
-    options: {
-      data: { full_name: fullName },
-      redirectTo: `${appUrl}/auth/confirm?next=/reservations`,
-    },
-  });
+  const redirectTo = `${appUrl}/auth/confirm?next=${encodeURIComponent(nextPath ?? "/reservations")}`;
+  const { data, error } =
+    type === "recovery"
+      ? await admin.auth.admin.generateLink({
+          type: "recovery",
+          email,
+          options: {
+            redirectTo,
+          },
+        })
+      : await admin.auth.admin.generateLink({
+          type,
+          email,
+          options: {
+            data: { full_name: fullName },
+            redirectTo,
+          },
+        });
 
   if (error || !data.properties.action_link || !data.user?.id) {
     throw new Error(error?.message || `Unable to create a ${type} link for ${email}.`);
   }
 
+  const emailContent =
+    type === "invite"
+      ? {
+          subject: "QCRC invitation link",
+          text: `Hello ${fullName},\n\nYou have been invited to join QCRC Team Management. Use this secure link to get started:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
+          html: `<p>Hello ${fullName},</p><p>You have been invited to join QCRC Team Management.</p><p><a href="${data.properties.action_link}">Accept Invitation</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+        }
+      : type === "recovery"
+        ? {
+            subject: "QCRC password reset link",
+            text: `Hello ${fullName},\n\nUse this secure link to reset your QCRC Team Management password:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on the account settings page where you can save a new password.`,
+            html: `<p>Hello ${fullName},</p><p>Use this secure link to reset your QCRC Team Management password:</p><p><a href="${data.properties.action_link}">Reset Password</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on the account settings page where you can save a new password.</p>`,
+          }
+        : {
+            subject: "QCRC sign-in link",
+            text: `Hello ${fullName},\n\nUse this secure link to sign in to QCRC Team Management:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
+            html: `<p>Hello ${fullName},</p><p>Use this secure link to sign in to QCRC Team Management:</p><p><a href="${data.properties.action_link}">Open QCRC Team Management</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+          };
+
   const sendResult = await sendTransactionalEmail({
     to: email,
-    subject: type === "invite" ? "QCRC invitation link" : "QCRC sign-in link",
-    text:
-      type === "invite"
-        ? `Hello ${fullName},\n\nYou have been invited to join QCRC Team Management. Use this secure link to get started:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`
-        : `Hello ${fullName},\n\nUse this secure link to sign in to QCRC Team Management:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
-    html:
-      type === "invite"
-        ? `<p>Hello ${fullName},</p><p>You have been invited to join QCRC Team Management.</p><p><a href="${data.properties.action_link}">Accept Invitation</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`
-        : `<p>Hello ${fullName},</p><p>Use this secure link to sign in to QCRC Team Management:</p><p><a href="${data.properties.action_link}">Open QCRC Team Management</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+    subject: emailContent.subject,
+    text: emailContent.text,
+    html: emailContent.html,
   });
 
   if (!sendResult.sent) {
@@ -713,6 +738,7 @@ export async function sendMemberMagicLinkAdminAction(formData: FormData) {
       email,
       fullName,
       type: "magiclink",
+      nextPath: "/reservations",
     });
     if (magicLinkResult.delivery !== "email") {
       destination.searchParams.set("invite_status", "success");
@@ -733,6 +759,85 @@ export async function sendMemberMagicLinkAdminAction(formData: FormData) {
 
   destination.searchParams.set("invite_status", "success");
   destination.searchParams.set("invite_message", `Magic link sent to ${email}.`);
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function sendPublicMagicLinkAction(formData: FormData) {
+  const admin = createAdminClient();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const destination = new URL("/login", "http://local");
+
+  if (!email) {
+    destination.searchParams.set("error", "Email is required.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const authUsersByEmail = await listAllAuthUsersByEmail(admin);
+  const { data: profile } = await admin.from("profiles").select("full_name").eq("email", email).maybeSingle();
+  const fullName = profile?.full_name?.trim() || email;
+
+  try {
+    const linkType = authUsersByEmail.has(email) ? "magiclink" : "invite";
+    const result = await generateAndSendMemberAuthLink(admin, {
+      email,
+      fullName,
+      type: linkType,
+      nextPath: "/reservations",
+    });
+
+    if (result.delivery !== "email") {
+      destination.searchParams.set("error", result.reason || "Email delivery is not configured.");
+      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    }
+  } catch (error) {
+    destination.searchParams.set("error", error instanceof Error ? error.message : "Unable to send a sign-in link.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  destination.searchParams.set("message", "Magic link sent. Check your inbox.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function sendPublicPasswordRecoveryAction(formData: FormData) {
+  const admin = createAdminClient();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const destination = new URL("/login", "http://local");
+
+  if (!email) {
+    destination.searchParams.set("error", "Email is required.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const authUsersByEmail = await listAllAuthUsersByEmail(admin);
+  if (!authUsersByEmail.has(email)) {
+    destination.searchParams.set("error", "No account was found for that email. Ask an admin to send you an invite first.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: profile } = await admin.from("profiles").select("full_name").eq("email", email).maybeSingle();
+  const fullName = profile?.full_name?.trim() || email;
+
+  try {
+    const result = await generateAndSendMemberAuthLink(admin, {
+      email,
+      fullName,
+      type: "recovery",
+      nextPath: "/account/security?reset=1",
+    });
+
+    if (result.delivery !== "email") {
+      destination.searchParams.set("error", result.reason || "Email delivery is not configured.");
+      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    }
+  } catch (error) {
+    destination.searchParams.set("error", error instanceof Error ? error.message : "Unable to send a password reset link.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  destination.searchParams.set(
+    "message",
+    "Password reset email sent. Open the link in the same browser, then choose a new password.",
+  );
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 

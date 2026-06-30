@@ -3,12 +3,12 @@ import { LoginForm } from "@/components/LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; message?: string }>;
 }) {
   const params = await searchParams;
   return (
     <main className="stack" style={{ paddingTop: "3rem", maxWidth: 500 }}>
-      <LoginForm initialError={params.error ?? null} />
+      <LoginForm initialError={params.error ?? null} initialMessage={params.message ?? null} />
     </main>
   );
 }

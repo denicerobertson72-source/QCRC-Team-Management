@@ -5,12 +5,19 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { sendPublicMagicLinkAction, sendPublicPasswordRecoveryAction } from "@/lib/actions";
 
-export function LoginForm({ initialError = null }: { initialError?: string | null }) {
+export function LoginForm({
+  initialError = null,
+  initialMessage = null,
+}: {
+  initialError?: string | null;
+  initialMessage?: string | null;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(initialMessage);
   const [error, setError] = useState<string | null>(initialError);
   const [preferPassword, setPreferPassword] = useState(false);
 
@@ -27,31 +34,6 @@ export function LoginForm({ initialError = null }: { initialError?: string | nul
     const stored = window.localStorage.getItem(storageKey);
     setPreferPassword(stored === "1");
   }, [storageKey]);
-
-  async function sendMagicLink(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setMessage(null);
-    setError(null);
-
-    try {
-      const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservations`,
-        },
-      });
-
-      if (authError) {
-        setError(authError.message);
-        return;
-      }
-
-      setMessage("Magic link sent. Check your inbox.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected login error");
-    }
-  }
 
   async function createPasswordAccount() {
     setMessage(null);
@@ -104,29 +86,8 @@ export function LoginForm({ initialError = null }: { initialError?: string | nul
     }
   }
 
-  async function sendResetPassword() {
-    setMessage(null);
-    setError(null);
-
-    try {
-      const supabase = createClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/confirm?next=/account/security?reset=1`,
-      });
-
-      if (resetError) {
-        setError(resetError.message);
-        return;
-      }
-
-      setMessage("Password reset email sent. Open the link in the same browser, then choose a new password.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected password reset error");
-    }
-  }
-
   return (
-    <div className="card form-grid">
+    <form className="card form-grid">
       <h1>QCRC Login</h1>
       <p className="muted">Use your club email to get a one-time sign-in link.</p>
       <Field label="Email">
@@ -154,25 +115,24 @@ export function LoginForm({ initialError = null }: { initialError?: string | nul
           Create Password Login
         </Button>
       </div>
-      <Button type="button" variant="secondary" onClick={sendResetPassword} disabled={!email}>
+      <input type="hidden" name="email" value={email} />
+      <Button type="submit" variant="secondary" formAction={sendPublicPasswordRecoveryAction} disabled={!email}>
         Forgot / Reset Password
       </Button>
       {!preferPassword ? (
-        <form onSubmit={sendMagicLink}>
-          <Button type="submit">Send Magic Link</Button>
-        </form>
+        <Button type="submit" formAction={sendPublicMagicLinkAction} disabled={!email}>
+          Send Magic Link
+        </Button>
       ) : (
         <div className="card-subtle">
           <p className="muted">Password login enabled for this email on this device.</p>
-          <form onSubmit={sendMagicLink}>
-            <Button type="submit" variant="secondary">
-              Use Magic Link Instead
-            </Button>
-          </form>
+          <Button type="submit" variant="secondary" formAction={sendPublicMagicLinkAction} disabled={!email}>
+            Use Magic Link Instead
+          </Button>
         </div>
       )}
       {message ? <p className="success">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}
-    </div>
+    </form>
   );
 }
