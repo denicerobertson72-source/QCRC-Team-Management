@@ -8,11 +8,11 @@
   --ink-soft: #5d4a42;
   --line: rgba(48, 24, 14, 0.18);
   --brand: #ff5a1f;
-  --brand-deep: #e24814;
+  --brand-deep: #8f260b;
   --brand-soft: rgba(255, 90, 31, 0.16);
   --brand-ghost: rgba(255, 90, 31, 0.28);
   --danger: #b42318;
-  --ok: #12724f;
+  --ok: #0f5e42;
   --ink-inverse: #fff7f2;
   --muted-strong: #2f2019;
   --shadow-text: 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -155,7 +155,7 @@ a:hover {
 }
 
 .global-alert-warning {
-  background: linear-gradient(90deg, rgba(121, 55, 14, 0.96), rgba(204, 102, 21, 0.94));
+  background: linear-gradient(90deg, rgba(111, 48, 8, 0.96), rgba(162, 74, 16, 0.94));
 }
 
 .pwa-banner {
@@ -730,11 +730,11 @@ input[type="hidden"] {
 }
 
 button {
-  border: 1px solid rgba(255, 187, 160, 0.28);
+  border: 1px solid rgba(173, 72, 32, 0.42);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(135deg, #ff6d3a 0%, var(--brand) 42%, #c83a16 100%);
-  color: #fff;
+    linear-gradient(135deg, #c83a16 0%, #b23410 42%, var(--brand-deep) 100%);
+  color: #fff7f2;
   padding: 0.72rem 1rem;
   cursor: pointer;
   font-weight: 800;
