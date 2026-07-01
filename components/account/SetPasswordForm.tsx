@@ -10,11 +10,13 @@ export function SetPasswordForm({
   title = "Set Password",
   description = "After saving, you can sign in directly with email + password.",
   successMessage = "Password saved. You can now use Sign In with Password.",
+  successRedirectMessage,
   redirectPath,
 }: {
   title?: string;
   description?: string;
   successMessage?: string;
+  successRedirectMessage?: string;
   redirectPath?: string;
 }) {
   const router = useRouter();
@@ -58,8 +60,14 @@ export function SetPasswordForm({
     setConfirmPassword("");
 
     if (redirectPath) {
+      const destination =
+        successRedirectMessage && redirectPath.includes("?")
+          ? `${redirectPath}&message=${encodeURIComponent(successRedirectMessage)}`
+          : successRedirectMessage
+            ? `${redirectPath}?message=${encodeURIComponent(successRedirectMessage)}`
+            : redirectPath;
       window.setTimeout(() => {
-        router.replace(redirectPath);
+        router.replace(destination);
         router.refresh();
       }, 800);
     }

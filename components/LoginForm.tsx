@@ -191,8 +191,9 @@ export function LoginForm({
           <SetPasswordForm
             title="Choose a New Password"
             description="Your reset link is active. Save a new password to finish signing in."
-            successMessage="Password saved. Redirecting you into the app."
-            redirectPath="/"
+            successMessage="Password saved. Redirecting you back to sign in."
+            successRedirectMessage="Password saved. Sign in with your new password."
+            redirectPath="/login"
           />
         )}
       </div>
