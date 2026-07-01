@@ -35,19 +35,21 @@ export async function generateAndSendMemberAuthLink(
     fullName,
     type,
     nextPath,
+    appUrl,
   }: {
     email: string;
     fullName: string;
     type: "invite" | "magiclink" | "recovery";
     nextPath?: string;
+    appUrl?: string;
   },
 ) {
-  const appUrl = getAppUrl();
+  const resolvedAppUrl = appUrl || getAppUrl();
   const callbackPath = nextPath ?? "/reservations";
   const redirectTo =
     type === "recovery"
-      ? `${appUrl}${callbackPath}`
-      : `${appUrl}/auth/confirm?next=${encodeURIComponent(callbackPath)}`;
+      ? `${resolvedAppUrl}${callbackPath}`
+      : `${resolvedAppUrl}/auth/confirm?next=${encodeURIComponent(callbackPath)}`;
   const { data, error } =
     type === "recovery"
       ? await admin.auth.admin.generateLink({

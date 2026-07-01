@@ -7,6 +7,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const mode = body?.mode === "recovery" ? "recovery" : "magiclink";
     const email = String(body?.email ?? "").trim().toLowerCase();
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const forwardedHost = request.headers.get("x-forwarded-host");
+    const requestUrl = new URL(request.url);
+    const origin = forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : requestUrl.origin;
 
     if (!email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
@@ -29,6 +33,7 @@ export async function POST(request: Request) {
       fullName,
       type: mode === "recovery" ? "recovery" : authUsersByEmail.has(email) ? "magiclink" : "invite",
       nextPath: mode === "recovery" ? "/account/security?reset=1" : "/reservations",
+      appUrl: origin,
     });
 
     if (result.delivery !== "email") {
