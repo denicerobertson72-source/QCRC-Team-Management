@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/Button";
 export function LoginForm({
   initialError = null,
   initialMessage = null,
+  nextPath = "/reservations",
 }: {
   initialError?: string | null;
   initialMessage?: string | null;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -35,6 +37,36 @@ export function LoginForm({
     const stored = window.localStorage.getItem(storageKey);
     setPreferPassword(stored === "1");
   }, [storageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.location.hash.includes("access_token=")) {
+      return;
+    }
+
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function finishHashLogin() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session || cancelled) {
+        return;
+      }
+
+      setError(null);
+      setMessage(null);
+      router.replace(nextPath || "/reservations");
+      router.refresh();
+    }
+
+    void finishHashLogin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nextPath, router]);
 
   async function createPasswordAccount() {
     setMessage(null);

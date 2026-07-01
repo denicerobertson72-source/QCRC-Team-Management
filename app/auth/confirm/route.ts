@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const nextPath = requestUrl.searchParams.get("next") ?? "/reservations";
 
     if (!tokenHash || !rawType) {
-      return NextResponse.redirect(new URL("/login?error=missing_token", requestUrl.origin));
+      return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(nextPath)}`, requestUrl.origin));
     }
 
     // Supabase email links can pass type=magiclink, while verifyOtp expects EmailOtpType values.
