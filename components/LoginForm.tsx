@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { SetPasswordForm } from "@/components/account/SetPasswordForm";
 
 export function LoginForm({
   initialError = null,
@@ -23,6 +24,7 @@ export function LoginForm({
   const [preferPassword, setPreferPassword] = useState(false);
   const [isSendingEmailLink, setIsSendingEmailLink] = useState(false);
   const [isSendingRecoveryLink, setIsSendingRecoveryLink] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   const storageKey = useMemo(() => {
     if (!email) return "";
@@ -45,6 +47,13 @@ export function LoginForm({
 
     const supabase = createClient();
     let cancelled = false;
+    const recoveryMode = window.location.hash.includes("type=recovery");
+
+    if (recoveryMode) {
+      setIsRecoveryMode(true);
+      setError(null);
+      setMessage("Your reset link is active. Save a new password below.");
+    }
 
     async function finishHashLogin() {
       const {
@@ -52,6 +61,10 @@ export function LoginForm({
       } = await supabase.auth.getSession();
 
       if (!session || cancelled) {
+        return;
+      }
+
+      if (recoveryMode) {
         return;
       }
 
@@ -67,33 +80,6 @@ export function LoginForm({
       cancelled = true;
     };
   }, [nextPath, router]);
-
-  async function createPasswordAccount() {
-    setMessage(null);
-    setError(null);
-
-    try {
-      const supabase = createClient();
-      const { error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/`,
-        },
-      });
-      if (signUpError) {
-        setError(signUpError.message);
-        return;
-      }
-      if (storageKey) window.localStorage.setItem(storageKey, "1");
-      setPreferPassword(true);
-      setMessage(
-        "If this is a new account, confirm email once. If you already had an account, sign in via magic link once and set password under Account Setting.",
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected sign-up error");
-    }
-  }
 
   async function signInWithPassword() {
     setMessage(null);
@@ -158,6 +144,21 @@ export function LoginForm({
     }
   }
 
+  if (isRecoveryMode) {
+    return (
+      <div className="stack">
+        {message ? <p className="success">{message}</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+        <SetPasswordForm
+          title="Choose a New Password"
+          description="Your reset link is active. Save a new password to finish signing in."
+          successMessage="Password saved. Redirecting you into the app."
+          redirectPath="/"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="card form-grid">
       <h1>QCRC Login</h1>
@@ -182,9 +183,6 @@ export function LoginForm({
       <div className="row">
         <Button type="button" variant="secondary" onClick={signInWithPassword} disabled={!email || !password}>
           Sign In with Password
-        </Button>
-        <Button type="button" variant="secondary" onClick={createPasswordAccount} disabled={!email || !password}>
-          Create Password Login
         </Button>
       </div>
       <Button
