@@ -25,6 +25,7 @@ export function LoginForm({
   const [isSendingEmailLink, setIsSendingEmailLink] = useState(false);
   const [isSendingRecoveryLink, setIsSendingRecoveryLink] = useState(false);
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [isPreparingRecovery, setIsPreparingRecovery] = useState(false);
 
   const storageKey = useMemo(() => {
     if (!email) return "";
@@ -47,24 +48,56 @@ export function LoginForm({
 
     const supabase = createClient();
     let cancelled = false;
-    const recoveryMode = window.location.hash.includes("type=recovery");
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+    const recoveryMode = hashParams.get("type") === "recovery";
 
     if (recoveryMode) {
       setIsRecoveryMode(true);
+      setIsPreparingRecovery(true);
       setError(null);
-      setMessage("Your reset link is active. Save a new password below.");
+      setMessage("Preparing your secure reset session...");
     }
 
     async function finishHashLogin() {
+      if (!accessToken || !refreshToken) {
+        if (!cancelled) {
+          setError("This email link is missing required sign-in information.");
+          setIsPreparingRecovery(false);
+        }
+        return;
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (sessionError) {
+        if (!cancelled) {
+          setError(sessionError.message);
+          setIsPreparingRecovery(false);
+        }
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session || cancelled) {
+        if (!cancelled) {
+          setError("We could not establish your sign-in session from that email link. Please request a new one.");
+          setIsPreparingRecovery(false);
+        }
         return;
       }
 
       if (recoveryMode) {
+        setMessage("Your reset link is active. Save a new password below.");
+        setIsPreparingRecovery(false);
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
         return;
       }
 
@@ -149,12 +182,19 @@ export function LoginForm({
       <div className="stack">
         {message ? <p className="success">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
-        <SetPasswordForm
-          title="Choose a New Password"
-          description="Your reset link is active. Save a new password to finish signing in."
-          successMessage="Password saved. Redirecting you into the app."
-          redirectPath="/"
-        />
+        {isPreparingRecovery ? (
+          <div className="card form-grid">
+            <h2>Choose a New Password</h2>
+            <p className="muted">Preparing your secure reset session. This should only take a moment.</p>
+          </div>
+        ) : (
+          <SetPasswordForm
+            title="Choose a New Password"
+            description="Your reset link is active. Save a new password to finish signing in."
+            successMessage="Password saved. Redirecting you into the app."
+            redirectPath="/"
+          />
+        )}
       </div>
     );
   }
