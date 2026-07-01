@@ -329,9 +329,10 @@ export async function getLineupBoardDetail(lineupBoardId: string) {
 
 export async function getPublishedLineups() {
   const { supabase } = await ensureProfile();
+  const now = new Date();
   const { data, error } = await supabase
     .from("lineup_boards")
-    .select("id, board_type, race_event_id, session_id, title, is_published, race_events(title,event_date), sessions(starts_at)")
+    .select("id, board_type, race_event_id, session_id, title, is_published, published_at, race_events(title,event_date), sessions(starts_at)")
     .eq("is_published", true)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -343,14 +344,18 @@ export async function getPublishedLineups() {
     const race = Array.isArray(board.race_events) ? board.race_events[0] : board.race_events;
 
     if (session?.starts_at) {
-      return getEasternDateKey(session.starts_at) >= todayEastern;
+      return new Date(session.starts_at).getTime() > now.getTime();
     }
 
     if (race?.event_date) {
       return String(race.event_date) >= todayEastern;
     }
 
-    return true;
+    if (board.board_type !== "race" && board.published_at) {
+      return getEasternDateKey(board.published_at) >= todayEastern;
+    }
+
+    return board.board_type === "race";
   });
 }
 

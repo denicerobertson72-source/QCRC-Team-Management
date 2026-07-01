@@ -86,7 +86,9 @@ export default async function TrainingBIPage({ searchParams }: { searchParams: S
                 <form action={toggleSessionSignupAction} className="inline-form">
                   <input type="hidden" name="session_id" value={session.id} />
                   <input type="hidden" name="signed_up" value={session.my_signed_up ? "false" : "true"} />
-                  <Button type="submit">{session.my_signed_up ? "Remove Me" : "Sign Me Up"}</Button>
+                  <Button type="submit" variant={session.my_signed_up ? "secondary" : "primary"}>
+                    {session.my_signed_up ? "Remove Me" : "Sign Me Up"}
+                  </Button>
                 </form>
               )}
             </Card>
