@@ -44,7 +44,7 @@ body {
   color: var(--ink);
   background:
     radial-gradient(circle at 10% 14%, rgba(255, 176, 128, 0.22) 0, transparent 22%),
-    linear-gradient(135deg, #ff5a1f 0%, #c63b18 26%, #5b2016 57%, #171110 79%, #040404 100%);
+    linear-gradient(180deg, #ffb07c 0%, #ff5a1f 18%, #c63b18 40%, #5b2016 68%, #171110 86%, #040404 100%);
 }
 
 body::before {
