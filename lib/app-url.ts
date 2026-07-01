@@ -32,5 +32,5 @@ export function getAppUrl() {
     return `https://${vercelUrl}`;
   }
 
-  return "https://qcrc-team-management.vercel.app";
+  return "https://qcrc-team-management-sf1y.vercel.app";
 }

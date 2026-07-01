@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTransactionalEmail } from "@/lib/email";
 import { getAppUrl } from "@/lib/app-url";
+import { headers } from "next/headers";
 
 export async function listAllAuthUsersByEmail(admin: ReturnType<typeof createAdminClient>) {
   const byEmail = new Map<string, string>();
@@ -44,7 +45,11 @@ export async function generateAndSendMemberAuthLink(
     appUrl?: string;
   },
 ) {
-  const resolvedAppUrl = appUrl || getAppUrl();
+  const requestHeaders = await headers();
+  const forwardedProto = requestHeaders.get("x-forwarded-proto");
+  const forwardedHost = requestHeaders.get("x-forwarded-host");
+  const requestOrigin = forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : null;
+  const resolvedAppUrl = appUrl || requestOrigin || getAppUrl();
   const callbackPath = nextPath ?? "/reservations";
   const redirectTo =
     type === "recovery"
