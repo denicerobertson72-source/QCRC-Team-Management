@@ -50,7 +50,7 @@ export async function generateAndSendMemberAuthLink(
   const forwardedHost = requestHeaders.get("x-forwarded-host");
   const requestOrigin = forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : null;
   const resolvedAppUrl = appUrl || requestOrigin || getAppUrl();
-  const callbackPath = nextPath ?? "/reservations";
+  const callbackPath = nextPath ?? "/";
   const redirectTo =
     type === "recovery"
       ? `${resolvedAppUrl}${callbackPath}`
@@ -81,8 +81,8 @@ export async function generateAndSendMemberAuthLink(
     type === "invite"
       ? {
           subject: "QCRC invitation link",
-          text: `Hello ${fullName},\n\nYou have been invited to join QCRC Team Management. Use this secure link to get started:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
-          html: `<p>Hello ${fullName},</p><p>You have been invited to join QCRC Team Management.</p><p><a href="${data.properties.action_link}">Accept Invitation</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+          text: `Hello ${fullName},\n\nYou have been invited to join QCRC Team Management. Use this secure link to get started:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on the home page.`,
+          html: `<p>Hello ${fullName},</p><p>You have been invited to join QCRC Team Management.</p><p><a href="${data.properties.action_link}">Accept Invitation</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on the home page.</p>`,
         }
       : type === "recovery"
         ? {
@@ -92,8 +92,8 @@ export async function generateAndSendMemberAuthLink(
           }
         : {
             subject: "QCRC sign-in link",
-            text: `Hello ${fullName},\n\nUse this secure link to sign in to QCRC Team Management:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on your reservations page.`,
-            html: `<p>Hello ${fullName},</p><p>Use this secure link to sign in to QCRC Team Management:</p><p><a href="${data.properties.action_link}">Open QCRC Team Management</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on your reservations page.</p>`,
+            text: `Hello ${fullName},\n\nUse this secure link to sign in to QCRC Team Management:\n\n${data.properties.action_link}\n\nAfter opening the link, you will land on the home page.`,
+            html: `<p>Hello ${fullName},</p><p>Use this secure link to sign in to QCRC Team Management:</p><p><a href="${data.properties.action_link}">Open QCRC Team Management</a></p><p>If the button does not work, paste this link into your browser:</p><p>${data.properties.action_link}</p><p>After opening the link, you will land on the home page.</p>`,
           };
 
   const sendResult = await sendTransactionalEmail({

@@ -633,7 +633,7 @@ export async function sendMemberMagicLinkAdminAction(formData: FormData) {
       email,
       fullName,
       type: "magiclink",
-      nextPath: "/reservations",
+      nextPath: "/",
     });
     if (magicLinkResult.delivery !== "email") {
       destination.searchParams.set("invite_status", "success");

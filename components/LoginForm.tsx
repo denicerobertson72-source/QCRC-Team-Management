@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 export function LoginForm({
   initialError = null,
   initialMessage = null,
-  nextPath = "/reservations",
+  nextPath = "/",
 }: {
   initialError?: string | null;
   initialMessage?: string | null;
@@ -57,7 +57,7 @@ export function LoginForm({
 
       setError(null);
       setMessage(null);
-      router.replace(nextPath || "/reservations");
+      router.replace(nextPath || "/");
       router.refresh();
     }
 
@@ -78,7 +78,7 @@ export function LoginForm({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservations`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/`,
         },
       });
       if (signUpError) {
@@ -112,7 +112,7 @@ export function LoginForm({
       }
 
       if (storageKey) window.localStorage.setItem(storageKey, "1");
-      router.replace("/reservations");
+      router.replace("/");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected password sign-in error");

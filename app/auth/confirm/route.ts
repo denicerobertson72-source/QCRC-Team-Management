@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
     const tokenHash = requestUrl.searchParams.get("token_hash");
     const rawType = requestUrl.searchParams.get("type");
-    const nextPath = requestUrl.searchParams.get("next") ?? "/reservations";
+    const nextPath = requestUrl.searchParams.get("next") ?? "/";
 
     if (!tokenHash || !rawType) {
       return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(nextPath)}`, requestUrl.origin));

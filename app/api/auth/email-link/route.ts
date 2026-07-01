@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       email,
       fullName,
       type: mode === "recovery" ? "recovery" : authUsersByEmail.has(email) ? "magiclink" : "invite",
-      nextPath: mode === "recovery" ? "/account/security?reset=1" : "/reservations",
+      nextPath: mode === "recovery" ? "/account/security?reset=1" : "/",
       appUrl: origin,
     });
 

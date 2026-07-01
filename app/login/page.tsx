@@ -8,11 +8,11 @@ export default async function LoginPage({
   const params = await searchParams;
   return (
     <main className="stack" style={{ paddingTop: "3rem", maxWidth: 500 }}>
-      <LoginForm
-        initialError={params.error ?? null}
-        initialMessage={params.message ?? null}
-        nextPath={params.next ?? "/reservations"}
-      />
+        <LoginForm
+          initialError={params.error ?? null}
+          initialMessage={params.message ?? null}
+          nextPath={params.next ?? "/"}
+        />
     </main>
   );
 }
