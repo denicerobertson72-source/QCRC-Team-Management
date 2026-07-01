@@ -742,6 +742,27 @@ export async function inviteMemberAdminAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
+  const { data: matchingNameProfiles, error: matchingNameError } = await admin
+    .from("profiles")
+    .select("id, email, full_name, status")
+    .ilike("full_name", fullName)
+    .neq("email", email);
+  if (matchingNameError) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set("invite_message", matchingNameError.message || "Unable to validate the member name.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const conflictingActiveProfile = (matchingNameProfiles ?? []).find((profile) => profile.status !== "inactive");
+  if (conflictingActiveProfile) {
+    destination.searchParams.set("invite_status", "error");
+    destination.searchParams.set(
+      "invite_message",
+      `An existing member already uses the name ${fullName} with ${conflictingActiveProfile.email}. Use a more distinct test name or update that member instead.`,
+    );
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
   const authUsersByEmail = await listAllAuthUsersByEmail(admin);
 
   if (authUsersByEmail.has(email)) {
