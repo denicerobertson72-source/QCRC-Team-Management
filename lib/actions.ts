@@ -120,7 +120,33 @@ function sanitizeStorageFileName(name: string) {
 
 function parseBooleanLike(value: string | undefined) {
   const normalized = (value ?? "").trim().toLowerCase();
-  return normalized === "true" || normalized === "yes" || normalized === "y" || normalized === "1";
+  if (!normalized) return null;
+
+  if (
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "y" ||
+    normalized === "1" ||
+    normalized === "paid" ||
+    normalized === "current" ||
+    normalized === "on"
+  ) {
+    return true;
+  }
+
+  if (
+    normalized === "false" ||
+    normalized === "no" ||
+    normalized === "n" ||
+    normalized === "0" ||
+    normalized === "due" ||
+    normalized === "unpaid" ||
+    normalized === "off"
+  ) {
+    return false;
+  }
+
+  return null;
 }
 
 function normalizeCsvDate(value: string | undefined) {
