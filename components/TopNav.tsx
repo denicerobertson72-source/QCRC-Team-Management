@@ -49,30 +49,10 @@ export async function TopNav() {
       <GlobalReservationAlert alerts={reservationAlerts.map(({ boatName, startTime }) => ({ boatName, startTime }))} />
       <GlobalOverdueAlert count={overdueBoats.length} boatNames={overdueBoats.map((boat) => boat.boat_name)} />
       <header className="topnav">
-        <nav className="topnav-links">
-          <div className="topnav-home">
-            <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
-            {navLinks.map((link) =>
-              link.home ? (
-                <Link key={link.href} href={link.href}>
-                  {link.label}
-                </Link>
-              ) : null,
-            )}
-          </div>
-          {navLinks.map((link) =>
-            link.home ? null : (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={link.href === "/notifications" ? "topnav-notification-link" : undefined}
-              >
-                {link.label}
-                {link.badge ? <span className="topnav-badge">{link.badge}</span> : null}
-              </Link>
-            ),
-          )}
-        </nav>
+        <div className="topnav-home">
+          <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
+          <Link href="/">Home</Link>
+        </div>
         <details className="topnav-menu">
           <summary className="topnav-menu-trigger" aria-label="Open navigation menu">
             <span />
@@ -97,11 +77,6 @@ export async function TopNav() {
             </form>
           </div>
         </details>
-        <form action={signOutAction} className="topnav-signout">
-          <Button type="submit" variant="secondary">
-            Sign Out
-          </Button>
-        </form>
       </header>
     </>
   );

@@ -212,17 +212,6 @@ a:hover {
   border-color: rgba(255, 255, 255, 0.22);
 }
 
-.topnav nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-wrap: wrap;
-}
-
-.topnav-links {
-  flex: 1 1 auto;
-}
-
 .topnav-home {
   display: inline-flex;
   align-items: center;
@@ -230,7 +219,7 @@ a:hover {
   margin-right: 0.15rem;
 }
 
-.topnav nav a,
+.topnav-home a,
 .topnav-menu-panel a {
   font-size: 0.92rem;
   font-weight: 700;
@@ -265,8 +254,9 @@ a:hover {
 }
 
 .topnav-menu {
-  display: none;
+  display: block;
   position: relative;
+  margin-left: auto;
 }
 
 .topnav-menu summary {
@@ -320,11 +310,7 @@ a:hover {
   margin-top: 0.35rem;
 }
 
-.topnav-signout {
-  flex: 0 0 auto;
-}
-
-.topnav nav a:hover,
+.topnav-home a:hover,
 .topnav-menu-panel a:hover {
   text-decoration: none;
   color: #ffffff;
@@ -1050,13 +1036,7 @@ tbody tr:last-child td {
     margin-right: 0;
   }
 
-  .topnav-links,
-  .topnav-signout {
-    display: none;
-  }
-
   .topnav-menu {
-    display: block;
     margin-left: auto;
   }
 }
