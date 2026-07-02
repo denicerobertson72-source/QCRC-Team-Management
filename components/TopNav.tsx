@@ -35,6 +35,7 @@ export async function TopNav() {
     { href: "/reservations", label: "Reservations" },
     { href: "/reserve", label: "Reserve" },
     { href: "/safety", label: "Safety" },
+    { href: "/programs/meetup", label: "Rowing Meetup" },
     { href: "/programs", label: "Programs" },
     { href: "/lineups", label: "Lineups" },
     { href: "/notifications", label: "Notifications", badge: unreadNotificationCount > 0 ? unreadBadgeLabel : null },
