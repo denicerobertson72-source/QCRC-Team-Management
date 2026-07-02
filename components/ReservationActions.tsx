@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { checkinAction, checkoutAction, updateReservationGateStatusAction } from "@/lib/actions";
+import { cancelReservationAction, checkinAction, checkoutAction, updateReservationAction, updateReservationGateStatusAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
+import { deriveReservationEndLocal } from "@/lib/reservations";
+import { formatEasternLocalInput, toEasternDateTimeLocalValue } from "@/lib/time";
 
 function geolocationErrorMessage(error: GeolocationPositionError) {
   if (error.code === error.PERMISSION_DENIED) {
@@ -40,6 +42,8 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
   const canCheckin = reservation.status === "checked_out";
   const canUpdateGate = reservation.status === "checked_in";
   const resumeSubmitRef = useRef(false);
+  const [startTime, setStartTime] = useState(() => toEasternDateTimeLocalValue(reservation.start_time));
+  const derivedEndTime = useMemo(() => deriveReservationEndLocal(startTime) ?? "", [startTime]);
 
   if (!canCheckout && !canCheckin && !canUpdateGate) return null;
 
@@ -100,21 +104,74 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
   return (
     <details className="card-subtle">
-      <summary>{canCheckout ? "Show launching options" : canCheckin ? "Show return options" : "Show gate options"}</summary>
+      <summary>{canCheckout ? "Show reservation options" : canCheckin ? "Show return options" : "Show gate options"}</summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
         {canCheckout ? (
-          <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit}>
-            <input type="hidden" name="reservation_id" value={reservation.id} />
-            <select name="location" defaultValue={reservation.checkout_location ?? "OH"} required>
-              <option value="OH">OH</option>
-              <option value="LM">LM</option>
-            </select>
-            <select name="river_direction" defaultValue={reservation.river_direction ?? "Upriver"} required>
-              <option value="Upriver">Upriver</option>
-              <option value="Downriver">Downriver</option>
-            </select>
-            <Button type="submit">Launching</Button>
-          </form>
+          <>
+            <div className="form-grid" style={{ flex: "1 1 320px" }}>
+              <form action={updateReservationAction} className="form-grid">
+                <input type="hidden" name="reservation_id" value={reservation.id} />
+                <input type="hidden" name="end_time" value={derivedEndTime} />
+                <label>
+                  Start Time
+                  <input
+                    name="start_time"
+                    type="datetime-local"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                    required
+                  />
+                </label>
+                <p className="muted">
+                  {derivedEndTime
+                    ? `End time will be set automatically to ${formatEasternLocalInput(derivedEndTime)} ET.`
+                    : "Choose a start time that stays within the same day."}
+                </p>
+                <label>
+                  Planned Launch Site
+                  <select name="checkout_location" defaultValue={reservation.checkout_location ?? "OH"} required>
+                    <option value="OH">OH</option>
+                    <option value="LM">LM</option>
+                  </select>
+                </label>
+                <label>
+                  Crew Names
+                  <input
+                    name="crew_names"
+                    defaultValue={(reservation.crew_names ?? []).join(", ")}
+                    placeholder="Optional crew names"
+                  />
+                </label>
+                <label>
+                  Notes
+                  <input name="notes" defaultValue={reservation.notes ?? ""} placeholder="Optional notes" />
+                </label>
+                <Button type="submit">Save Changes</Button>
+              </form>
+
+              <form action={cancelReservationAction}>
+                <input type="hidden" name="reservation_id" value={reservation.id} />
+                <div className="row">
+                  <Button type="submit" variant="secondary">
+                    Cancel Reservation
+                  </Button>
+                </div>
+              </form>
+            </div>
+
+            <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit} style={{ flex: "1 1 320px" }}>
+              <input type="hidden" name="reservation_id" value={reservation.id} />
+              <select name="location" defaultValue={reservation.checkout_location ?? "OH"} required>
+                <option value="OH">OH</option>
+                <option value="LM">LM</option>
+              </select>
+              <select name="river_direction" defaultValue={reservation.river_direction ?? "Upriver"} required>
+                <option value="Upriver">Upriver</option>
+                <option value="Downriver">Downriver</option>
+              </select>
+              <Button type="submit">Launching</Button>
+            </form>
+          </>
         ) : null}
 
         {canCheckin ? (

@@ -385,7 +385,7 @@ export async function updateReservationAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const startTime = String(formData.get("start_time") ?? "");
-  const endTime = String(formData.get("end_time") ?? "");
+  const endTime = String(formData.get("end_time") ?? "") || deriveReservationEndLocal(startTime) || "";
   const checkoutLocation = String(formData.get("checkout_location") ?? "");
   const notes = String(formData.get("notes") ?? "");
   const crewNames = String(formData.get("crew_names") ?? "");

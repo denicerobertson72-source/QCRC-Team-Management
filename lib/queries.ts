@@ -1,4 +1,5 @@
 import { ensureProfile } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   Boat,
   BoatAvailabilityBlock,
@@ -47,6 +48,17 @@ function rowerNameFromRelation(profileRelation: unknown) {
 
 function notificationCutoffIso() {
   return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function getProfileNamesById(memberIds: string[]) {
+  const uniqueIds = [...new Set(memberIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map<string, string>();
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("profiles").select("id, full_name").in("id", uniqueIds);
+  if (error) throw error;
+
+  return new Map((data ?? []).map((profile) => [profile.id, profile.full_name?.trim() || "Unknown"]));
 }
 
 export async function getMyReservations() {
@@ -298,13 +310,14 @@ export async function getLineupBoardDetail(lineupBoardId: string) {
     ? await (async () => {
         const { data: seatData, error: seatError } = await supabase
           .from("lineup_seats")
-          .select("id, lineup_boat_id, seat_number, member_id, profiles(full_name)")
+          .select("id, lineup_boat_id, seat_number, member_id")
           .in("lineup_boat_id", boatIds)
           .order("seat_number", { ascending: true });
         if (seatError) throw seatError;
         return seatData ?? [];
       })()
     : [];
+  const profileNamesById = await getProfileNamesById(seats.map((seat) => seat.member_id).filter(Boolean));
 
   const seatsByBoat = new Map<string, typeof seats>();
   for (const seat of seats) {
@@ -321,7 +334,7 @@ export async function getLineupBoardDetail(lineupBoardId: string) {
         id: seat.id,
         seat_number: seat.seat_number,
         member_id: seat.member_id,
-        member_name: profileNameFromRelation(seat.profiles),
+        member_name: seat.member_id ? profileNamesById.get(seat.member_id) ?? "Unknown" : "TBD",
       })),
     })),
   };
@@ -585,7 +598,7 @@ export async function getRowingMeetupState() {
         .maybeSingle(),
       supabase
         .from("rowing_meetup_members")
-        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at, profiles(full_name)")
+        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
         .order("created_at", { ascending: true }),
       supabase
         .from("rowing_meetup_availability")
@@ -597,12 +610,12 @@ export async function getRowingMeetupState() {
   if (membershipError) throw membershipError;
   if (membersError) throw membersError;
   if (slotsError) throw slotsError;
+  const profileNamesById = await getProfileNamesById((allMembers ?? []).map((row: any) => row.member_id));
 
   const members: RowingMeetupMember[] = (allMembers ?? []).map((row: any) => {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     return {
       member_id: row.member_id,
-      full_name: profile?.full_name ?? "Unknown",
+      full_name: profileNamesById.get(row.member_id) ?? "Unknown",
       skill_level: row.skill_level,
       wants_1x: row.wants_1x,
       wants_2x: row.wants_2x,
