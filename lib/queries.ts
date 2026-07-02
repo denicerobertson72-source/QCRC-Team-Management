@@ -91,6 +91,49 @@ export async function getMyReservations() {
   return rows;
 }
 
+export async function getUpcomingOtherReservations() {
+  const { user } = await ensureProfile();
+  const admin = createAdminClient();
+
+  const now = new Date();
+  const startKey = getEasternDateKey(now);
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowKey = getEasternDateKey(tomorrow);
+  const endWindow = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await admin
+    .from("reservations")
+    .select("id, created_by, start_time, status, boats(boat_class_id)")
+    .in("status", ["reserved", "checked_out"])
+    .gte("start_time", now.toISOString())
+    .lt("start_time", endWindow)
+    .neq("created_by", user.id)
+    .order("start_time", { ascending: true });
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    created_by: string;
+    start_time: string;
+    status: string;
+    boats: { boat_class_id?: string | null } | { boat_class_id?: string | null }[] | null;
+  }>;
+  const namesById = await getProfileNamesById(rows.map((row) => row.created_by));
+
+  return rows
+    .map((row) => {
+      const boat = Array.isArray(row.boats) ? row.boats[0] : row.boats;
+      return {
+        id: row.id,
+        member_name: namesById.get(row.created_by) ?? "Unknown",
+        start_time: row.start_time,
+        boat_class_id: boat?.boat_class_id ?? "Unknown",
+        date_key: getEasternDateKey(row.start_time),
+      };
+    })
+    .filter((row) => row.date_key === startKey || row.date_key === tomorrowKey);
+}
+
 export async function getMyPrivateBoatOutings() {
   const { supabase, user } = await ensureProfile();
   const { data, error } = await supabase
@@ -412,6 +455,24 @@ export async function getProgramSessionsForMonth(programTypes: string[], monthSt
     my_signed_up: mine.has(session.id),
     signup_count: countBySession.get(session.id) ?? 0,
   })) as ProgramSession[];
+}
+
+export async function getNextProgramSessionMonth(programTypes: string[]) {
+  const { supabase } = await ensureProfile();
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("starts_at")
+    .in("session_type", programTypes)
+    .gte("starts_at", nowIso)
+    .order("starts_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.starts_at) return null;
+
+  const startsAt = new Date(data.starts_at);
+  return `${startsAt.getUTCFullYear()}-${String(startsAt.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 export async function getOverdueBoatAlerts() {

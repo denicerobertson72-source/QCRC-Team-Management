@@ -8,11 +8,23 @@ function seatLabel(boatClassId: string, seatNumber: number) {
   if (boatClassId === "1x") return "Sculler";
   if (boatClassId === "2x") return seatNumber === 1 ? "Stroke" : "Bow";
   if (boatClassId === "4x") {
-    if (seatNumber === 1) return "Stroke";
     if (seatNumber === 4) return "Bow";
-    return `Seat ${seatNumber}`;
+    if (seatNumber === 3) return "Seat 2";
+    if (seatNumber === 2) return "Seat 3";
+    return "Stroke";
   }
   return `Seat ${seatNumber}`;
+}
+
+function orderedSeats<T extends { seat_number: number }>(boatClassId: string, seats: T[]) {
+  if (boatClassId !== "4x") return seats;
+  const order = new Map([
+    [4, 0],
+    [3, 1],
+    [2, 2],
+    [1, 3],
+  ]);
+  return [...seats].sort((a, b) => (order.get(a.seat_number) ?? a.seat_number) - (order.get(b.seat_number) ?? b.seat_number));
 }
 
 export default async function LineupsPage() {
@@ -49,7 +61,7 @@ export default async function LineupsPage() {
                           <p className="muted">Race time: {formatEasternDateTime(String(boat.race_time))} ET</p>
                         ) : null}
                         <ul>
-                          {boat.seats.map((seat) => (
+                          {orderedSeats(boat.boat_class_id, boat.seats).map((seat) => (
                             <li key={seat.id}>
                               {seatLabel(boat.boat_class_id, seat.seat_number)}: {seat.member_name ?? "TBD"}
                             </li>

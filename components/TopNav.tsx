@@ -30,32 +30,74 @@ export async function TopNav() {
     }))
     .filter((row) => row.boatStatus !== "available");
   const unreadBadgeLabel = unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount);
+  const navLinks = [
+    { href: "/", label: "Home", home: true },
+    { href: "/reservations", label: "Reservations" },
+    { href: "/reserve", label: "Reserve" },
+    { href: "/safety", label: "Safety" },
+    { href: "/programs", label: "Programs" },
+    { href: "/lineups", label: "Lineups" },
+    { href: "/notifications", label: "Notifications", badge: unreadNotificationCount > 0 ? unreadBadgeLabel : null },
+    { href: "/boats", label: "Boats" },
+    { href: "/damage/new", label: "Damage" },
+    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+    { href: "/account/security", label: "Account Setting" },
+  ];
 
   return (
     <>
       <GlobalReservationAlert alerts={reservationAlerts.map(({ boatName, startTime }) => ({ boatName, startTime }))} />
       <GlobalOverdueAlert count={overdueBoats.length} boatNames={overdueBoats.map((boat) => boat.boat_name)} />
       <header className="topnav">
-        <nav>
+        <nav className="topnav-links">
           <div className="topnav-home">
             <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
-            <Link href="/">Home</Link>
+            {navLinks.map((link) =>
+              link.home ? (
+                <Link key={link.href} href={link.href}>
+                  {link.label}
+                </Link>
+              ) : null,
+            )}
           </div>
-          <Link href="/reservations">Reservations</Link>
-          <Link href="/reserve">Reserve</Link>
-          <Link href="/safety">Safety</Link>
-          <Link href="/programs">Programs</Link>
-          <Link href="/lineups">Lineups</Link>
-          <Link href="/notifications" className="topnav-notification-link">
-            Notifications
-            {unreadNotificationCount > 0 ? <span className="topnav-badge">{unreadBadgeLabel}</span> : null}
-          </Link>
-          <Link href="/boats">Boats</Link>
-          <Link href="/damage/new">Damage</Link>
-          {isAdmin ? <Link href="/admin">Admin</Link> : null}
-          <Link href="/account/security">Account Setting</Link>
+          {navLinks.map((link) =>
+            link.home ? null : (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={link.href === "/notifications" ? "topnav-notification-link" : undefined}
+              >
+                {link.label}
+                {link.badge ? <span className="topnav-badge">{link.badge}</span> : null}
+              </Link>
+            ),
+          )}
         </nav>
-        <form action={signOutAction}>
+        <details className="topnav-menu">
+          <summary className="topnav-menu-trigger" aria-label="Open navigation menu">
+            <span />
+            <span />
+            <span />
+          </summary>
+          <div className="topnav-menu-panel">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={link.href === "/notifications" ? "topnav-notification-link" : undefined}
+              >
+                {link.label}
+                {link.badge ? <span className="topnav-badge">{link.badge}</span> : null}
+              </Link>
+            ))}
+            <form action={signOutAction} className="topnav-menu-signout">
+              <Button type="submit" variant="secondary">
+                Sign Out
+              </Button>
+            </form>
+          </div>
+        </details>
+        <form action={signOutAction} className="topnav-signout">
           <Button type="submit" variant="secondary">
             Sign Out
           </Button>

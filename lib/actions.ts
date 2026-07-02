@@ -1131,11 +1131,6 @@ export async function submitDamageAction(formData: FormData) {
     const severity = Number(formData.get("severity") ?? 1);
     const description = String(formData.get("description") ?? "");
     const responsibleMemberName = String(formData.get("responsible_member_name") ?? "").trim();
-    const rawPaths = String(formData.get("photo_paths") ?? "");
-    const photoPaths = rawPaths
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
     const uploadedFiles = formData
       .getAll("photos")
       .filter((entry): entry is File => typeof File !== "undefined" && entry instanceof File && entry.size > 0);
@@ -1152,7 +1147,7 @@ export async function submitDamageAction(formData: FormData) {
       uploadedPaths.push(storagePath);
     }
 
-    const allPhotoPaths = [...photoPaths, ...uploadedPaths];
+    const allPhotoPaths = uploadedPaths;
     const finalDescription = responsibleMemberName
       ? `${description}\nResponsible rower: ${responsibleMemberName}`
       : description;
@@ -2326,7 +2321,7 @@ export async function cancelSessionAdminAction(formData: FormData) {
 
   const { data: sessionRow, error: sessionLoadError } = await supabase
     .from("sessions")
-    .select("title, starts_at")
+    .select("title, starts_at, session_type")
     .eq("id", sessionId)
     .single();
   if (sessionLoadError) throw sessionLoadError;
@@ -2356,6 +2351,7 @@ export async function cancelSessionAdminAction(formData: FormData) {
         payload: {
           title: sessionRow.title,
           starts_at: sessionRow.starts_at,
+          session_type: sessionRow.session_type,
           cancelled_reason: cancelledReason || "Cancelled by coach/admin",
         },
       }));

@@ -26,11 +26,23 @@ function seatLabel(boatClassId: string, seatNumber: number) {
   if (boatClassId === "1x") return "Sculler";
   if (boatClassId === "2x") return seatNumber === 1 ? "Stroke" : "Bow";
   if (boatClassId === "4x") {
-    if (seatNumber === 1) return "Stroke";
     if (seatNumber === 4) return "Bow";
-    return `Seat ${seatNumber}`;
+    if (seatNumber === 3) return "Seat 2";
+    if (seatNumber === 2) return "Seat 3";
+    return "Stroke";
   }
   return `Seat ${seatNumber}`;
+}
+
+function orderedSeats(boatClassId: string, seats: Seat[]) {
+  if (boatClassId !== "4x") return seats;
+  const order = new Map([
+    [4, 0],
+    [3, 1],
+    [2, 2],
+    [1, 3],
+  ]);
+  return [...seats].sort((a, b) => (order.get(a.seat_number) ?? a.seat_number) - (order.get(b.seat_number) ?? b.seat_number));
 }
 
 export function LineupBuilder({
@@ -164,7 +176,7 @@ export function LineupBuilder({
                 </Button>
               </form>
             </div>
-            {boat.seats.map((seat) => (
+            {orderedSeats(boat.boat_class_id, boat.seats).map((seat) => (
               <div
                 key={seat.id}
                 className="card-subtle row lineup-seat-card"

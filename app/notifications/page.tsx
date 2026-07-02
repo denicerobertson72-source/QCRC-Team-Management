@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { getMyNotifications } from "@/lib/queries";
 import { markAllNotificationsReadAction, markNotificationReadAction } from "@/lib/actions";
 import { formatEasternDateTime } from "@/lib/time";
+import Link from "next/link";
 
 function notificationTitle(notification: { notification_type: string; payload: Record<string, unknown> }) {
   if (notification.notification_type === "boat_out_of_service") {
@@ -47,6 +48,22 @@ function notificationBody(notification: { notification_type: string; payload: Re
   return "";
 }
 
+function notificationHref(notification: { notification_type: string; payload: Record<string, unknown> }) {
+  if (notification.notification_type === "lineup_published") return "/lineups";
+  if (notification.notification_type === "boat_out_of_service") return "/reserve";
+  if (notification.notification_type === "rowing_meetup_signup") return "/programs/meetup";
+  if (notification.notification_type === "overdue_boat_alert") return "/reservations";
+  if (notification.notification_type === "billing_reminder") return "/account/security";
+  if (notification.notification_type === "session_cancelled") {
+    const sessionType = String(notification.payload.session_type ?? "");
+    if (sessionType === "coached_training_beginner_intermediate") return "/programs/training/beginner-intermediate";
+    if (sessionType === "coached_training_advanced") return "/programs/training/advanced";
+    if (sessionType === "saturday_coached_row") return "/programs/saturday";
+    return "/programs";
+  }
+  return null;
+}
+
 export default async function NotificationsPage() {
   const notifications = await getMyNotifications();
 
@@ -79,14 +96,21 @@ export default async function NotificationsPage() {
                 </span>
               </div>
               <p>{notificationBody(notification)}</p>
-              {notification.read_at === null ? (
-                <form action={markNotificationReadAction}>
-                  <input type="hidden" name="notification_id" value={notification.id} />
-                  <Button type="submit" variant="secondary">
-                    Mark Read
-                  </Button>
-                </form>
-              ) : null}
+              <div className="notification-actions">
+                {notificationHref(notification) ? (
+                  <Link href={notificationHref(notification)!} className="cta-link">
+                    Open
+                  </Link>
+                ) : null}
+                {notification.read_at === null ? (
+                  <form action={markNotificationReadAction}>
+                    <input type="hidden" name="notification_id" value={notification.id} />
+                    <Button type="submit" variant="secondary">
+                      Mark Read
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
             </Card>
           ))}
         </div>

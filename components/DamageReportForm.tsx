@@ -47,13 +47,6 @@ export function DamageReportForm({
       <Field label="Description">
         <textarea name="description" rows={4} required />
       </Field>
-      <Field label="Photo storage paths (optional, one per line)">
-        <textarea
-          name="photo_paths"
-          rows={4}
-          placeholder={"damage/<report-id>/photo1.jpg\\ndamage/<report-id>/photo2.jpg"}
-        />
-      </Field>
       <Field label="Upload photos (optional)">
         <input name="photos" type="file" accept="image/*" multiple />
       </Field>
