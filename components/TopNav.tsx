@@ -59,7 +59,14 @@ export async function TopNav() {
             <span />
             <span />
           </summary>
+          <div className="topnav-menu-backdrop" />
           <div className="topnav-menu-panel">
+            <div className="topnav-menu-header">
+              <div className="topnav-home">
+                <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
+                <span>Menu</span>
+              </div>
+            </div>
             {navLinks.map((link) => (
               <Link
                 key={link.href}
