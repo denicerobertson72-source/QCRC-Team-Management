@@ -139,6 +139,8 @@ export default async function SafetyPage() {
                   <p>
                     {entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}
                   </p>
+                ) : entry.river_direction ? (
+                  <p>Route: {entry.river_direction}</p>
                 ) : null}
                 {entry.notes ? <p>Comments: {entry.notes}</p> : null}
                 <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
@@ -188,7 +190,9 @@ export default async function SafetyPage() {
                   <td>{entry.checked_out_at ? `${formatEasternDateTime(entry.checked_out_at)} ET` : "-"}</td>
                   <td>{entry.checked_in_at ? `${formatEasternDateTime(entry.checked_in_at)} ET` : "-"}</td>
                   <td>
-                    {canManageSafety ? `${entry.checkout_location ?? "-"}${entry.river_direction ? ` / ${entry.river_direction}` : ""}` : "-"}
+                    {canManageSafety
+                      ? `${entry.checkout_location ?? "-"}${entry.river_direction ? ` / ${entry.river_direction}` : ""}`
+                      : entry.river_direction ?? "-"}
                   </td>
                   <td>
                     {entry.gate_status === "locked" ? "Locked" : entry.gate_status === "unlocked" ? "Unlocked" : "-"}
