@@ -25,6 +25,12 @@ export default async function RacingProgramPage() {
                 {event.event_date}
                 {event.location ? ` | ${event.location}` : ""}
               </p>
+              {event.my_signup?.comments ? (
+                <Card subtle>
+                  <strong>Saved comment</strong>
+                  <p>{event.my_signup.comments}</p>
+                </Card>
+              ) : null}
 
               <form action={saveRaceSignupAction} className="form-grid">
                 <input type="hidden" name="race_event_id" value={event.id} />

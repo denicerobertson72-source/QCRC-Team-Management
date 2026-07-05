@@ -18,7 +18,7 @@ export default async function SafetyPage() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const canManageSafety = profile?.role === "admin" || profile?.role === "coach" || profile?.role === "equipment_manager";
   const overdue = onWater.filter((entry) => entry.is_overdue);
-  const visibleOnWater = canManageSafety ? onWater : onWater.filter((entry) => entry.created_by === user.id);
+  const visibleOnWater = onWater;
   const visibleOverdue = canManageSafety ? overdue : overdue.filter((entry) => entry.created_by === user.id);
   const visibleRecentLog = canManageSafety ? recentLog : recentLog.filter((entry) => entry.created_by === user.id);
   const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
@@ -135,9 +135,11 @@ export default async function SafetyPage() {
                 <p>
                   Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET
                 </p>
-                <p>
-                  {entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}
-                </p>
+                {canManageSafety ? (
+                  <p>
+                    {entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}
+                  </p>
+                ) : null}
                 {entry.notes ? <p>Comments: {entry.notes}</p> : null}
                 <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
               </Card>

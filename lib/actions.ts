@@ -2091,10 +2091,10 @@ export async function addLineupBoatAdminAction(formData: FormData) {
     .from("lineup_boats")
     .select("sort_order")
     .eq("lineup_board_id", lineupBoardId)
-    .order("sort_order", { ascending: false })
+    .order("sort_order", { ascending: true })
     .limit(1);
   if (existingError) throw existingError;
-  const nextSortOrder = (existingBoats?.[0]?.sort_order ?? 0) + 1;
+  const nextSortOrder = (existingBoats?.[0]?.sort_order ?? 0) - 1;
 
   const { data, error } = await supabase
     .from("lineup_boats")

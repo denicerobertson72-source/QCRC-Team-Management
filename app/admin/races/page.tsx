@@ -94,7 +94,7 @@ export default async function AdminRacesPage() {
                             <td>{signup.birthdate}</td>
                             <td>{signup.desired_race_count ?? 1}</td>
                             <td>{prefs || "-"}</td>
-                            <td>{signup.comments ?? "-"}</td>
+                            <td>{signup.comments ? <span>{signup.comments}</span> : "-"}</td>
                           </tr>
                         );
                       })

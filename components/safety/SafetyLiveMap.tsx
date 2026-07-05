@@ -14,6 +14,13 @@ declare global {
 const MAPBOX_GL_VERSION = "v3.23.1";
 const DEFAULT_CENTER: [number, number] = [-84.512, 39.1031];
 
+function shortRowerName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Rower";
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}.`;
+}
+
 function formatPointTimestamp(value: string) {
   return new Date(value).toLocaleString("en-US", {
     timeZone: "America/New_York",
@@ -81,6 +88,7 @@ function buildTrackGeoJson(state: SafetyLiveMapState) {
           outingKind: outing.outing_kind,
           boatName: outing.boat_name,
           rowerName: outing.rower_name,
+          rowerShortName: shortRowerName(outing.rower_name),
           isMine: outing.outing_id === state.my_active_outing_id,
           isOverdue: outing.is_overdue,
         },
@@ -104,6 +112,7 @@ function buildPointGeoJson(state: SafetyLiveMapState) {
           outingKind: outing.outing_kind,
           boatName: outing.boat_name,
           rowerName: outing.rower_name,
+          rowerShortName: shortRowerName(outing.rower_name),
           locationLabel: outing.checkout_location ?? "Launch location not set",
           direction: outing.river_direction ?? "Direction not set",
           isMine: outing.outing_id === state.my_active_outing_id,
@@ -259,7 +268,7 @@ export function SafetyLiveMap({
             type: "symbol",
             source: "outing-points",
             layout: {
-              "text-field": ["get", "boatName"],
+              "text-field": ["get", "rowerShortName"],
               "text-size": 12,
               "text-offset": [0, 1.25],
               "text-anchor": "top",
