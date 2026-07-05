@@ -20,7 +20,7 @@ export default async function SafetyPage() {
   const overdue = onWater.filter((entry) => entry.is_overdue);
   const visibleOnWater = onWater;
   const visibleOverdue = canManageSafety ? overdue : overdue.filter((entry) => entry.created_by === user.id);
-  const visibleRecentLog = canManageSafety ? recentLog : recentLog.filter((entry) => entry.created_by === user.id);
+  const visibleRecentLog = recentLog;
   const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
   const mapboxAccessToken =
     process.env.ROWING_MAP_KEY ??
@@ -188,7 +188,7 @@ export default async function SafetyPage() {
                   <td>{entry.checked_out_at ? `${formatEasternDateTime(entry.checked_out_at)} ET` : "-"}</td>
                   <td>{entry.checked_in_at ? `${formatEasternDateTime(entry.checked_in_at)} ET` : "-"}</td>
                   <td>
-                    {entry.checkout_location ?? "-"}{entry.river_direction ? ` / ${entry.river_direction}` : ""}
+                    {canManageSafety ? `${entry.checkout_location ?? "-"}${entry.river_direction ? ` / ${entry.river_direction}` : ""}` : "-"}
                   </td>
                   <td>
                     {entry.gate_status === "locked" ? "Locked" : entry.gate_status === "unlocked" ? "Unlocked" : "-"}
