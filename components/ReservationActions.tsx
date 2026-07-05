@@ -2,12 +2,35 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { useFormStatus } from "react-dom";
 import { cancelReservationAction, checkinAction, checkoutAction, updateReservationAction, updateReservationGateStatusAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { formatEasternLocalInput, toEasternDateTimeLocalValue } from "@/lib/time";
+
+const GPS_LAUNCH_TIMEOUT_MS = 8000;
+const GPS_LAUNCH_MAX_AGE_MS = 60000;
+
+function PendingSubmitButton({
+  label,
+  pendingLabel,
+  variant = "primary",
+  className = "",
+}: {
+  label: string;
+  pendingLabel: string;
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant={variant} className={className} disabled={pending}>
+      {pending ? pendingLabel : label}
+    </Button>
+  );
+}
 
 function geolocationErrorMessage(error: GeolocationPositionError) {
   if (error.code === error.PERMISSION_DENIED) {
@@ -71,9 +94,9 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     try {
       await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0,
+          enableHighAccuracy: false,
+          timeout: GPS_LAUNCH_TIMEOUT_MS,
+          maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
       });
       window.localStorage.setItem(INTENT_STORAGE_KEY, makeOutingKey("reservation", reservation.id));
@@ -117,7 +140,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
               <option value="Upriver">Upriver</option>
               <option value="Downriver">Downriver</option>
             </select>
-            <Button type="submit">Launching</Button>
+            <PendingSubmitButton label="Launching" pendingLabel="Launching..." />
           </form>
 
           <Button type="button" variant="secondary" onClick={() => setShowEdit((current) => !current)}>
@@ -165,16 +188,14 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
                 <input name="notes" defaultValue={reservation.notes ?? ""} placeholder="Optional notes" />
               </label>
               <div className="row">
-                <Button type="submit">Save Changes</Button>
+                <PendingSubmitButton label="Save Changes" pendingLabel="Saving..." />
               </div>
             </form>
 
             <form action={cancelReservationAction}>
               <input type="hidden" name="reservation_id" value={reservation.id} />
               <div className="row">
-                <Button type="submit" variant="secondary">
-                  Cancel Reservation
-                </Button>
+                <PendingSubmitButton label="Cancel Reservation" pendingLabel="Cancelling..." variant="secondary" />
               </div>
             </form>
           </div>
@@ -192,7 +213,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
           <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
             <input name="notes" placeholder="Condition notes" />
-            <Button type="submit">Mark Returned</Button>
+            <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
           </form>
         ) : null}
 
@@ -204,9 +225,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
               <option value="locked">Gate locked</option>
               <option value="unlocked">Gate left unlocked</option>
             </select>
-            <Button type="submit" variant="secondary">
-              Save Gate Status
-            </Button>
+            <PendingSubmitButton label="Save Gate Status" pendingLabel="Saving Gate..." variant="secondary" />
           </form>
         ) : null}
       </div>

@@ -2,10 +2,31 @@
 
 import { useMemo, useRef } from "react";
 import type { FormEvent } from "react";
+import { useFormStatus } from "react-dom";
 import { privateBoatLaunchAction, privateBoatReturnAction, updatePrivateBoatGateStatusAction } from "@/lib/actions";
 import type { PrivateBoatOuting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
+
+const GPS_LAUNCH_TIMEOUT_MS = 8000;
+const GPS_LAUNCH_MAX_AGE_MS = 60000;
+
+function PendingSubmitButton({
+  label,
+  pendingLabel,
+  variant = "primary",
+}: {
+  label: string;
+  pendingLabel: string;
+  variant?: "primary" | "secondary";
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant={variant} disabled={pending}>
+      {pending ? pendingLabel : label}
+    </Button>
+  );
+}
 
 function geolocationErrorMessage(error: GeolocationPositionError) {
   if (error.code === error.PERMISSION_DENIED) {
@@ -63,9 +84,9 @@ export function PrivateBoatOutingPanel({
     try {
       await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0,
+          enableHighAccuracy: false,
+          timeout: GPS_LAUNCH_TIMEOUT_MS,
+          maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
       });
       window.localStorage.setItem(INTENT_STORAGE_KEY, outingKey);
@@ -113,7 +134,7 @@ export function PrivateBoatOutingPanel({
               <option value="Upriver">Upriver</option>
               <option value="Downriver">Downriver</option>
             </select>
-            <Button type="submit">Launch Private Boat</Button>
+            <PendingSubmitButton label="Launch Private Boat" pendingLabel="Launching..." />
           </form>
         ) : null}
 
@@ -121,7 +142,7 @@ export function PrivateBoatOutingPanel({
           <form action={privateBoatReturnAction} className="inline-form" onSubmit={handleReturnSubmit}>
             <input type="hidden" name="private_outing_id" value={activeOuting.id} />
             <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
-            <Button type="submit">Mark Returned</Button>
+            <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
           </form>
         ) : null}
 
@@ -133,9 +154,7 @@ export function PrivateBoatOutingPanel({
               <option value="locked">Gate locked</option>
               <option value="unlocked">Gate left unlocked</option>
             </select>
-            <Button type="submit" variant="secondary">
-              Save Gate Status
-            </Button>
+            <PendingSubmitButton label="Save Gate Status" pendingLabel="Saving Gate..." variant="secondary" />
           </form>
         ) : null}
       </div>
