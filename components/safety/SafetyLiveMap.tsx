@@ -13,6 +13,7 @@ declare global {
 
 const MAPBOX_GL_VERSION = "v3.23.1";
 const DEFAULT_CENTER: [number, number] = [-84.512, 39.1031];
+const LOCATION_UPLOAD_INTERVAL_MS = 15000;
 
 function shortRowerName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -378,7 +379,7 @@ export function SafetyLiveMap({
         }
         return withMyLatestPoint(nextState, current.my_active_outing_id, currentUserId, myOuting.latest_point);
       });
-    }, 30000);
+    }, LOCATION_UPLOAD_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [currentUserId, sharingEnabled]);
@@ -442,7 +443,7 @@ export function SafetyLiveMap({
         setState((current) => withMyLatestPoint(current, myActiveOutingId, currentUserId, point));
 
         const now = Date.now();
-        if (now - lastUploadAtRef.current < 30000) return;
+        if (now - lastUploadAtRef.current < LOCATION_UPLOAD_INTERVAL_MS) return;
         lastUploadAtRef.current = now;
 
         const { error } = await supabaseRef.current!.from("rowing_location_points").insert({
