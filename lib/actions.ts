@@ -38,10 +38,8 @@ function clearanceValueFromForm(value: FormDataEntryValue | null) {
 }
 
 async function assertAdmin() {
-  const { supabase, user } = await ensureProfile();
-  const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (error) throw error;
-  if (!data || (data.role !== "admin" && data.role !== "equipment_manager" && data.role !== "coach")) {
+  const { supabase, user, profile } = await ensureProfile();
+  if (profile.role !== "admin" && profile.role !== "equipment_manager" && profile.role !== "coach") {
     throw new Error("Admin permissions required");
   }
   return { supabase, user };

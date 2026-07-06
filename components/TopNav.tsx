@@ -8,9 +8,8 @@ import type { OverdueBoatAlert } from "@/lib/types";
 import { getUnreadNotificationCount } from "@/lib/queries";
 
 export async function TopNav() {
-  const { supabase, user } = await ensureProfile();
-  const [{ data }, overdueResult, reservationAlertResult, unreadNotificationCount] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user.id).single(),
+  const { supabase, user, profile } = await ensureProfile();
+  const [overdueResult, reservationAlertResult, unreadNotificationCount] = await Promise.all([
     supabase.rpc("overdue_boat_summary"),
     supabase
       .from("reservations")
@@ -20,7 +19,7 @@ export async function TopNav() {
       .gte("start_time", new Date().toISOString()),
     getUnreadNotificationCount(),
   ]);
-  const isAdmin = data?.role === "admin";
+  const isAdmin = profile.role === "admin";
   const overdueBoats = (Array.isArray(overdueResult.data) ? overdueResult.data : []) as OverdueBoatAlert[];
   const reservationAlerts = (reservationAlertResult.data ?? [])
     .map((row: any) => ({
@@ -51,7 +50,7 @@ export async function TopNav() {
       <GlobalOverdueAlert count={overdueBoats.length} boatNames={overdueBoats.map((boat) => boat.boat_name)} />
       <header className="topnav">
         <div className="topnav-home">
-          <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
+          <img src="/QCRC.png" alt="QCRC" width={52} height={52} className="topnav-logo topnav-logo-plain" />
           <Link href="/">Home</Link>
         </div>
         <details className="topnav-menu">
@@ -64,7 +63,7 @@ export async function TopNav() {
           <div className="topnav-menu-panel">
             <div className="topnav-menu-header">
               <div className="topnav-home">
-                <img src="/QCRC.png" alt="QCRC" className="topnav-logo topnav-logo-plain" />
+                <img src="/QCRC.png" alt="QCRC" width={52} height={52} className="topnav-logo topnav-logo-plain" />
                 <span>Menu</span>
               </div>
             </div>

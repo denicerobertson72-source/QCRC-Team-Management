@@ -10,12 +10,11 @@ import { getSafetyLiveMapState } from "@/lib/safety-live";
 import { SafetyLiveMap } from "@/components/safety/SafetyLiveMap";
 
 export default async function SafetyPage() {
-  const [{ onWater, recentLog }, resources, { supabase, user }] = await Promise.all([
+  const [{ onWater, recentLog }, resources, { supabase, user, profile }] = await Promise.all([
     getSafetyDashboard(),
     getPublishedSafetyResources(),
     ensureProfile(),
   ]);
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const canManageSafety = profile?.role === "admin" || profile?.role === "coach" || profile?.role === "equipment_manager";
   const overdue = onWater.filter((entry) => entry.is_overdue);
   const visibleOnWater = onWater;

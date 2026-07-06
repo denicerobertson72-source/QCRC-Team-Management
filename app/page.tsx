@@ -29,8 +29,7 @@ const QUICK_LINKS = [
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ supabase, user }, announcements] = await Promise.all([ensureProfile(), getActiveTeamAnnouncements()]);
-  const { data: profile } = await supabase.from("profiles").select("full_name, role").eq("id", user.id).single();
+  const [{ profile }, announcements] = await Promise.all([ensureProfile(), getActiveTeamAnnouncements()]);
   const isAdmin = profile?.role === "admin";
   const displayName = profile?.full_name?.trim() && !profile.full_name.includes("@") ? profile.full_name.trim() : "";
   const links = isAdmin ? [...QUICK_LINKS, { href: "/admin", label: "Admin", description: "Manage members, boats, safety, and programs." }] : QUICK_LINKS;
