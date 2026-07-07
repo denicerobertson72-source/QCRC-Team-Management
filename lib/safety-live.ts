@@ -1,5 +1,7 @@
 import type { SafetyEntry, SafetyLiveMapState, RowingLocationPoint, SafetyTrackedOuting } from "@/lib/types";
 
+const MAX_TRACK_POINTS_PER_OUTING = 60;
+
 type SupabaseLike = {
   from: (table: string) => {
     select: (query: string) => any;
@@ -8,6 +10,26 @@ type SupabaseLike = {
 
 export function canManageSafetyMap(role: string | null | undefined) {
   return role === "admin" || role === "coach" || role === "equipment_manager";
+}
+
+function compressTrackPoints(points: RowingLocationPoint[]) {
+  if (points.length <= MAX_TRACK_POINTS_PER_OUTING) {
+    return points;
+  }
+
+  const lastIndex = points.length - 1;
+  const selectedIndexes = new Set<number>([0, lastIndex]);
+  const interiorSlots = MAX_TRACK_POINTS_PER_OUTING - 2;
+
+  for (let slot = 1; slot <= interiorSlots; slot += 1) {
+    const pointIndex = Math.round((slot * lastIndex) / (interiorSlots + 1));
+    selectedIndexes.add(pointIndex);
+  }
+
+  return [...selectedIndexes]
+    .sort((a, b) => a - b)
+    .map((index) => points[index])
+    .filter(Boolean);
 }
 
 export async function getSafetyLiveMapState(
@@ -67,7 +89,7 @@ export async function getSafetyLiveMapState(
   }
 
   const outings: SafetyTrackedOuting[] = activeReservations.map((entry) => {
-    const trackPoints = pointsByReservation.get(entry.id) ?? [];
+    const trackPoints = compressTrackPoints(pointsByReservation.get(entry.id) ?? []);
     return {
       outing_id: entry.id,
       outing_kind: entry.outing_kind,

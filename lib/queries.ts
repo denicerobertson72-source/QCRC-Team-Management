@@ -5,6 +5,7 @@ import type {
   BoatAvailabilityBlock,
   NotificationEvent,
   OverdueBoatAlert,
+  OverdueBoatAlertSummary,
   PrivateBoatOuting,
   ProfileSummary,
   ProgramSession,
@@ -103,7 +104,7 @@ export async function getUpcomingOtherReservations() {
 
   const { data, error } = await admin
     .from("reservations")
-    .select("id, created_by, start_time, status, boats(boat_class_id)")
+    .select("id, created_by, start_time, status, boats(boat_class_id), profiles!reservations_created_by_fkey(full_name,email)")
     .in("status", ["reserved", "checked_out"])
     .gte("start_time", now.toISOString())
     .lt("start_time", endWindow)
@@ -117,15 +118,19 @@ export async function getUpcomingOtherReservations() {
     start_time: string;
     status: string;
     boats: { boat_class_id?: string | null } | { boat_class_id?: string | null }[] | null;
+    profiles:
+      | { full_name?: string | null; email?: string | null }
+      | { full_name?: string | null; email?: string | null }[]
+      | null;
   }>;
-  const namesById = await getProfileNamesById(rows.map((row) => row.created_by));
 
   return rows
     .map((row) => {
       const boat = Array.isArray(row.boats) ? row.boats[0] : row.boats;
+      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       return {
         id: row.id,
-        member_name: namesById.get(row.created_by) ?? "Unknown",
+        member_name: rowerNameFromRelation(profile),
         start_time: row.start_time,
         boat_class_id: boat?.boat_class_id ?? "Unknown",
         date_key: getEasternDateKey(row.start_time),
@@ -234,17 +239,15 @@ export async function getMyTrainingGroupAssignment() {
 
 export async function getRaceEventsWithMySignup() {
   const { supabase, user } = await ensureProfile();
-  const { data: events, error: eventsError } = await supabase
-    .from("race_events")
-    .select("id, title, event_date, location, notes")
-    .order("event_date", { ascending: true });
-  if (eventsError) throw eventsError;
-
-  const { data: signups, error: signupsError } = await supabase
-    .from("race_signups")
-    .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments")
-    .eq("member_id", user.id);
+  const [{ data: events, error: eventsError }, { data: signups, error: signupsError }] = await Promise.all([
+    supabase.from("race_events").select("id, title, event_date, location, notes").order("event_date", { ascending: true }),
+    supabase
+      .from("race_signups")
+      .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments")
+      .eq("member_id", user.id),
+  ]);
   if (signupsError) throw signupsError;
+  if (eventsError) throw eventsError;
 
   const signupByRace = new Map<
     string,
@@ -482,6 +485,17 @@ export async function getOverdueBoatAlerts() {
   return (data ?? []) as OverdueBoatAlert[];
 }
 
+export async function getOverdueBoatAlertSummary() {
+  const { supabase } = await ensureProfile();
+  const { data, error } = await supabase.rpc("overdue_boat_alert_summary");
+  if (error) throw error;
+  const summary = ((data ?? [])[0] ?? null) as OverdueBoatAlertSummary | null;
+  return {
+    overdue_count: Number(summary?.overdue_count ?? 0),
+    first_boat_name: summary?.first_boat_name ?? null,
+  };
+}
+
 export async function getMyNotifications(limit = 50) {
   const { supabase, user } = await ensureProfile();
   const cutoffIso = notificationCutoffIso();
@@ -509,26 +523,10 @@ export async function getUnreadNotificationCount() {
   return count ?? 0;
 }
 
-export async function getSafetyDashboard() {
-  const { supabase } = await ensureProfile();
-  const [{ data: reservationData, error: reservationError }, { data: privateOutings, error: privateOutingError }] = await Promise.all([
-    supabase
-      .from("reservations")
-      .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, boats(name), profiles!reservations_created_by_fkey(full_name,email)")
-      .in("status", ["checked_out", "checked_in"])
-      .order("checked_out_at", { ascending: false })
-      .limit(100),
-    supabase
-      .from("private_boat_outings")
-      .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, profiles!private_boat_outings_member_id_fkey(full_name,email)")
-      .in("status", ["checked_out", "checked_in"])
-      .order("checked_out_at", { ascending: false })
-      .limit(100),
-  ]);
-
-  if (reservationError) throw reservationError;
-  if (privateOutingError) throw privateOutingError;
-
+function buildSafetyDashboard(
+  reservationData: any[] | null,
+  privateOutings: any[] | null,
+) {
   const now = Date.now();
   const reservationRows = (reservationData ?? []).map((row: any) => {
     const boat = Array.isArray(row.boats) ? row.boats[0] : row.boats;
@@ -596,6 +594,33 @@ export async function getSafetyDashboard() {
     onWater: rows.filter((row) => row.status === "checked_out"),
     recentLog: rows,
   };
+}
+
+export async function getSafetyDashboardForSupabase(supabase: any) {
+  const [{ data: reservationData, error: reservationError }, { data: privateOutings, error: privateOutingError }] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, boats(name), profiles!reservations_created_by_fkey(full_name,email)")
+      .in("status", ["checked_out", "checked_in"])
+      .order("checked_out_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("private_boat_outings")
+      .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, profiles!private_boat_outings_member_id_fkey(full_name,email)")
+      .in("status", ["checked_out", "checked_in"])
+      .order("checked_out_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  if (reservationError) throw reservationError;
+  if (privateOutingError) throw privateOutingError;
+
+  return buildSafetyDashboard(reservationData ?? null, privateOutings ?? null);
+}
+
+export async function getSafetyDashboard() {
+  const { supabase } = await ensureProfile();
+  return getSafetyDashboardForSupabase(supabase);
 }
 
 export async function getActiveTeamAnnouncements() {

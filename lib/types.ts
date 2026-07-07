@@ -162,6 +162,11 @@ export type OverdueBoatAlert = {
   river_direction: string | null;
 };
 
+export type OverdueBoatAlertSummary = {
+  overdue_count: number;
+  first_boat_name: string | null;
+};
+
 export type NotificationEvent = {
   id: string;
   notification_type: string;

@@ -4,22 +4,22 @@ import { useEffect } from "react";
 
 export function GlobalOverdueAlert({
   count,
-  boatNames,
+  firstBoatName,
 }: {
   count: number;
-  boatNames: string[];
+  firstBoatName: string | null;
 }) {
   useEffect(() => {
-    const key = `qcrc-overdue-alert:${count}:${boatNames.join("|")}`;
+    const key = `qcrc-overdue-alert:${count}:${firstBoatName ?? ""}`;
     if (count > 0 && window.sessionStorage.getItem(key) !== "1") {
       window.sessionStorage.setItem(key, "1");
       window.alert(
         count === 1
-          ? `Overdue boat alert: ${boatNames[0]} is overdue.`
+          ? `Overdue boat alert: ${firstBoatName ?? "A boat"} is overdue.`
           : `Overdue boat alert: ${count} boats are overdue.`,
       );
     }
-  }, [boatNames, count]);
+  }, [count, firstBoatName]);
 
   if (count === 0) return null;
 
@@ -27,7 +27,7 @@ export function GlobalOverdueAlert({
     <div className="global-alert" role="alert">
       <strong>Overdue Boat Alert</strong>
       <span>
-        {count === 1 ? `${boatNames[0]} is overdue.` : `${count} boats are overdue.`}
+        {count === 1 ? `${firstBoatName ?? "A boat"} is overdue.` : `${count} boats are overdue.`}
       </span>
     </div>
   );

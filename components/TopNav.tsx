@@ -1,34 +1,48 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { signOutAction } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { ensureProfile } from "@/lib/auth";
 import { GlobalOverdueAlert } from "@/components/ui/GlobalOverdueAlert";
 import { GlobalReservationAlert } from "@/components/ui/GlobalReservationAlert";
-import type { OverdueBoatAlert } from "@/lib/types";
-import { getUnreadNotificationCount } from "@/lib/queries";
+import { getOverdueBoatAlertSummary, getUnreadNotificationCount } from "@/lib/queries";
 
-export async function TopNav() {
-  const { supabase, user, profile } = await ensureProfile();
-  const [overdueResult, reservationAlertResult, unreadNotificationCount] = await Promise.all([
-    supabase.rpc("overdue_boat_summary"),
-    supabase
-      .from("reservations")
-      .select("id, start_time, boats(name,status)")
-      .eq("created_by", user.id)
-      .eq("status", "reserved")
-      .gte("start_time", new Date().toISOString()),
-    getUnreadNotificationCount(),
-  ]);
-  const isAdmin = profile.role === "admin";
-  const overdueBoats = (Array.isArray(overdueResult.data) ? overdueResult.data : []) as OverdueBoatAlert[];
-  const reservationAlerts = (reservationAlertResult.data ?? [])
+async function NotificationBadge() {
+  const unreadNotificationCount = await getUnreadNotificationCount();
+  if (unreadNotificationCount <= 0) return null;
+
+  return <span className="topnav-badge">{unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount)}</span>;
+}
+
+async function ReservationAlerts({ userId }: { userId: string }) {
+  const { supabase } = await ensureProfile();
+  const { data, error } = await supabase
+    .from("reservations")
+    .select("id, start_time, boats(name,status)")
+    .eq("created_by", userId)
+    .eq("status", "reserved")
+    .gte("start_time", new Date().toISOString());
+
+  if (error) throw error;
+
+  const alerts = (data ?? [])
     .map((row: any) => ({
       boatName: (Array.isArray(row.boats) ? row.boats[0] : row.boats)?.name ?? row.id,
       boatStatus: (Array.isArray(row.boats) ? row.boats[0] : row.boats)?.status ?? "available",
-      startTime: row.start_time,
     }))
     .filter((row) => row.boatStatus !== "available");
-  const unreadBadgeLabel = unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount);
+
+  return <GlobalReservationAlert count={alerts.length} firstBoatName={alerts[0]?.boatName ?? null} />;
+}
+
+async function OverdueAlerts() {
+  const summary = await getOverdueBoatAlertSummary();
+  return <GlobalOverdueAlert count={summary.overdue_count} firstBoatName={summary.first_boat_name} />;
+}
+
+export async function TopNav() {
+  const { user, profile } = await ensureProfile();
+  const isAdmin = profile.role === "admin";
   const navLinks = [
     { href: "/", label: "Home", home: true },
     { href: "/reservations", label: "Reservations" },
@@ -37,7 +51,7 @@ export async function TopNav() {
     { href: "/programs/meetup", label: "Rowing Meetup" },
     { href: "/programs", label: "Programs" },
     { href: "/lineups", label: "Lineups" },
-    { href: "/notifications", label: "Notifications", badge: unreadNotificationCount > 0 ? unreadBadgeLabel : null },
+    { href: "/notifications", label: "Notifications" },
     { href: "/boats", label: "Boats" },
     { href: "/damage/new", label: "Damage" },
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
@@ -46,8 +60,12 @@ export async function TopNav() {
 
   return (
     <>
-      <GlobalReservationAlert alerts={reservationAlerts.map(({ boatName, startTime }) => ({ boatName, startTime }))} />
-      <GlobalOverdueAlert count={overdueBoats.length} boatNames={overdueBoats.map((boat) => boat.boat_name)} />
+      <Suspense fallback={null}>
+        <ReservationAlerts userId={user.id} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <OverdueAlerts />
+      </Suspense>
       <header className="topnav">
         <div className="topnav-home">
           <img src="/QCRC.png" alt="QCRC" width={52} height={52} className="topnav-logo topnav-logo-plain" />
@@ -74,7 +92,11 @@ export async function TopNav() {
                 className={link.href === "/notifications" ? "topnav-notification-link" : undefined}
               >
                 {link.label}
-                {link.badge ? <span className="topnav-badge">{link.badge}</span> : null}
+                {link.href === "/notifications" ? (
+                  <Suspense fallback={null}>
+                    <NotificationBadge />
+                  </Suspense>
+                ) : null}
               </Link>
             ))}
             <form action={signOutAction} className="topnav-menu-signout">

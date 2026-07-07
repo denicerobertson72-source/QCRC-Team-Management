@@ -75,6 +75,8 @@ export default async function AdminDamagePage() {
                         <img
                           src={imageUrl}
                           alt={`Damage photo ${index + 1}`}
+                          loading="lazy"
+                          decoding="async"
                           style={{ width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }}
                         />
                       </a>

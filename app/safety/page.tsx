@@ -83,6 +83,8 @@ export default async function SafetyPage() {
                     <img
                       src={resource.resource_url}
                       alt={resource.title}
+                      loading="lazy"
+                      decoding="async"
                       style={{ width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }}
                     />
                   </a>

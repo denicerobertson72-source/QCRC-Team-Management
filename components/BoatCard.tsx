@@ -9,6 +9,8 @@ export function BoatCard({ boat }: { boat: Boat }) {
         <img
           src={boat.photo_url}
           alt={`${boat.name} photo`}
+          loading="lazy"
+          decoding="async"
           style={{ width: "100%", borderRadius: "12px", border: "1px solid var(--line)", objectFit: "cover" }}
         />
       ) : null}

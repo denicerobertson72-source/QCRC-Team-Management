@@ -10,9 +10,10 @@ import { formatEasternDateTime } from "@/lib/time";
 import {
   addLineupBoatAdminAction,
   createLineupBoardAdminAction,
-  publishLineupBoardAdminAction,
   removeLineupBoatAdminAction,
+  publishLineupBoardAdminAction,
   saveLineupAssignmentsAdminAction,
+  saveAndPublishLineupAssignmentsAdminAction,
 } from "@/lib/actions";
 import { getLineupBoardDetail, getRosterForBoard } from "@/lib/queries";
 
@@ -86,14 +87,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
         <Card className="stack">
           <div className="page-title">
             <h3>{detail.board.title}</h3>
-            <form action={publishLineupBoardAdminAction} className="inline-form">
-              <input type="hidden" name="lineup_board_id" value={board.id} />
-              <input type="hidden" name="publish" value={detail.board.is_published ? "false" : "true"} />
-              <input type="hidden" name="return_to" value={returnTo} />
-              <Button type="submit" variant="secondary">
-                {detail.board.is_published ? "Unpublish" : "Publish"}
-              </Button>
-            </form>
+            <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
 
           <form action={addLineupBoatAdminAction} className="inline-form">
@@ -116,7 +110,11 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             boats={detail.boats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}
+            saveAndPublishAction={saveAndPublishLineupAssignmentsAdminAction}
+            publishAction={publishLineupBoardAdminAction}
             removeBoatAction={removeLineupBoatAdminAction}
+            lineupBoardId={board.id}
+            isPublished={detail.board.is_published}
             returnTo={returnTo}
           />
         </Card>

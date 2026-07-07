@@ -1,17 +1,11 @@
-"use client";
-
-import { useMemo, useState } from "react";
 import { reserveBoatAction } from "@/lib/actions";
 import type { Boat } from "@/lib/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternLocalInput } from "@/lib/time";
+import { ReservationTimeFields } from "@/components/ReservationTimeFields";
 
 export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: string; returnTo: string }) {
-  const [startTime, setStartTime] = useState(start);
-  const end = useMemo(() => deriveReservationEndLocal(startTime), [startTime]);
   const additionalSeats = boat.boat_class_id === "4x" ? 3 : boat.boat_class_id === "2x" ? 1 : 0;
   const crewLabel =
     additionalSeats === 0
@@ -26,6 +20,8 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
         <img
           src={boat.photo_url}
           alt={`${boat.name} photo`}
+          loading="lazy"
+          decoding="async"
           style={{ width: "100%", borderRadius: "12px", border: "1px solid var(--line)", objectFit: "cover" }}
         />
       ) : null}
@@ -42,17 +38,7 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
 
       <input type="hidden" name="boat_id" value={boat.id} />
       <input type="hidden" name="return_to" value={returnTo} />
-      <Field label="Start">
-        <input
-          name="start_time"
-          type="datetime-local"
-          value={startTime}
-          onChange={(event) => setStartTime(event.target.value)}
-          required
-        />
-      </Field>
-      <input type="hidden" name="end_time" value={end ?? ""} />
-      <p className="muted">{end ? `End time will be set automatically to ${formatEasternLocalInput(end)} ET.` : "Choose a start time that stays within the same day."}</p>
+      <ReservationTimeFields start={start} />
       {crewLabel ? (
         <Field label={crewLabel}>
           <textarea

@@ -2141,12 +2141,11 @@ export async function saveLineupAssignmentsAdminAction(formData: FormData) {
   if (returnTo) redirect(returnTo);
 }
 
-export async function publishLineupBoardAdminAction(formData: FormData) {
-  const { supabase } = await assertAdmin();
-  const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
-  const publish = String(formData.get("publish") ?? "true") === "true";
-  const returnTo = String(formData.get("return_to") ?? "");
-
+async function publishLineupBoardInternal(
+  supabase: Awaited<ReturnType<typeof assertAdmin>>["supabase"],
+  lineupBoardId: string,
+  publish: boolean,
+) {
   const { error } = await supabase
     .from("lineup_boards")
     .update({
@@ -2156,66 +2155,105 @@ export async function publishLineupBoardAdminAction(formData: FormData) {
     .eq("id", lineupBoardId);
   if (error) throw error;
 
-  if (publish) {
-    const { data: boardDetail, error: boardDetailError } = await supabase
-      .from("lineup_boards")
-      .select("title, board_type, race_event_id, session_id")
-      .eq("id", lineupBoardId)
-      .single();
-    if (boardDetailError) throw boardDetailError;
-
-    let recipientIds: string[] = [];
-    if (boardDetail.session_id) {
-      const { data: signups, error: signupsError } = await supabase
-        .from("session_signups")
-        .select("member_id")
-        .eq("session_id", boardDetail.session_id);
-      if (signupsError) throw signupsError;
-      recipientIds = [...new Set((signups ?? []).map((row) => row.member_id))];
-    } else if (boardDetail.race_event_id) {
-      const { data: signups, error: signupsError } = await supabase
-        .from("race_signups")
-        .select("member_id")
-        .eq("race_event_id", boardDetail.race_event_id);
-      if (signupsError) throw signupsError;
-      recipientIds = [...new Set((signups ?? []).map((row) => row.member_id))];
-    }
-
-    if (recipientIds.length > 0) {
-      const notifications = recipientIds.map((memberId) => ({
-        notification_key: `lineup-published:${lineupBoardId}:${memberId}`,
-        notification_type: "lineup_published",
-        member_id: memberId,
-        payload: {
-          title: boardDetail.title,
-          lineup_board_id: lineupBoardId,
-        },
-      }));
-      const { error: notificationError } = await supabase
-        .from("notification_events")
-        .upsert(notifications, { onConflict: "notification_key" });
-      if (notificationError) throw notificationError;
-
-      const { data: recipients, error: recipientError } = await supabase
-        .from("profiles")
-        .select("phone, sms_opt_in")
-        .in("id", recipientIds)
-        .eq("sms_opt_in", true);
-      if (recipientError) throw recipientError;
-
-      const phones = (recipients ?? []).map((row) => row.phone).filter(Boolean) as string[];
-      if (phones.length > 0) {
-        try {
-          await sendSms({
-            to: phones,
-            body: `QCRC alert: lineup published for ${boardDetail.title}. Open the app to view your boat and seat order.`,
-          });
-        } catch {
-          // Keep lineup publishing successful even if SMS delivery fails.
-        }
-      }
-    }
+  if (!publish) {
+    return;
   }
+
+  const { data: boardDetail, error: boardDetailError } = await supabase
+    .from("lineup_boards")
+    .select("title, board_type, race_event_id, session_id")
+    .eq("id", lineupBoardId)
+    .single();
+  if (boardDetailError) throw boardDetailError;
+
+  let recipientIds: string[] = [];
+  if (boardDetail.session_id) {
+    const { data: signups, error: signupsError } = await supabase
+      .from("session_signups")
+      .select("member_id")
+      .eq("session_id", boardDetail.session_id);
+    if (signupsError) throw signupsError;
+    recipientIds = [...new Set((signups ?? []).map((row) => row.member_id))];
+  } else if (boardDetail.race_event_id) {
+    const { data: signups, error: signupsError } = await supabase
+      .from("race_signups")
+      .select("member_id")
+      .eq("race_event_id", boardDetail.race_event_id);
+    if (signupsError) throw signupsError;
+    recipientIds = [...new Set((signups ?? []).map((row) => row.member_id))];
+  }
+
+  if (recipientIds.length === 0) {
+    return;
+  }
+
+  const notifications = recipientIds.map((memberId) => ({
+    notification_key: `lineup-published:${lineupBoardId}:${memberId}`,
+    notification_type: "lineup_published",
+    member_id: memberId,
+    payload: {
+      title: boardDetail.title,
+      lineup_board_id: lineupBoardId,
+    },
+  }));
+  const { error: notificationError } = await supabase
+    .from("notification_events")
+    .upsert(notifications, { onConflict: "notification_key" });
+  if (notificationError) throw notificationError;
+
+  const { data: recipients, error: recipientError } = await supabase
+    .from("profiles")
+    .select("phone, sms_opt_in")
+    .in("id", recipientIds)
+    .eq("sms_opt_in", true);
+  if (recipientError) throw recipientError;
+
+  const phones = (recipients ?? []).map((row) => row.phone).filter(Boolean) as string[];
+  if (phones.length === 0) {
+    return;
+  }
+
+  try {
+    await sendSms({
+      to: phones,
+      body: `QCRC alert: lineup published for ${boardDetail.title}. Open the app to view your boat and seat order.`,
+    });
+  } catch {
+    // Keep lineup publishing successful even if SMS delivery fails.
+  }
+}
+
+export async function publishLineupBoardAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
+  const publish = String(formData.get("publish") ?? "true") === "true";
+  const returnTo = String(formData.get("return_to") ?? "");
+
+  await publishLineupBoardInternal(supabase, lineupBoardId, publish);
+
+  revalidatePath("/admin/lineups");
+  revalidatePath("/admin/races");
+  revalidatePath("/lineups");
+  revalidatePath("/notifications");
+  if (returnTo) redirect(returnTo);
+}
+
+export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
+  const assignmentJson = String(formData.get("assignments_json") ?? "[]");
+  const returnTo = String(formData.get("return_to") ?? "");
+  const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
+
+  for (const item of assignments) {
+    const { error } = await supabase
+      .from("lineup_seats")
+      .update({ member_id: item.memberId })
+      .eq("id", item.seatId);
+    if (error) throw error;
+  }
+
+  await publishLineupBoardInternal(supabase, lineupBoardId, true);
 
   revalidatePath("/admin/lineups");
   revalidatePath("/admin/races");
