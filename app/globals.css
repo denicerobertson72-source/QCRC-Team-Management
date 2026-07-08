@@ -558,65 +558,13 @@ a:hover {
   align-items: stretch;
 }
 
-.lineup-progress-summary {
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.lineup-progress-pill {
-  padding: 0.55rem 0.8rem;
-}
-
-.lineup-mobile-toolbar {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.lineup-mobile-toolbar-actions {
-  gap: 0.65rem;
-  flex-wrap: wrap;
-}
-
-.lineup-selected-member {
-  gap: 0.3rem;
-}
-
-.lineup-desktop-roster {
-  display: grid;
-}
-
-.lineup-member-chip {
-  border: 1px solid transparent;
-}
-
-.lineup-member-chip-active {
-  border-color: var(--accent);
-  background: rgba(255, 90, 31, 0.12);
-}
-
-.lineup-boat-tabs {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-}
-
-.lineup-boat-tab {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  padding: 0.75rem 0.9rem;
-  font: inherit;
-  text-align: center;
-}
-
-.lineup-boat-tab-active {
-  border-color: var(--accent);
-  background: rgba(255, 90, 31, 0.12);
-}
-
 .lineup-boat-card {
   align-content: start;
+}
+
+.lineup-top-actions {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .lineup-boat-header {
@@ -641,68 +589,27 @@ a:hover {
   min-width: 0;
 }
 
-.lineup-seat-quick-actions {
-  display: none;
-}
-
 .lineup-seat-clear {
   align-self: center;
-}
-
-.lineup-roster-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  align-items: end;
-}
-
-.lineup-roster-sheet-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(20, 15, 13, 0.46);
-  border: 0;
-}
-
-.lineup-roster-sheet-panel {
-  position: relative;
-  margin: 0 0.75rem 0.75rem;
-  max-height: min(75vh, 38rem);
-  overflow: auto;
-}
-
-.lineup-roster-sheet-list {
-  gap: 0.6rem;
-}
-
-.lineup-roster-sheet-item {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  color: var(--ink);
-  padding: 0.85rem 1rem;
-  font: inherit;
-  text-align: left;
-}
-
-.lineup-roster-sheet-item-active {
-  border-color: var(--accent);
-  background: rgba(255, 90, 31, 0.12);
-}
-
-.lineup-action-bar {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.lineup-action-copy {
-  gap: 0.25rem;
 }
 
 .lineup-action-buttons {
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.lineup-add-boat-form {
+  align-content: start;
+}
+
+.lineup-add-boat-fields {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lineup-race-times {
+  gap: 0.85rem;
 }
 
 .calendar-toolbar {
@@ -1227,26 +1134,6 @@ tbody tr:last-child td {
     align-items: flex-start;
   }
 
-  .lineup-desktop-roster {
-    display: none;
-  }
-
-  .lineup-progress-card {
-    position: sticky;
-    top: 0.75rem;
-    z-index: 4;
-  }
-
-  .lineup-boat-tabs {
-    position: sticky;
-    top: 10.8rem;
-    z-index: 3;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(10rem, 1fr);
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-  }
-
   .lineup-boat-remove {
     margin-left: 0;
     width: 100%;
@@ -1255,10 +1142,6 @@ tbody tr:last-child td {
   .lineup-seat-card {
     display: grid;
     gap: 0.7rem;
-  }
-
-  .lineup-seat-quick-actions {
-    display: grid;
   }
 
   .lineup-seat-label {
@@ -1274,10 +1157,6 @@ tbody tr:last-child td {
     width: 100%;
   }
 
-  .lineup-boat-card[data-mobile-active="false"] {
-    display: none;
-  }
-
   .lineup-action-buttons {
     display: grid;
   }
@@ -1287,10 +1166,8 @@ tbody tr:last-child td {
     width: 100%;
   }
 
-  .lineup-action-bar {
-    position: sticky;
-    bottom: 0.75rem;
-    z-index: 5;
+  .lineup-add-boat-fields {
+    grid-template-columns: 1fr;
   }
 
   .calendar-grid {

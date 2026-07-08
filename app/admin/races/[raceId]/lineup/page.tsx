@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { LineupBuilder } from "@/components/admin/LineupBuilder";
 import { toEasternDateTimeLocalValue } from "@/lib/time";
 import {
-  addLineupBoatAdminAction,
   createLineupBoardAdminAction,
+  addLineupBoatAdminAction,
   removeLineupBoatAdminAction,
   publishLineupBoardAdminAction,
   saveLineupAssignmentsAdminAction,
@@ -76,24 +76,21 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             <h3>{detail.board.title}</h3>
             <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
+          <LineupBuilder
+            boats={detail.boats}
+            roster={roster}
+            action={saveLineupAssignmentsAdminAction}
+            addBoatAction={addLineupBoatAdminAction}
+            saveAndPublishAction={saveAndPublishLineupAssignmentsAdminAction}
+            publishAction={publishLineupBoardAdminAction}
+            removeBoatAction={removeLineupBoatAdminAction}
+            lineupBoardId={board.id}
+            isPublished={detail.board.is_published}
+            allowMultiSeat
+            returnTo={returnTo}
+          />
 
-          <form action={addLineupBoatAdminAction} className="inline-form">
-            <input type="hidden" name="lineup_board_id" value={board.id} />
-            <input type="hidden" name="return_to" value={returnTo} />
-            <Field label="Boat Name">
-              <input name="boat_name" required />
-            </Field>
-            <Field label="Class">
-              <select name="boat_class_id" defaultValue="4x">
-                <option value="1x">1x</option>
-                <option value="2x">2x</option>
-                <option value="4x">4x</option>
-              </select>
-            </Field>
-            <Button type="submit">Add Boat</Button>
-          </form>
-
-          <div className="stack">
+          <div className="stack lineup-race-times">
             {detail.boats.map((boat) => (
               <form key={boat.id} action={updateLineupBoatRaceTimeAdminAction} className="inline-form">
                 <input type="hidden" name="lineup_boat_id" value={boat.id} />
@@ -111,19 +108,6 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
               </form>
             ))}
           </div>
-
-          <LineupBuilder
-            boats={detail.boats}
-            roster={roster}
-            action={saveLineupAssignmentsAdminAction}
-            saveAndPublishAction={saveAndPublishLineupAssignmentsAdminAction}
-            publishAction={publishLineupBoardAdminAction}
-            removeBoatAction={removeLineupBoatAdminAction}
-            lineupBoardId={board.id}
-            isPublished={detail.board.is_published}
-            allowMultiSeat
-            returnTo={returnTo}
-          />
         </Card>
       </main>
     </>

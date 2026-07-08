@@ -64,6 +64,7 @@ export function PwaExperience() {
     }
 
     let cancelled = false;
+    let handleVisibilityChange: (() => void) | null = null;
 
     const handleControllerChange = () => {
       if (cancelled) return;
@@ -75,11 +76,21 @@ export function PwaExperience() {
 
     void navigator.serviceWorker.register("/sw.js").then((registration) => {
       if (cancelled) return;
+      void registration.update().catch(() => undefined);
 
       const updateDismissed = window.sessionStorage.getItem(UPDATE_DISMISSED_KEY) === "true";
+      const shouldAutoApply = isStandaloneMode();
 
       const maybePromptForUpdate = (worker: ServiceWorker | null) => {
-        if (!worker || updateDismissed) {
+        if (!worker) {
+          return;
+        }
+        if (shouldAutoApply) {
+          setWaitingWorker(worker);
+          worker.postMessage({ type: "SKIP_WAITING" });
+          return;
+        }
+        if (updateDismissed) {
           return;
         }
         setWaitingWorker(worker);
@@ -98,10 +109,20 @@ export function PwaExperience() {
           }
         });
       });
+
+      handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          void registration.update().catch(() => undefined);
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
     });
 
     return () => {
       cancelled = true;
+      if (handleVisibilityChange) {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
     };
   }, []);
@@ -139,6 +160,7 @@ export function PwaExperience() {
 
   function applyUpdate() {
     if (!waitingWorker) return;
+    window.sessionStorage.removeItem(UPDATE_DISMISSED_KEY);
     setShowUpdatePrompt(false);
     waitingWorker.postMessage({ type: "SKIP_WAITING" });
   }

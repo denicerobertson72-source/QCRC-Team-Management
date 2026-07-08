@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { LineupBuilder } from "@/components/admin/LineupBuilder";
 import { formatEasternDateTime } from "@/lib/time";
 import {
-  addLineupBoatAdminAction,
   createLineupBoardAdminAction,
+  addLineupBoatAdminAction,
   removeLineupBoatAdminAction,
   publishLineupBoardAdminAction,
   saveLineupAssignmentsAdminAction,
@@ -89,27 +89,11 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             <h3>{detail.board.title}</h3>
             <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
-
-          <form action={addLineupBoatAdminAction} className="inline-form">
-            <input type="hidden" name="lineup_board_id" value={board.id} />
-            <input type="hidden" name="return_to" value={returnTo} />
-            <Field label="Boat Name">
-              <input name="boat_name" required />
-            </Field>
-            <Field label="Class">
-              <select name="boat_class_id" defaultValue="4x">
-                <option value="1x">1x</option>
-                <option value="2x">2x</option>
-                <option value="4x">4x</option>
-              </select>
-            </Field>
-            <Button type="submit">Add Boat</Button>
-          </form>
-
           <LineupBuilder
             boats={detail.boats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}
+            addBoatAction={addLineupBoatAdminAction}
             saveAndPublishAction={saveAndPublishLineupAssignmentsAdminAction}
             publishAction={publishLineupBoardAdminAction}
             removeBoatAction={removeLineupBoatAdminAction}

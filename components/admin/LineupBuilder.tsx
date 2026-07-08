@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 type RosterMember = {
@@ -49,6 +49,7 @@ export function LineupBuilder({
   boats,
   roster,
   action,
+  addBoatAction,
   saveAndPublishAction,
   publishAction,
   removeBoatAction,
@@ -60,6 +61,7 @@ export function LineupBuilder({
   boats: Boat[];
   roster: RosterMember[];
   action: (formData: FormData) => void;
+  addBoatAction: (formData: FormData) => void;
   saveAndPublishAction?: (formData: FormData) => void;
   publishAction?: (formData: FormData) => void;
   removeBoatAction: (formData: FormData) => void;
@@ -69,9 +71,6 @@ export function LineupBuilder({
   returnTo?: string;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(allowMultiSeat ? roster[0]?.id ?? null : null);
-  const [mobileRosterOpen, setMobileRosterOpen] = useState(false);
-  const [activeBoatId, setActiveBoatId] = useState<string | null>(boats[0]?.id ?? null);
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -83,45 +82,13 @@ export function LineupBuilder({
     return ids;
   }, [localBoats]);
 
-  const unassigned = allowMultiSeat ? roster : roster.filter((member) => !assignedMemberIds.has(member.id));
   const sortedRoster = useMemo(() => [...roster].sort((a, b) => a.full_name.localeCompare(b.full_name)), [roster]);
-  const sortedUnassigned = useMemo(
-    () => [...unassigned].sort((a, b) => a.full_name.localeCompare(b.full_name)),
-    [unassigned],
-  );
-  const pickerMembers = allowMultiSeat ? sortedRoster : sortedUnassigned;
 
   const memberNameById = useMemo(() => {
     return new Map(roster.map((member) => [member.id, member.full_name]));
   }, [roster]);
 
-  const selectedMember =
-    selectedMemberId ? roster.find((member) => member.id === selectedMemberId) ?? null : null;
-  const totalSeats = useMemo(() => localBoats.reduce((count, boat) => count + boat.seats.length, 0), [localBoats]);
-  const assignedSeats = useMemo(
-    () => localBoats.reduce((count, boat) => count + boat.seats.filter((seat) => seat.member_id).length, 0),
-    [localBoats],
-  );
-  const emptySeats = Math.max(totalSeats - assignedSeats, 0);
-
-  useEffect(() => {
-    if (!activeBoatId || !localBoats.some((boat) => boat.id === activeBoatId)) {
-      setActiveBoatId(localBoats[0]?.id ?? null);
-    }
-  }, [activeBoatId, localBoats]);
-
-  useEffect(() => {
-    if (selectedMemberId === null) {
-      return;
-    }
-    if (pickerMembers.some((member) => member.id === selectedMemberId)) {
-      return;
-    }
-    setSelectedMemberId(pickerMembers[0]?.id ?? null);
-  }, [pickerMembers, selectedMemberId]);
-
-  function onDropMember(seatId: string, memberId: string, advanceSelection = false) {
-    let nextSelectedMemberId: string | null = selectedMemberId;
+  function onDropMember(seatId: string, memberId: string) {
     setLocalBoats((prev) => {
       const next = prev.map((boat) => ({ ...boat, seats: boat.seats.map((seat) => ({ ...seat })) }));
 
@@ -146,23 +113,8 @@ export function LineupBuilder({
         }
       }
 
-      if (advanceSelection && !allowMultiSeat) {
-        const assignedIds = new Set<string>();
-        for (const boat of next) {
-          for (const seat of boat.seats) {
-            if (seat.member_id) assignedIds.add(seat.member_id);
-          }
-        }
-        nextSelectedMemberId =
-          sortedRoster.find((member) => !assignedIds.has(member.id) && member.id !== memberId)?.id ?? null;
-      }
-
       return next;
     });
-    if (advanceSelection && !allowMultiSeat) {
-      setSelectedMemberId(nextSelectedMemberId);
-    }
-    setMobileRosterOpen(false);
   }
 
   function clearSeat(seatId: string) {
@@ -197,115 +149,58 @@ export function LineupBuilder({
 
   return (
     <div className="stack">
-      <div className="card stack lineup-progress-card">
-        <div className="page-title">
-          <h3>Assignment Progress</h3>
-          <span className="muted">
-            {assignedSeats}/{totalSeats} seats assigned
-          </span>
-        </div>
-        <div className="row lineup-progress-summary">
-          <span className="card-subtle lineup-progress-pill">Assigned: {assignedSeats}</span>
-          <span className="card-subtle lineup-progress-pill">{allowMultiSeat ? `Roster: ${roster.length}` : `Unassigned: ${sortedUnassigned.length}`}</span>
-          <span className="card-subtle lineup-progress-pill">Empty seats: {emptySeats}</span>
-        </div>
-        <div className="lineup-mobile-toolbar">
-          <div className="stack lineup-selected-member">
-            <strong>{selectedMember ? selectedMember.full_name : "No rower selected"}</strong>
-            <span className="muted">
-              {selectedMember
-                ? allowMultiSeat
-                  ? "Selected for quick assignment to multiple seats."
-                  : "Tap a seat button below to place this rower quickly."
-                : "Choose a rower to assign without jumping back to the top of the page."}
-            </span>
-          </div>
-          <div className="row lineup-mobile-toolbar-actions">
-            <Button type="button" variant="secondary" onClick={() => setMobileRosterOpen(true)}>
-              {allowMultiSeat ? "Open Roster" : `Choose Rower (${sortedUnassigned.length})`}
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setSelectedMemberId(null)}>
-              Clear Selected
-            </Button>
-          </div>
+      <div className="card lineup-top-actions">
+        <div className="row lineup-action-buttons">
+          <form action={action} className="inline-form">
+            <input type="hidden" name="assignments_json" value={assignmentsJson} />
+            {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+            <Button type="submit">Save Assignments</Button>
+          </form>
+          {!isPublished && saveAndPublishAction && lineupBoardId ? (
+            <form action={saveAndPublishAction} className="inline-form">
+              <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
+              <input type="hidden" name="assignments_json" value={assignmentsJson} />
+              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+              <Button type="submit" variant="secondary">Save + Publish</Button>
+            </form>
+          ) : null}
+          {isPublished && publishAction && lineupBoardId ? (
+            <form action={publishAction} className="inline-form">
+              <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
+              <input type="hidden" name="publish" value="false" />
+              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+              <Button type="submit" variant="secondary">Unpublish</Button>
+            </form>
+          ) : null}
         </div>
       </div>
 
-      <div className="card stack lineup-desktop-roster">
-        <h3>Unassigned Rowers</h3>
-        <p className="muted">Use the seat dropdowns on phone or drag-and-drop on desktop. Once a rower is assigned, they disappear from the remaining unassigned options.</p>
-        <div className="row lineup-unassigned-list">
-          {unassigned.map((member) => (
-            <div
-              key={member.id}
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.setData("text/member-id", member.id);
-              }}
-              className={`card-subtle lineup-member-chip${selectedMemberId === member.id ? " lineup-member-chip-active" : ""}`}
-              style={{ cursor: "grab" }}
-              onClick={() => setSelectedMemberId(member.id)}
-            >
-              {member.full_name}
+      {lineupBoardId ? (
+        <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
+          <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
+          {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+          <h3>Add Boat</h3>
+          <div className="lineup-add-boat-fields">
+            <div>
+              <label className="field-label">Boat Name</label>
+              <input name="boat_name" required />
             </div>
-          ))}
-          {unassigned.length === 0 ? <p className="muted">Everyone is assigned.</p> : null}
-        </div>
-      </div>
-
-      <div className="lineup-boat-tabs" role="tablist" aria-label="Lineup boats">
-        {localBoats.map((boat) => {
-          const boatAssignedCount = boat.seats.filter((seat) => seat.member_id).length;
-          return (
-            <button
-              key={boat.id}
-              type="button"
-              className={`lineup-boat-tab${boat.id === activeBoatId ? " lineup-boat-tab-active" : ""}`}
-              onClick={() => setActiveBoatId(boat.id)}
-            >
-              {boat.boat_name} ({boatAssignedCount}/{boat.seats.length})
-            </button>
-          );
-        })}
-      </div>
-
-      {mobileRosterOpen ? (
-        <div className="lineup-roster-sheet" role="dialog" aria-modal="true" aria-label="Select a rower">
-          <button type="button" className="lineup-roster-sheet-backdrop" onClick={() => setMobileRosterOpen(false)} aria-label="Close roster picker" />
-          <div className="card stack lineup-roster-sheet-panel">
-            <div className="page-title">
-              <h3>{allowMultiSeat ? "Roster" : "Choose a Rower"}</h3>
-              <Button type="button" variant="secondary" onClick={() => setMobileRosterOpen(false)}>
-                Close
-              </Button>
-            </div>
-            <div className="stack lineup-roster-sheet-list">
-              {pickerMembers.map((member) => (
-                <button
-                  key={member.id}
-                  type="button"
-                  className={`lineup-roster-sheet-item${selectedMemberId === member.id ? " lineup-roster-sheet-item-active" : ""}`}
-                  onClick={() => {
-                    setSelectedMemberId(member.id);
-                    setMobileRosterOpen(false);
-                  }}
-                >
-                  {member.full_name}
-                </button>
-              ))}
-              {pickerMembers.length === 0 ? <p className="muted">Everyone is assigned.</p> : null}
+            <div>
+              <label className="field-label">Class</label>
+              <select name="boat_class_id" defaultValue="4x">
+                <option value="1x">1x</option>
+                <option value="2x">2x</option>
+                <option value="4x">4x</option>
+              </select>
             </div>
           </div>
-        </div>
+          <Button type="submit">Add Boat</Button>
+        </form>
       ) : null}
 
       <div className="grid">
         {localBoats.map((boat) => (
-          <div
-            key={boat.id}
-            className="card stack lineup-boat-card"
-            data-mobile-active={boat.id === activeBoatId ? "true" : "false"}
-          >
+          <div key={boat.id} className="card stack lineup-boat-card">
             <div className="page-title lineup-boat-header">
               <div className="stack">
                 <h3>
@@ -338,20 +233,6 @@ export function LineupBuilder({
               >
                 <strong className="lineup-seat-label">{seatLabel(boat.boat_class_id, seat.seat_number)}</strong>
                 <div className="stack lineup-seat-controls">
-                  <div className="lineup-seat-quick-actions">
-                    {selectedMember ? (
-                      <Button
-                        type="button"
-                        onClick={() => onDropMember(seat.id, selectedMember.id, true)}
-                      >
-                        {seat.member_id === selectedMember.id ? `Keep ${selectedMember.full_name}` : `Assign ${selectedMember.full_name}`}
-                      </Button>
-                    ) : (
-                      <Button type="button" variant="secondary" onClick={() => setMobileRosterOpen(true)}>
-                        Choose a rower first
-                      </Button>
-                    )}
-                  </div>
                   <select
                     value={seat.member_id ?? ""}
                     onChange={(event) => {
@@ -390,37 +271,7 @@ export function LineupBuilder({
         ))}
       </div>
 
-      <div className="card lineup-action-bar">
-        <div className="stack lineup-action-copy">
-          <strong>{isPublished ? "Published lineup" : "Draft lineup"}</strong>
-          <span className="muted">
-            Save your changes here, then publish when the lineup is ready for rowers to see.
-          </span>
-        </div>
-        <div className="row lineup-action-buttons">
-          <form action={action} className="inline-form">
-            <input type="hidden" name="assignments_json" value={assignmentsJson} />
-            {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-            <Button type="submit">Save Assignments</Button>
-          </form>
-          {!isPublished && saveAndPublishAction && lineupBoardId ? (
-            <form action={saveAndPublishAction} className="inline-form">
-              <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
-              <input type="hidden" name="assignments_json" value={assignmentsJson} />
-              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-              <Button type="submit" variant="secondary">Save + Publish</Button>
-            </form>
-          ) : null}
-          {isPublished && publishAction && lineupBoardId ? (
-            <form action={publishAction} className="inline-form">
-              <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
-              <input type="hidden" name="publish" value="false" />
-              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-              <Button type="submit" variant="secondary">Unpublish</Button>
-            </form>
-          ) : null}
-        </div>
-      </div>
+      {localBoats.length === 0 ? <p className="muted">No boats added yet.</p> : null}
     </div>
   );
 }
