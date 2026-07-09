@@ -83,6 +83,10 @@ export function LineupBuilder({
   }, [localBoats]);
 
   const sortedRoster = useMemo(() => [...roster].sort((a, b) => a.full_name.localeCompare(b.full_name)), [roster]);
+  const unassignedRoster = useMemo(
+    () => sortedRoster.filter((member) => !assignedMemberIds.has(member.id)),
+    [assignedMemberIds, sortedRoster],
+  );
 
   const memberNameById = useMemo(() => {
     return new Map(roster.map((member) => [member.id, member.full_name]));
@@ -135,12 +139,7 @@ export function LineupBuilder({
   }
 
   function seatOptions(currentMemberId: string | null) {
-    const available = sortedRoster.filter((member) => !assignedMemberIds.has(member.id) || member.id === currentMemberId);
-    const assignedElsewhere = allowMultiSeat
-      ? []
-      : sortedRoster.filter((member) => assignedMemberIds.has(member.id) && member.id !== currentMemberId);
-
-    return { available, assignedElsewhere };
+    return sortedRoster.filter((member) => !assignedMemberIds.has(member.id) || member.id === currentMemberId);
   }
 
   const assignmentsJson = JSON.stringify(
@@ -198,6 +197,26 @@ export function LineupBuilder({
         </form>
       ) : null}
 
+      {!allowMultiSeat ? (
+        <div className="card stack lineup-unassigned-box">
+          <div className="page-title">
+            <h3>Unassigned Rowers</h3>
+            <span className="muted">{unassignedRoster.length} remaining</span>
+          </div>
+          {unassignedRoster.length > 0 ? (
+            <div className="row lineup-unassigned-list">
+              {unassignedRoster.map((member) => (
+                <span key={member.id} className="card-subtle lineup-unassigned-chip">
+                  {member.full_name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">Everyone is assigned.</p>
+          )}
+        </div>
+      ) : null}
+
       <div className="grid">
         {localBoats.map((boat) => (
           <div key={boat.id} className="card stack lineup-boat-card">
@@ -245,20 +264,11 @@ export function LineupBuilder({
                     }}
                   >
                     <option value="">Select a rower</option>
-                    {seatOptions(seat.member_id).available.map((member) => (
+                    {seatOptions(seat.member_id).map((member) => (
                       <option key={member.id} value={member.id}>
                         {member.full_name}
                       </option>
                     ))}
-                    {!allowMultiSeat && seatOptions(seat.member_id).assignedElsewhere.length > 0 ? (
-                      <optgroup label="Move from another boat">
-                        {seatOptions(seat.member_id).assignedElsewhere.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.full_name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
                   </select>
                   <span className="muted">{seat.member_id ? `Assigned: ${memberNameById.get(seat.member_id) ?? seat.member_name}` : "No rower assigned yet."}</span>
                 </div>
