@@ -425,22 +425,45 @@ export async function updateReservationAction(formData: FormData) {
 }
 
 export async function cancelReservationAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { user } = await ensureProfile();
+  const admin = createAdminClient();
   const reservationId = String(formData.get("reservation_id") ?? "");
 
-  const { data, error } = await supabase
+  const { data: reservation, error: loadError } = await admin
     .from("reservations")
-    .update({ status: "cancelled" })
+    .select("id, created_by, status, checked_out_at, checked_in_at")
     .eq("id", reservationId)
-    .eq("created_by", user.id)
-    .eq("status", "reserved")
-    .select("id")
     .maybeSingle();
 
   const destination = new URL("/reservations", "http://local");
-  if (error || !data) {
+  if (loadError || !reservation || reservation.created_by !== user.id) {
     destination.searchParams.set("reservation_status", "error");
-    destination.searchParams.set("reservation_message", error?.message || "Unable to cancel reservation. It may already have launched, returned, or been cancelled.");
+    destination.searchParams.set("reservation_message", loadError?.message || "Unable to find a cancellable reservation for your account.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (reservation.status === "cancelled") {
+    revalidatePath("/reservations");
+    revalidatePath("/reserve");
+    destination.searchParams.set("reservation_status", "success");
+    destination.searchParams.set("reservation_message", "Reservation is already cancelled. The boat is available for someone else to reserve now.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (reservation.status !== "reserved" || reservation.checked_out_at || reservation.checked_in_at) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Unable to cancel reservation. It may already have launched or returned.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await admin
+    .from("reservations")
+    .update({ status: "cancelled" })
+    .eq("id", reservation.id);
+
+  if (error) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", error.message || "Unable to cancel reservation.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
