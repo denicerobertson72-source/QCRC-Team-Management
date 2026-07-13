@@ -202,6 +202,31 @@ export async function getAvailableBoats(start: string, end: string, boatClassId?
   return (data ?? []) as Boat[];
 }
 
+export async function getAvailableBoatIds(start: string, end: string, boatClassId?: string) {
+  const { supabase } = await ensureProfile();
+  const startIso = easternLocalInputToIso(start);
+  const endIso = easternLocalInputToIso(end);
+
+  if (!startIso || !endIso) {
+    return [];
+  }
+
+  const params = {
+    p_start_time: startIso,
+    p_end_time: endIso,
+    p_boat_class_id: boatClassId || null,
+  };
+  const { data, error } = await supabase.rpc("available_boat_ids_for_window", params);
+
+  if (!error) {
+    return (data ?? []).map((row: { id: string }) => row.id);
+  }
+
+  // Keep deployments safe if the migration has not reached Supabase yet.
+  const fallback = await getAvailableBoats(start, end, boatClassId);
+  return fallback.map((boat) => boat.id);
+}
+
 export async function getBoatAvailabilityBlocks() {
   const { supabase } = await ensureProfile();
   const { data, error } = await supabase

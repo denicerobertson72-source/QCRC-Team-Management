@@ -1,6 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { ReservationForm } from "@/components/ReservationForm";
-import { getAvailableBoats, getBoats, getMyProfileSummary } from "@/lib/queries";
+import { getAvailableBoatIds, getBoats, getMyProfileSummary } from "@/lib/queries";
 import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
@@ -40,13 +40,13 @@ export default async function ReservePage({
     boatClassId ? `&boatClassId=${encodeURIComponent(boatClassId)}` : ""
   }${params.boatName ? `&boatName=${encodeURIComponent(params.boatName)}` : ""}${skillLevel ? `&skillLevel=${encodeURIComponent(skillLevel)}` : ""}${weightClass ? `&weightClass=${encodeURIComponent(weightClass)}` : ""}${onlyAvailable ? "&onlyAvailable=true" : ""}`;
 
-  const [availableBoats, allBoats, profile] = await Promise.all([
-    getAvailableBoats(start, end ?? start, boatClassId || undefined),
+  const [availableBoatIds, allBoats, profile] = await Promise.all([
+    getAvailableBoatIds(start, end ?? start, boatClassId || undefined),
     getBoats(),
     getMyProfileSummary(),
   ]);
 
-  const availableIds = new Set(availableBoats.map((b) => b.id));
+  const availableIds = new Set(availableBoatIds);
   const availableByDefaultBoats = allBoats.filter((boat) => boat.status === "available" && availableIds.has(boat.id));
   const skillLevels = [...new Set(allBoats.map((boat) => boat.required_skill_level).filter((level): level is string => Boolean(level)))];
   const weightClasses = [...new Set(allBoats.map((boat) => boat.weight_class).filter((weight): weight is string => Boolean(weight)))];
