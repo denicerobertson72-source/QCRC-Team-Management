@@ -64,17 +64,19 @@ async function getProfileNamesById(memberIds: string[]) {
 
 export async function getMyReservations() {
   const { supabase, user } = await ensureProfile();
+  const todayStartIso = easternLocalInputToIso(`${getEasternDateKey(new Date())}T00:00`);
 
   const { data, error } = await supabase
     .from("reservations")
-    .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, boats(name)")
-    .in("status", ["reserved", "checked_out", "checked_in"])
+    .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, updated_at, boats(name)")
+    .in("status", ["reserved", "checked_out", "checked_in", "cancelled"])
     .or(`created_by.eq.${user.id}`)
     .order("start_time", { ascending: false });
 
   if (error) throw error;
 
-  type ReservationRow = Omit<Reservation, "boats"> & {
+  type ReservationRow = Omit<Reservation, "boats" | "updated_at"> & {
+    updated_at: string;
     boats: { name: string } | { name: string }[] | null;
   };
 
@@ -85,6 +87,9 @@ export async function getMyReservations() {
       boats: Array.isArray(row.boats) ? (row.boats[0] ?? null) : row.boats,
     }))
     .filter((row) => {
+      if (row.status === "cancelled") {
+        return todayStartIso ? row.updated_at >= todayStartIso : false;
+      }
       if (row.status !== "checked_in") return true;
       return !row.gate_status;
     });

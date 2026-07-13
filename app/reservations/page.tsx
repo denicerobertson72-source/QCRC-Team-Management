@@ -87,7 +87,8 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
           ) : null}
           {reservations.length === 0 ? <Card subtle>No reservations yet.</Card> : null}
           {reservations.map((reservation) => (
-            <Card key={reservation.id} className="stack">
+            <Card key={reservation.id} className={`stack${reservation.status === "cancelled" ? " reservation-cancelled-card" : ""}`}>
+              {reservation.status === "cancelled" ? <strong className="reservation-cancelled-label">CANCELLED</strong> : null}
               <h3>{reservation.boats?.name ?? reservation.boat_id}</h3>
               <p className="muted">
                 {formatDateTime(reservation.start_time)} to {new Intl.DateTimeFormat("en-US", {
@@ -96,6 +97,9 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
                 }).format(new Date(reservation.end_time))}{" "}
                 ET
               </p>
+              {reservation.status === "cancelled" ? (
+                <p className="error">This reservation was cancelled. The boat is available for someone else to reserve.</p>
+              ) : null}
               <ReservationActions reservation={reservation} />
             </Card>
           ))}

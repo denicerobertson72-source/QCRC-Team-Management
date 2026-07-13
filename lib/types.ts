@@ -49,6 +49,7 @@ export type Reservation = {
   river_direction?: string | null;
   gate_status?: string | null;
   notes: string | null;
+  updated_at?: string;
   crew_names?: string[];
   boats?: { name: string } | null;
 };

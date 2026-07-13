@@ -428,24 +428,26 @@ export async function cancelReservationAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("reservations")
     .update({ status: "cancelled" })
     .eq("id", reservationId)
     .eq("created_by", user.id)
-    .eq("status", "reserved");
+    .eq("status", "reserved")
+    .select("id")
+    .maybeSingle();
 
   const destination = new URL("/reservations", "http://local");
-  if (error) {
+  if (error || !data) {
     destination.searchParams.set("reservation_status", "error");
-    destination.searchParams.set("reservation_message", error.message || "Unable to cancel reservation.");
+    destination.searchParams.set("reservation_message", error?.message || "Unable to cancel reservation. It may already have launched, returned, or been cancelled.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
   revalidatePath("/reservations");
   revalidatePath("/reserve");
   destination.searchParams.set("reservation_status", "success");
-  destination.searchParams.set("reservation_message", "Reservation cancelled.");
+  destination.searchParams.set("reservation_message", "Reservation cancelled. The boat is available for someone else to reserve now.");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
