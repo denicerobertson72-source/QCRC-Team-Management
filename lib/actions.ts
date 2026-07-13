@@ -380,7 +380,8 @@ export async function reserveBoatAction(formData: FormData) {
 }
 
 export async function updateReservationAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { user } = await ensureProfile();
+  const admin = createAdminClient();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const startTime = String(formData.get("start_time") ?? "");
   const endTime = String(formData.get("end_time") ?? "") || deriveReservationEndLocal(startTime) || "";
@@ -398,7 +399,67 @@ export async function updateReservationAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { error } = await supabase
+  const { data: reservation, error: loadError } = await admin
+    .from("reservations")
+    .select("id, boat_id, created_by, status, checked_out_at, checked_in_at")
+    .eq("id", reservationId)
+    .maybeSingle();
+
+  const destination = new URL("/reservations", "http://local");
+  if (loadError || !reservation || reservation.created_by !== user.id) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", loadError?.message || "Unable to find an editable reservation for your account.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (reservation.status !== "reserved" || reservation.checked_out_at || reservation.checked_in_at) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Unable to edit reservation. It may already have launched, returned, or been cancelled.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: canReserve, error: eligibilityError } = await admin.rpc("can_user_reserve_boat", {
+    p_user_id: user.id,
+    p_boat_id: reservation.boat_id,
+    p_start_time: startTimeIso,
+    p_end_time: endTimeIso,
+  });
+
+  if (eligibilityError || !canReserve) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", eligibilityError?.message || "Reservation blocked. Check dues status, skill tier, weight class, or boat availability.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: ownReservations, error: ownReservationError } = await admin
+    .from("reservations")
+    .select("id, start_time, end_time")
+    .eq("created_by", user.id)
+    .in("status", ["reserved", "checked_out"])
+    .neq("id", reservation.id);
+
+  if (ownReservationError) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", ownReservationError.message || "Unable to check your other reservation times.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const newStart = new Date(startTimeIso).getTime();
+  const newEnd = new Date(endTimeIso).getTime();
+  const bufferMs = 90 * 60 * 1000;
+  const hasNearbyOwnReservation = (ownReservations ?? []).some((row) => {
+    const existingStart = new Date(row.start_time).getTime() - bufferMs;
+    const existingEnd = new Date(row.end_time).getTime() + bufferMs;
+    return existingStart < newEnd && newStart < existingEnd;
+  });
+
+  if (hasNearbyOwnReservation) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "You already have another active or reserved outing within 90 minutes of this time.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { data: updatedReservation, error } = await admin
     .from("reservations")
     .update({
       start_time: startTimeIso,
@@ -406,14 +467,13 @@ export async function updateReservationAction(formData: FormData) {
       checkout_location: checkoutLocation || null,
       notes: finalNotes || null,
     })
-    .eq("id", reservationId)
-    .eq("created_by", user.id)
-    .eq("status", "reserved");
+    .eq("id", reservation.id)
+    .select("id")
+    .maybeSingle();
 
-  const destination = new URL("/reservations", "http://local");
-  if (error) {
+  if (error || !updatedReservation) {
     destination.searchParams.set("reservation_status", "error");
-    destination.searchParams.set("reservation_message", error.message || "Unable to update reservation.");
+    destination.searchParams.set("reservation_message", error?.message || "Unable to update reservation.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
