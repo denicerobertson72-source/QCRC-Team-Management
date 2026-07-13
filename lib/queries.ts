@@ -450,6 +450,7 @@ export async function getPublishedLineups() {
 
 export async function getProgramSessionsForMonth(programTypes: string[], monthStartIso: string, monthEndIso: string) {
   const { supabase, user } = await ensureProfile();
+  const admin = createAdminClient();
   const nowIso = new Date().toISOString();
   const effectiveStartIso = monthStartIso > nowIso ? monthStartIso : nowIso;
 
@@ -465,7 +466,7 @@ export async function getProgramSessionsForMonth(programTypes: string[], monthSt
   const sessionIds = (sessions ?? []).map((s) => s.id);
   if (sessionIds.length === 0) return [] as ProgramSession[];
 
-  const { data: allSignups, error: signupError } = await supabase
+  const { data: allSignups, error: signupError } = await admin
     .from("session_signups")
     .select("session_id, member_id")
     .in("session_id", sessionIds);
