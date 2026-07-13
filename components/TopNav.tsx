@@ -1,47 +1,11 @@
-import { Suspense } from "react";
 import Link from "next/link";
 import { signOutAction } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { ensureProfile } from "@/lib/auth";
-import { GlobalOverdueAlert } from "@/components/ui/GlobalOverdueAlert";
-import { GlobalReservationAlert } from "@/components/ui/GlobalReservationAlert";
-import { getOverdueBoatAlertSummary, getUnreadNotificationCount } from "@/lib/queries";
-
-async function NotificationBadge() {
-  const unreadNotificationCount = await getUnreadNotificationCount();
-  if (unreadNotificationCount <= 0) return null;
-
-  return <span className="topnav-badge">{unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount)}</span>;
-}
-
-async function ReservationAlerts({ userId }: { userId: string }) {
-  const { supabase } = await ensureProfile();
-  const { data, error } = await supabase
-    .from("reservations")
-    .select("id, start_time, boats(name,status)")
-    .eq("created_by", userId)
-    .eq("status", "reserved")
-    .gte("start_time", new Date().toISOString());
-
-  if (error) throw error;
-
-  const alerts = (data ?? [])
-    .map((row: any) => ({
-      boatName: (Array.isArray(row.boats) ? row.boats[0] : row.boats)?.name ?? row.id,
-      boatStatus: (Array.isArray(row.boats) ? row.boats[0] : row.boats)?.status ?? "available",
-    }))
-    .filter((row) => row.boatStatus !== "available");
-
-  return <GlobalReservationAlert count={alerts.length} firstBoatName={alerts[0]?.boatName ?? null} />;
-}
-
-async function OverdueAlerts() {
-  const summary = await getOverdueBoatAlertSummary();
-  return <GlobalOverdueAlert count={summary.overdue_count} firstBoatName={summary.first_boat_name} />;
-}
+import { NavStatusClient } from "@/components/NavStatusClient";
 
 export async function TopNav() {
-  const { user, profile } = await ensureProfile();
+  const { profile } = await ensureProfile();
   const isAdmin = profile.role === "admin";
   const navLinks = [
     { href: "/", label: "Home", home: true },
@@ -60,12 +24,7 @@ export async function TopNav() {
 
   return (
     <>
-      <Suspense fallback={null}>
-        <ReservationAlerts userId={user.id} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <OverdueAlerts />
-      </Suspense>
+      <NavStatusClient />
       <header className="topnav">
         <div className="topnav-home">
           <img src="/QCRC.png" alt="QCRC" width={52} height={52} className="topnav-logo topnav-logo-plain" />
@@ -92,11 +51,7 @@ export async function TopNav() {
                 className={link.href === "/notifications" ? "topnav-notification-link" : undefined}
               >
                 {link.label}
-                {link.href === "/notifications" ? (
-                  <Suspense fallback={null}>
-                    <NotificationBadge />
-                  </Suspense>
-                ) : null}
+                {link.href === "/notifications" ? <span id="topnav-notification-badge" /> : null}
               </Link>
             ))}
             <form action={signOutAction} className="topnav-menu-signout">
