@@ -2483,7 +2483,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
 
     if (scopedTypes.includes("saturday_coached_row") && dayOfWeek === 6) {
       const startsAt = easternLocalInputToIso(
-        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T08:30`,
+        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T08:00`,
       ) as string;
       const key = `saturday_coached_row|${new Date(startsAt).toISOString()}`;
       if (!existingKeys.has(key)) {
@@ -2492,7 +2492,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
           session_type: "saturday_coached_row",
           starts_at: startsAt,
           ends_at: easternLocalInputToIso(
-            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T10:00`,
+            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T09:30`,
           ) as string,
           created_by: user.id,
           is_cancelled: false,
@@ -2556,7 +2556,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
 
 function defaultSessionTimesByType(sessionType: string) {
   if (sessionType === "saturday_coached_row") {
-    return { start: "08:30", end: "10:00" };
+    return { start: "08:00", end: "09:30" };
   }
   if (sessionType === "coached_training_beginner_intermediate") {
     return { start: "17:30", end: "18:30" };
@@ -2564,12 +2564,8 @@ function defaultSessionTimesByType(sessionType: string) {
   return { start: "06:30", end: "07:30" };
 }
 
-export async function resetProgramMonthToDefaultTimesAction(formData: FormData) {
-  const { supabase } = await assertAdmin();
-  const monthInput = String(formData.get("month") ?? "");
-  const sessionType = String(formData.get("session_type") ?? "");
+async function updateSessionMonthTimes(supabase: Awaited<ReturnType<typeof assertAdmin>>["supabase"], monthInput: string, sessionType: string, startTime: string, endTime: string) {
   const { start, end } = monthWindowFromInput(monthInput);
-  const times = defaultSessionTimesByType(sessionType);
 
   const { data: sessions, error } = await supabase
     .from("sessions")
@@ -2590,14 +2586,46 @@ export async function resetProgramMonthToDefaultTimesAction(formData: FormData) 
       hour12: false,
     });
     const [datePart] = local.split(" ");
-    const startsAtIso = easternLocalInputToIso(`${datePart}T${times.start}`);
-    const endsAtIso = easternLocalInputToIso(`${datePart}T${times.end}`);
+    const startsAtIso = easternLocalInputToIso(`${datePart}T${startTime}`);
+    const endsAtIso = easternLocalInputToIso(`${datePart}T${endTime}`);
     const { error: updateError } = await supabase
       .from("sessions")
       .update({ starts_at: startsAtIso, ends_at: endsAtIso })
       .eq("id", session.id);
     if (updateError) throw updateError;
   }
+}
+
+export async function resetProgramMonthToDefaultTimesAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const monthInput = String(formData.get("month") ?? "");
+  const sessionType = String(formData.get("session_type") ?? "");
+  const times = defaultSessionTimesByType(sessionType);
+
+  await updateSessionMonthTimes(supabase, monthInput, sessionType, times.start, times.end);
+
+  revalidatePath("/programs/saturday");
+  revalidatePath("/programs/training");
+  revalidatePath("/programs/training/beginner-intermediate");
+  revalidatePath("/programs/training/advanced");
+  revalidatePath("/admin/programs");
+  revalidatePath("/admin/programs/saturday");
+  revalidatePath("/admin/programs/training-beginner-intermediate");
+  revalidatePath("/admin/programs/training-advanced");
+}
+
+export async function updateProgramMonthTimesAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const monthInput = String(formData.get("month") ?? "");
+  const sessionType = String(formData.get("session_type") ?? "");
+  const startTime = String(formData.get("start_time") ?? "");
+  const endTime = String(formData.get("end_time") ?? "");
+
+  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+    throw new Error("Use HH:MM times for month schedule updates.");
+  }
+
+  await updateSessionMonthTimes(supabase, monthInput, sessionType, startTime, endTime);
 
   revalidatePath("/programs/saturday");
   revalidatePath("/programs/training");

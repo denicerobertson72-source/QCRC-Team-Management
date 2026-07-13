@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { getProgramSessionsForMonth } from "@/lib/queries";
 import { toggleSessionSignupAction } from "@/lib/actions";
-import { formatEasternDateTime, formatEasternMonthLabel, getEasternDateKey } from "@/lib/time";
+import { formatEasternDateTime, formatEasternMonthLabel, formatEasternTimeOffset, getEasternDateKey } from "@/lib/time";
 
 type SearchParams = Promise<{ month?: string }>;
 
@@ -43,7 +43,7 @@ export default async function SaturdayProgramPage({ searchParams }: { searchPara
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Saturday Coached Row" subtitle={`Signups for ${month.label}. Row at 8:30 AM ET, arrival 7:45 AM.`} />
+        <PageTitle title="Saturday Coached Row" subtitle={`Signups for ${month.label}. Current default: row at 8:00 AM ET, arrival 7:40 AM.`} />
 
         <div className="row">
           <Link href={`/programs/saturday?month=${month.prev}`}>Previous Month</Link>
@@ -56,7 +56,7 @@ export default async function SaturdayProgramPage({ searchParams }: { searchPara
           {sessions.map((session) => (
             <Card key={session.id} className="stack">
               <h3>{prettyDateTime(session.starts_at)}</h3>
-              <p className="muted">Arrival 7:45 AM ET | Signups: {session.signup_count}</p>
+              <p className="muted">Arrival {formatEasternTimeOffset(session.starts_at, -20)} ET | Signups: {session.signup_count}</p>
 
               {session.is_cancelled ? (
                 <p className="error">Cancelled{session.cancelled_reason ? `: ${session.cancelled_reason}` : ""}</p>

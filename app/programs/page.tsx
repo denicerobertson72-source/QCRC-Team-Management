@@ -16,7 +16,7 @@ export default function ProgramsPage() {
           <Card className="stack program-tile">
             <span className="section-kicker">Weekly</span>
             <h3>Saturday Coached Row</h3>
-            <p className="muted">Row at 8:30 AM ET. Arrival time 7:45 AM.</p>
+            <p className="muted">Row at 8:00 AM ET. Arrival time 7:40 AM.</p>
             <Link href="/programs/saturday" className="cta-link">Open Signup</Link>
           </Card>
           <Card className="stack program-tile">

@@ -12,6 +12,20 @@ export function formatEasternDateTime(value: string | Date) {
   });
 }
 
+export function formatEasternTime(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleTimeString("en-US", {
+    timeZone: ET_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatEasternTimeOffset(value: string | Date, offsetMinutes: number) {
+  const date = value instanceof Date ? value : new Date(value);
+  return formatEasternTime(new Date(date.getTime() + offsetMinutes * 60 * 1000));
+}
+
 export function formatEasternMonthLabel(date: Date) {
   return date.toLocaleDateString("en-US", {
     timeZone: ET_TIMEZONE,
