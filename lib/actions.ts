@@ -50,6 +50,25 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
+function locationPointFromForm(formData: FormData) {
+  const latitude = Number(formData.get("gps_latitude") ?? "");
+  const longitude = Number(formData.get("gps_longitude") ?? "");
+  const accuracyRaw = String(formData.get("gps_accuracy_meters") ?? "");
+  const recordedAt = String(formData.get("gps_recorded_at") ?? "");
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !recordedAt) {
+    return null;
+  }
+
+  const accuracyMeters = Number(accuracyRaw);
+  return {
+    latitude,
+    longitude,
+    accuracy_meters: Number.isFinite(accuracyMeters) ? accuracyMeters : null,
+    recorded_at: recordedAt,
+  };
+}
+
 type ProtectedMemberReference = {
   label: string;
   count: number;
@@ -999,12 +1018,19 @@ export async function updateSafetyResourceAdminAction(formData: FormData) {
 }
 
 export async function checkoutAction(formData: FormData) {
-  const { supabase } = await ensureProfile();
+  const { supabase, user } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
+  const launchPoint = locationPointFromForm(formData);
 
   const destination = new URL("/reservations", "http://local");
+
+  if (!launchPoint) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Launch requires a live location point. Please enable location access and try again.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
 
   const { error } = await supabase.rpc("checkout_reservation", {
     p_reservation_id: reservationId,
@@ -1024,6 +1050,18 @@ export async function checkoutAction(formData: FormData) {
       destination.searchParams.set("reservation_message", updateResult.error.message || "Launch recorded, but direction was not saved.");
       redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
     }
+  }
+
+  const { error: locationError } = await supabase.from("rowing_location_points").insert({
+    reservation_id: reservationId,
+    private_outing_id: null,
+    member_id: user.id,
+    ...launchPoint,
+  });
+  if (locationError) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", locationError.message || "Launch recorded, but the first location point was not saved.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
   revalidatePath("/reservations");
@@ -1090,7 +1128,14 @@ export async function privateBoatLaunchAction(formData: FormData) {
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
+  const launchPoint = locationPointFromForm(formData);
   const destination = new URL("/reservations", "http://local");
+
+  if (!launchPoint) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", "Launch requires a live location point. Please enable location access and try again.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -1138,6 +1183,18 @@ export async function privateBoatLaunchAction(formData: FormData) {
   if (error) {
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", error.message || "Unable to launch private boat.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error: locationError } = await supabase.from("rowing_location_points").insert({
+    reservation_id: null,
+    private_outing_id: privateOutingId,
+    member_id: user.id,
+    ...launchPoint,
+  });
+  if (locationError) {
+    destination.searchParams.set("reservation_status", "error");
+    destination.searchParams.set("reservation_message", locationError.message || "Private boat launch recorded, but the first location point was not saved.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 

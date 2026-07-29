@@ -88,13 +88,17 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     const form = event.currentTarget;
 
     try {
-      await new Promise<GeolocationPosition>((resolve, reject) => {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: false,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
       });
+      form.querySelector<HTMLInputElement>('input[name="gps_latitude"]')!.value = String(position.coords.latitude);
+      form.querySelector<HTMLInputElement>('input[name="gps_longitude"]')!.value = String(position.coords.longitude);
+      form.querySelector<HTMLInputElement>('input[name="gps_accuracy_meters"]')!.value = String(position.coords.accuracy ?? "");
+      form.querySelector<HTMLInputElement>('input[name="gps_recorded_at"]')!.value = new Date(position.timestamp).toISOString();
       window.localStorage.setItem(INTENT_STORAGE_KEY, makeOutingKey("reservation", reservation.id));
       resumeSubmitRef.current = true;
       form.requestSubmit();
@@ -124,6 +128,10 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         <div className="row">
           <form action={checkoutAction} className="inline-form" onSubmit={handleCheckoutSubmit} style={{ flex: "1 1 320px" }}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
+            <input type="hidden" name="gps_latitude" />
+            <input type="hidden" name="gps_longitude" />
+            <input type="hidden" name="gps_accuracy_meters" />
+            <input type="hidden" name="gps_recorded_at" />
             <select name="location" defaultValue={reservation.checkout_location ?? "OH"} required>
               <option value="OH">OH</option>
               <option value="LM">LM</option>

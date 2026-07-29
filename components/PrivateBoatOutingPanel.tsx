@@ -78,13 +78,17 @@ export function PrivateBoatOutingPanel({
     const outingKey = makeOutingKey("private_boat", launchOutingId);
 
     try {
-      await new Promise<GeolocationPosition>((resolve, reject) => {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: false,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
       });
+      form.querySelector<HTMLInputElement>('input[name="gps_latitude"]')!.value = String(position.coords.latitude);
+      form.querySelector<HTMLInputElement>('input[name="gps_longitude"]')!.value = String(position.coords.longitude);
+      form.querySelector<HTMLInputElement>('input[name="gps_accuracy_meters"]')!.value = String(position.coords.accuracy ?? "");
+      form.querySelector<HTMLInputElement>('input[name="gps_recorded_at"]')!.value = new Date(position.timestamp).toISOString();
       window.localStorage.setItem(INTENT_STORAGE_KEY, outingKey);
       resumeSubmitRef.current = true;
       form.requestSubmit();
@@ -120,6 +124,10 @@ export function PrivateBoatOutingPanel({
         {!activeOuting && canLaunch ? (
           <form action={privateBoatLaunchAction} className="inline-form" onSubmit={handleLaunchSubmit}>
             <input type="hidden" name="private_outing_id" value={launchOutingId} />
+            <input type="hidden" name="gps_latitude" />
+            <input type="hidden" name="gps_longitude" />
+            <input type="hidden" name="gps_accuracy_meters" />
+            <input type="hidden" name="gps_recorded_at" />
             <select name="location" defaultValue="OH" required>
               <option value="OH">OH</option>
               <option value="LM">LM</option>
