@@ -2380,6 +2380,34 @@ export async function removeLineupBoatAdminAction(formData: FormData) {
   if (returnTo) redirect(returnTo);
 }
 
+async function clearMemberFromSessionLineups(sessionId: string, memberId: string) {
+  const admin = createAdminClient();
+  const { data: boards, error: boardsError } = await admin
+    .from("lineup_boards")
+    .select("id")
+    .eq("session_id", sessionId);
+  if (boardsError) throw boardsError;
+
+  const boardIds = (boards ?? []).map((board) => board.id);
+  if (boardIds.length === 0) return;
+
+  const { data: boats, error: boatsError } = await admin
+    .from("lineup_boats")
+    .select("id")
+    .in("lineup_board_id", boardIds);
+  if (boatsError) throw boatsError;
+
+  const boatIds = (boats ?? []).map((boat) => boat.id);
+  if (boatIds.length === 0) return;
+
+  const { error: seatsError } = await admin
+    .from("lineup_seats")
+    .update({ member_id: null })
+    .in("lineup_boat_id", boatIds)
+    .eq("member_id", memberId);
+  if (seatsError) throw seatsError;
+}
+
 export async function toggleSessionSignupAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const sessionId = String(formData.get("session_id") ?? "");
@@ -2422,6 +2450,7 @@ export async function toggleSessionSignupAction(formData: FormData) {
       .eq("session_id", sessionId)
       .eq("member_id", user.id);
     if (error) throw error;
+    await clearMemberFromSessionLineups(sessionId, user.id);
   }
 
   revalidatePath("/programs/saturday");
@@ -2432,6 +2461,9 @@ export async function toggleSessionSignupAction(formData: FormData) {
   revalidatePath("/admin/programs/saturday");
   revalidatePath("/admin/programs/training-beginner-intermediate");
   revalidatePath("/admin/programs/training-advanced");
+  revalidatePath("/admin/lineups");
+  revalidatePath(`/admin/lineups/session/${sessionId}`);
+  revalidatePath("/lineups");
 }
 
 export async function cancelSessionAdminAction(formData: FormData) {

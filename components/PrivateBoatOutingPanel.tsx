@@ -30,15 +30,15 @@ function PendingSubmitButton({
 
 function geolocationErrorMessage(error: GeolocationPositionError) {
   if (error.code === error.PERMISSION_DENIED) {
-    return "Location access was denied. You can still launch without live tracking.";
+    return "Location access was denied. Live location tracking is required before launching for safety. Enable location access for this app/site in your browser settings, then try launching again.";
   }
   if (error.code === error.POSITION_UNAVAILABLE) {
-    return "Your location is currently unavailable. Check Safari location permissions and macOS Location Services, then try again.";
+    return "Your location is currently unavailable. Check browser location permissions, device Location Services, and signal/GPS availability, then try launching again.";
   }
   if (error.code === error.TIMEOUT) {
-    return "Location lookup timed out. Safari may still be trying to get a GPS fix. You can retry or continue without live tracking.";
+    return "Location lookup timed out. Live location tracking is required before launching, so please try again when your device has a better location fix.";
   }
-  return error.message || "Location access was blocked or unavailable.";
+  return error.message || "Location access was blocked or unavailable. Live location tracking is required before launching.";
 }
 
 function describeUnknownLocationError(error: unknown) {
@@ -66,20 +66,16 @@ export function PrivateBoatOutingPanel({
       return;
     }
 
+    event.preventDefault();
+
     if (!navigator.geolocation) {
       window.localStorage.removeItem(INTENT_STORAGE_KEY);
+      window.alert("Live location tracking is required before launching, but this browser does not support location services. Please launch from a browser/device with location enabled.");
       return;
     }
 
-    event.preventDefault();
     const form = event.currentTarget;
     const outingKey = makeOutingKey("private_boat", launchOutingId);
-
-    const continueWithoutTracking = () => {
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
-      resumeSubmitRef.current = true;
-      form.requestSubmit();
-    };
 
     try {
       await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -97,10 +93,8 @@ export function PrivateBoatOutingPanel({
         typeof error === "object" && error && "code" in error
           ? geolocationErrorMessage(error as GeolocationPositionError)
           : `Location access was blocked or unavailable. Debug: ${describeUnknownLocationError(error)}`;
-      const shouldContinue = window.confirm(`${detail}\n\nLaunch anyway without live tracking?`);
-      if (shouldContinue) {
-        continueWithoutTracking();
-      }
+      window.localStorage.removeItem(INTENT_STORAGE_KEY);
+      window.alert(`${detail}\n\nLaunch was not recorded. Please enable location access and try again.`);
     }
   }
 
