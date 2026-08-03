@@ -72,7 +72,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, sms_opt_in, role, status, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, membership_type, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date",
+        "id, full_name, email, phone, sms_opt_in, role, status, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date",
       )
       .order("full_name"),
     supabase
@@ -99,7 +99,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     if (authFilter !== "all" && member.authState !== authFilter) return false;
     if (statusFilter !== "all" && member.status !== statusFilter) return false;
     if (!query) return true;
-    const haystack = [member.full_name, member.email, member.status, member.membership_type].join(" ").toLowerCase();
+    const haystack = [member.full_name, member.email, member.status, member.skill_level, trainingGroupByMemberId.get(member.id) ?? ""].join(" ").toLowerCase();
     return haystack.includes(query);
   });
 
@@ -107,7 +107,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Members" subtitle="Add members, update dues/compliance/status/role, and remove access." />
+        <PageTitle title="Admin: Members" subtitle="Add members, update role/status/skill/training group, and remove access." />
 
         {params.import_status && params.import_message ? (
           <FlashNotice
@@ -183,12 +183,11 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
           <Card subtle className="stack">
             <strong>Expected column names</strong>
             <p className="muted">
-              `email`, `full_name`, `phone`, `role`, `status`, `membership_type`, `skill_level`, `weight_class`,
-              `dues_ok`, `dues_renewal_date`, `usrowing_membership_date`, `safesport_date`, `owns_private_boat`,
-              `boat_storage_fee_ok`, `boat_storage_fee_renewal_date`, `sms_opt_in`
+              `email`, `full_name`, `phone`, `role`, `status`, `skill_level`, `weight_class`,
+              `coached_training_group`, `owns_private_boat`, `boat_storage_fee_ok`, `boat_storage_fee_renewal_date`, `sms_opt_in`
             </p>
             <p className="muted">
-              Dates should be in `YYYY-MM-DD` format. Boolean fields accept `true/false`, `yes/no`, or `1/0`.
+              Dates should be in `YYYY-MM-DD` format. Boolean fields accept `true/false`, `yes/no`, or `1/0`. Coached training group accepts `Beginner/Intermediate`, `BI`, `Advanced`, or blank.
             </p>
           </Card>
           <Button type="submit">Import CSV</Button>

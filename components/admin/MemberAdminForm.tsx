@@ -12,13 +12,8 @@ type MemberAdminFormProps = {
     email: string;
     role: string;
     status: string;
-    membership_type: string;
     phone: string | null;
     sms_opt_in: boolean | null;
-    dues_ok: boolean;
-    dues_renewal_date: string | null;
-    usrowing_membership_date: string | null;
-    safesport_date: string | null;
     owns_private_boat: boolean | null;
     boat_storage_fee_ok: boolean | null;
     boat_storage_fee_renewal_date: string | null;
@@ -60,14 +55,6 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
         </select>
       </Field>
 
-      <Field label="Membership Type">
-        <select name="membership_type" defaultValue={member.membership_type}>
-          <option value="community">community</option>
-          <option value="competitive">competitive</option>
-          <option value="ltr">ltr</option>
-        </select>
-      </Field>
-
       <Field label="Mobile Phone">
         <input name="phone" defaultValue={member.phone ?? ""} placeholder="5135551234 or +15135551234" />
       </Field>
@@ -77,25 +64,6 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
           <option value="false">off</option>
           <option value="true">on</option>
         </select>
-      </Field>
-
-      <Field label="Dues">
-        <select name="dues_ok" defaultValue={member.dues_ok ? "true" : "false"}>
-          <option value="true">paid</option>
-          <option value="false">due</option>
-        </select>
-      </Field>
-
-      <Field label="Dues Renewal Date">
-        <input name="dues_renewal_date" type="date" defaultValue={member.dues_renewal_date ?? ""} />
-      </Field>
-
-      <Field label="USRowing Membership Date">
-        <input name="usrowing_membership_date" type="date" defaultValue={member.usrowing_membership_date ?? ""} />
-      </Field>
-
-      <Field label="SafeSport Date">
-        <input name="safesport_date" type="date" defaultValue={member.safesport_date ?? ""} />
       </Field>
 
       <Field label="Owns Private Boat">

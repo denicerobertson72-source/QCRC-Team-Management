@@ -182,6 +182,25 @@ function csvBooleanValue(value: string | undefined) {
   return parseBooleanLike(raw);
 }
 
+function normalizeTrainingGroup(value: string | undefined | null) {
+  const normalized = (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return null;
+  if (
+    normalized === "beginner_intermediate" ||
+    normalized === "beginner/intermediate" ||
+    normalized === "beginner" ||
+    normalized === "intermediate" ||
+    normalized === "bi" ||
+    normalized === "b_i"
+  ) {
+    return "beginner_intermediate";
+  }
+  if (normalized === "advanced" || normalized === "adv") {
+    return "advanced";
+  }
+  return undefined;
+}
+
 function normalizeMeetupTime(value: FormDataEntryValue | null) {
   const raw = String(value ?? "").trim().toLowerCase();
   if (!raw) return "";
@@ -615,9 +634,14 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   const { data: existingProfiles, error: existingProfilesError } = await admin
     .from("profiles")
     .select(
-      "id, email, full_name, phone, role, status, membership_type, skill_level, weight_class, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date, sms_opt_in",
+      "id, email, full_name, phone, role, status, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date, sms_opt_in",
     );
   if (existingProfilesError) throw existingProfilesError;
+  const { data: existingTrainingAssignments, error: existingTrainingError } = await admin
+    .from("program_signups")
+    .select("member_id, training_group")
+    .eq("program_type", "coached_training");
+  if (existingTrainingError) throw existingTrainingError;
   const markMissingInactive = String(formData.get("mark_missing_inactive") ?? "false") === "true";
 
   const existingProfilesByEmail = new Map(
@@ -631,6 +655,9 @@ export async function importMembersCsvAdminAction(formData: FormData) {
       .map((profile) => [profile.email.toLowerCase(), profile.id]),
   );
   const existingEmailSet = new Set(existingByEmail.keys());
+  const existingTrainingByMemberId = new Map(
+    (existingTrainingAssignments ?? []).map((assignment) => [assignment.member_id, assignment.training_group]),
+  );
   const authUsersByEmail = await listAllAuthUsersByEmail(admin);
 
   let imported = 0;
@@ -681,14 +708,8 @@ export async function importMembersCsvAdminAction(formData: FormData) {
       phone: csvTextValue(record.phone) ?? existingProfile?.phone ?? null,
       role: csvTextValue(record.role) ?? existingProfile?.role ?? "member",
       status: csvTextValue(record.status) ?? existingProfile?.status ?? "active",
-      membership_type: csvTextValue(record.membership_type) ?? existingProfile?.membership_type ?? "community",
       skill_level: csvTextValue(record.skill_level) ?? existingProfile?.skill_level ?? "Beginner",
       weight_class: csvTextValue(record.weight_class) ?? existingProfile?.weight_class ?? "Mid-weight",
-      dues_ok: csvBooleanValue(record.dues_ok) ?? existingProfile?.dues_ok ?? false,
-      dues_renewal_date: csvTextValue(record.dues_renewal_date) ?? existingProfile?.dues_renewal_date ?? null,
-      usrowing_membership_date:
-        csvTextValue(record.usrowing_membership_date) ?? existingProfile?.usrowing_membership_date ?? null,
-      safesport_date: csvTextValue(record.safesport_date) ?? existingProfile?.safesport_date ?? null,
       owns_private_boat: csvBooleanValue(record.owns_private_boat) ?? existingProfile?.owns_private_boat ?? false,
       boat_storage_fee_ok: csvBooleanValue(record.boat_storage_fee_ok) ?? existingProfile?.boat_storage_fee_ok ?? false,
       boat_storage_fee_renewal_date:
@@ -705,6 +726,40 @@ export async function importMembersCsvAdminAction(formData: FormData) {
     imported += 1;
     if (existingEmailSet.has(email)) {
       updated += 1;
+    }
+
+    const hasTrainingGroupColumn = Object.prototype.hasOwnProperty.call(record, "coached_training_group") || Object.prototype.hasOwnProperty.call(record, "training_group");
+    if (hasTrainingGroupColumn) {
+      const rawTrainingGroup = csvTextValue(record.coached_training_group ?? record.training_group);
+      const trainingGroup = normalizeTrainingGroup(rawTrainingGroup);
+      if (trainingGroup === undefined) {
+        warnings.push(`Skipped coached training group for ${email}: ${rawTrainingGroup} is not recognized.`);
+      } else if (trainingGroup) {
+        const { error: signupError } = await admin.from("program_signups").upsert(
+          {
+            member_id: profileId,
+            program_type: "coached_training",
+            training_group: trainingGroup,
+          },
+          { onConflict: "member_id,program_type" },
+        );
+        if (signupError) {
+          errors.push(`Could not update coached training group for ${email}: ${signupError.message}`);
+        } else {
+          existingTrainingByMemberId.set(profileId, trainingGroup);
+        }
+      } else if (existingTrainingByMemberId.has(profileId)) {
+        const { error: deleteError } = await admin
+          .from("program_signups")
+          .delete()
+          .eq("member_id", profileId)
+          .eq("program_type", "coached_training");
+        if (deleteError) {
+          errors.push(`Could not clear coached training group for ${email}: ${deleteError.message}`);
+        } else {
+          existingTrainingByMemberId.delete(profileId);
+        }
+      }
     }
   }
 
@@ -1467,16 +1522,8 @@ export async function updateMemberAdminAction(formData: FormData) {
   const fullName = String(formData.get("full_name") ?? "").trim();
   const role = String(formData.get("role") ?? "member");
   const status = String(formData.get("status") ?? "active");
-  const membershipType = String(formData.get("membership_type") ?? "community");
   const phone = String(formData.get("phone") ?? "").trim();
   const smsOptIn = String(formData.get("sms_opt_in") ?? "false") === "true";
-  const duesOk = String(formData.get("dues_ok") ?? "false") === "true";
-  const duesRenewalDateRaw = String(formData.get("dues_renewal_date") ?? "");
-  const duesRenewalDate = duesRenewalDateRaw || null;
-  const usrowingMembershipDateRaw = String(formData.get("usrowing_membership_date") ?? "");
-  const usrowingMembershipDate = usrowingMembershipDateRaw || null;
-  const safeSportDateRaw = String(formData.get("safesport_date") ?? "");
-  const safeSportDate = safeSportDateRaw || null;
   const ownsPrivateBoat = String(formData.get("owns_private_boat") ?? "false") === "true";
   const boatStorageFeeOk = String(formData.get("boat_storage_fee_ok") ?? "false") === "true";
   const boatStorageFeeRenewalDateRaw = String(formData.get("boat_storage_fee_renewal_date") ?? "");
@@ -1488,7 +1535,7 @@ export async function updateMemberAdminAction(formData: FormData) {
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from("profiles")
-    .select("full_name, email, phone, sms_opt_in, dues_ok, dues_renewal_date, usrowing_membership_date, safesport_date, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date")
+    .select("full_name, email, phone, sms_opt_in, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date")
     .eq("id", memberId)
     .single();
   if (existingMemberError) throw existingMemberError;
@@ -1497,15 +1544,9 @@ export async function updateMemberAdminAction(formData: FormData) {
     full_name: fullName || existingMember.full_name,
     role,
     status,
-    membership_type: membershipType,
     phone: phone || null,
     sms_opt_in: smsOptIn,
     sms_opt_in_at: smsOptIn && !existingMember.sms_opt_in ? new Date().toISOString() : smsOptIn ? undefined : null,
-    dues_ok: duesOk,
-    dues_renewal_date: duesRenewalDate,
-    usrowing_membership_date: usrowingMembershipDate,
-    safesport_date: safeSportDate,
-    dues_last_paid_at: duesOk && !existingMember.dues_ok ? new Date().toISOString() : undefined,
     skill_level: skillLevel,
     weight_class: weightClass,
     owns_private_boat: ownsPrivateBoat,
@@ -1513,7 +1554,6 @@ export async function updateMemberAdminAction(formData: FormData) {
     boat_storage_fee_renewal_date: boatStorageFeeRenewalDate,
     boat_storage_fee_last_paid_at:
       ownsPrivateBoat && boatStorageFeeOk && !existingMember.boat_storage_fee_ok ? new Date().toISOString() : ownsPrivateBoat ? undefined : null,
-    waiver_signed_at: duesOk ? new Date().toISOString() : null,
   };
 
   const { error } = await supabase
@@ -1551,9 +1591,6 @@ export async function updateMemberAdminAction(formData: FormData) {
   }
 
   const paymentLines: string[] = [];
-  if (duesOk && !existingMember.dues_ok) {
-    paymentLines.push(formatCurrencyStatusLine("Annual dues", duesOk, duesRenewalDate));
-  }
   if (ownsPrivateBoat && boatStorageFeeOk && !existingMember.boat_storage_fee_ok) {
     paymentLines.push(formatCurrencyStatusLine("Boat storage fee", boatStorageFeeOk, boatStorageFeeRenewalDate));
   }

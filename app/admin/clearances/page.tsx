@@ -37,7 +37,7 @@ export default async function AdminClearancesPage() {
   const { supabase } = await ensureProfile();
   const { data: members } = await supabase
     .from("profiles")
-    .select("id, full_name, skill_level, status, membership_type")
+    .select("id, full_name, skill_level, status")
     .order("full_name");
 
   return (
@@ -61,7 +61,6 @@ export default async function AdminClearancesPage() {
               <tr>
                 <th>Member</th>
                 <th>Status</th>
-                <th>Membership</th>
                 <th>Skill Level</th>
                 <th>1x</th>
                 <th>2x</th>
@@ -77,7 +76,6 @@ export default async function AdminClearancesPage() {
                   <td>
                     <StatusChip label={member.status} kind={member.status === "active" ? "checked_out" : "reserved"} />
                   </td>
-                  <td>{member.membership_type}</td>
                   <td>{member.skill_level}</td>
                   <td>{derivedTier}</td>
                   <td>{derivedTier}</td>
