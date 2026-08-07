@@ -269,8 +269,13 @@ export async function getMyTrainingGroupAssignment() {
 
 export async function getRaceEventsWithMySignup() {
   const { supabase, user } = await ensureProfile();
+  const todayEastern = getEasternDateKey(new Date());
   const [{ data: events, error: eventsError }, { data: signups, error: signupsError }] = await Promise.all([
-    supabase.from("race_events").select("id, title, event_date, location, notes").order("event_date", { ascending: true }),
+    supabase
+      .from("race_events")
+      .select("id, title, event_date, location, notes")
+      .gte("event_date", todayEastern)
+      .order("event_date", { ascending: true }),
     supabase
       .from("race_signups")
       .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments")
@@ -440,11 +445,11 @@ export async function getPublishedLineups() {
       return String(race.event_date) >= todayEastern;
     }
 
-    if (board.board_type !== "race" && board.published_at) {
+    if (board.board_type !== "racing" && board.published_at) {
       return getEasternDateKey(board.published_at) >= todayEastern;
     }
 
-    return board.board_type === "race";
+    return board.board_type === "racing";
   });
 }
 

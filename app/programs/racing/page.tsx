@@ -16,7 +16,7 @@ export default async function RacingProgramPage() {
         <PageTitle title="Racing Signups" subtitle="Pick races, enter birthdate, choose preferred boat classes, and note how many races you want to row." />
 
         <div className="stack">
-          {events.length === 0 ? <Card subtle>No races posted yet.</Card> : null}
+          {events.length === 0 ? <Card subtle>No upcoming races posted.</Card> : null}
 
           {events.map((event) => (
             <Card key={event.id} className="stack">

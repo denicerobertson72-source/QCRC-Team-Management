@@ -6,13 +6,16 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { addRaceEventAdminAction } from "@/lib/actions";
+import { getEasternDateKey } from "@/lib/time";
 
 export default async function AdminRacesPage() {
   const { supabase } = await ensureAdminProfile();
+  const todayEastern = getEasternDateKey(new Date());
 
   const { data: races } = await supabase
     .from("race_events")
     .select("id, title, event_date, location, notes")
+    .gte("event_date", todayEastern)
     .order("event_date", { ascending: true });
 
   const raceIds = (races ?? []).map((r) => r.id);
@@ -49,6 +52,8 @@ export default async function AdminRacesPage() {
         </form>
 
         <div className="stack">
+          {(races ?? []).length === 0 ? <Card subtle>No upcoming races posted.</Card> : null}
+
           {(races ?? []).map((race) => {
             const raceSignups = signups.filter((s) => s.race_event_id === race.id);
 
