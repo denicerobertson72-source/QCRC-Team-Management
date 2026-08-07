@@ -83,9 +83,6 @@ async function getProtectedMemberReferences(admin: ReturnType<typeof createAdmin
     damagePhotos,
     privateBoatOutings,
     createdSessions,
-    sessionSignups,
-    programSignups,
-    raceSignups,
   ] = await Promise.all([
     admin.from("reservations").select("id", { head: true, count: "exact" }).eq("created_by", memberId),
     admin.from("reservation_crew").select("reservation_id", { head: true, count: "exact" }).eq("member_id", memberId),
@@ -94,9 +91,6 @@ async function getProtectedMemberReferences(admin: ReturnType<typeof createAdmin
     admin.from("damage_photos").select("id", { head: true, count: "exact" }).eq("uploaded_by", memberId),
     admin.from("private_boat_outings").select("id", { head: true, count: "exact" }).eq("member_id", memberId),
     admin.from("sessions").select("id", { head: true, count: "exact" }).eq("created_by", memberId),
-    admin.from("session_signups").select("session_id", { head: true, count: "exact" }).eq("member_id", memberId),
-    admin.from("program_signups").select("member_id", { head: true, count: "exact" }).eq("member_id", memberId),
-    admin.from("race_signups").select("member_id", { head: true, count: "exact" }).eq("member_id", memberId),
   ]);
 
   const results = [
@@ -107,9 +101,6 @@ async function getProtectedMemberReferences(admin: ReturnType<typeof createAdmin
     { label: "damage photo uploads", result: damagePhotos },
     { label: "private boat outings", result: privateBoatOutings },
     { label: "created sessions", result: createdSessions },
-    { label: "session signups", result: sessionSignups },
-    { label: "program signups", result: programSignups },
-    { label: "race signups", result: raceSignups },
   ];
 
   for (const entry of results) {
@@ -1519,6 +1510,7 @@ export async function updateMemberAdminAction(formData: FormData) {
   const { supabase } = await assertSiteAdmin();
   const admin = createAdminClient();
   const memberId = String(formData.get("member_id") ?? "");
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const fullName = String(formData.get("full_name") ?? "").trim();
   const role = String(formData.get("role") ?? "member");
   const status = String(formData.get("status") ?? "active");
@@ -1540,7 +1532,35 @@ export async function updateMemberAdminAction(formData: FormData) {
     .single();
   if (existingMemberError) throw existingMemberError;
 
+  if (!email) {
+    throw new Error("Member email is required.");
+  }
+
+  const emailChanged = email !== existingMember.email?.toLowerCase();
+  if (emailChanged) {
+    const [{ data: matchingProfiles, error: matchingProfilesError }, authUsersByEmail] = await Promise.all([
+      admin.from("profiles").select("id").eq("email", email).neq("id", memberId).limit(1),
+      listAllAuthUsersByEmail(admin),
+    ]);
+    if (matchingProfilesError) throw matchingProfilesError;
+
+    const matchingAuthUserId = authUsersByEmail.get(email);
+    if ((matchingProfiles ?? []).length > 0 || (matchingAuthUserId && matchingAuthUserId !== memberId)) {
+      throw new Error(`Another member already uses ${email}.`);
+    }
+
+    const { error: authUpdateError } = await admin.auth.admin.updateUserById(memberId, {
+      email,
+      email_confirm: true,
+      user_metadata: {
+        full_name: fullName || existingMember.full_name,
+      },
+    });
+    if (authUpdateError) throw authUpdateError;
+  }
+
   const updatePayload = {
+    email,
     full_name: fullName || existingMember.full_name,
     role,
     status,

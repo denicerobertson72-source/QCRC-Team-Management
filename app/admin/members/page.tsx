@@ -243,11 +243,11 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                   <input type="hidden" name="member_id" value={m.id} />
                   <strong>Permanent delete</strong>
                   <p className="muted">
-                    Use this only for duplicates, test accounts, or people with no club history. Members with reservations, crew history, damage history, or private outings will be blocked and should be marked inactive instead.
+                    Use this for duplicates, test accounts, or invite-pending profiles. Enrollment-only rows like program/session/race signups can be removed with the duplicate account, but reservations, crew history, damage history, private outings, or sessions created by this member will still be blocked.
                   </p>
                   <label className="member-checkbox-row">
                     <input name="confirm_delete" type="checkbox" value="true" />
-                    <span>I understand this permanently deletes the member if no protected history exists.</span>
+                    <span>I understand this permanently deletes the member and any removable enrollment records.</span>
                   </label>
                   <div className="row">
                     <Button type="submit" variant="secondary">Delete Permanently</Button>

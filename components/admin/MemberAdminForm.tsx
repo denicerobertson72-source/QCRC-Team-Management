@@ -31,7 +31,7 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
       <input type="hidden" name="member_id" value={member.id} />
 
       <Field label="Account Email">
-        <input value={member.email} readOnly />
+        <input name="email" type="email" defaultValue={member.email} required />
       </Field>
 
       <Field label="Full Name">
