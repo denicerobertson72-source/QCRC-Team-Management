@@ -11,7 +11,7 @@ import { deriveReservationEndLocal } from "@/lib/reservations";
 import { formatEasternLocalInput, toEasternDateTimeLocalValue } from "@/lib/time";
 
 const GPS_LAUNCH_TIMEOUT_MS = 8000;
-const GPS_LAUNCH_MAX_AGE_MS = 60000;
+const GPS_LAUNCH_MAX_AGE_MS = 0;
 
 function PendingSubmitButton({
   label,
@@ -90,7 +90,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });

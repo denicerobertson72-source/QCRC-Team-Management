@@ -5,6 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import type { TrackableOuting } from "@/lib/types";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, parseOutingKey } from "@/lib/live-tracking";
 
+function formatTrackingTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
 export function ReservationTrackingManager({
   outings,
   currentUserId,
@@ -14,6 +23,7 @@ export function ReservationTrackingManager({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [status, setStatus] = useState<"success" | "error" | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState(true);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const activeOutingRef = useRef<TrackableOuting | null>(null);
@@ -22,6 +32,17 @@ export function ReservationTrackingManager({
   if (!supabaseRef.current) {
     supabaseRef.current = createClient();
   }
+
+  useEffect(() => {
+    setIsPageVisible(document.visibilityState === "visible");
+
+    function handleVisibilityChange() {
+      setIsPageVisible(document.visibilityState === "visible");
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const intendedOutingKey = window.localStorage.getItem(INTENT_STORAGE_KEY);
@@ -91,7 +112,7 @@ export function ReservationTrackingManager({
           setMessage(`Live tracking upload failed: ${error.message}`);
         } else {
           setStatus("success");
-          setMessage("Live location sharing is active for your current outing.");
+          setMessage(`Live location sharing active. Last upload: ${formatTrackingTime(recordedAt)} ET.`);
         }
       },
       (error) => {
@@ -100,7 +121,7 @@ export function ReservationTrackingManager({
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 15000,
+        maximumAge: 0,
         timeout: 20000,
       },
     );
@@ -114,5 +135,16 @@ export function ReservationTrackingManager({
   }, [currentUserId, outings]);
 
   if (!message || !status) return null;
-  return <p className={status}>{message}</p>;
+  return (
+    <div className="stack" style={{ gap: "0.35rem" }}>
+      <p className={status}>{message}</p>
+      {!isPageVisible ? (
+        <p className="error">
+          Live tracking may pause while QCRC is in the background. Keep this app open and the screen awake while rowing.
+        </p>
+      ) : (
+        <p className="muted">For the live map to keep moving, keep QCRC open and the phone awake while you are on the water.</p>
+      )}
+    </div>
+  );
 }

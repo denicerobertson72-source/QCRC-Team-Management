@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
 
 const GPS_LAUNCH_TIMEOUT_MS = 8000;
-const GPS_LAUNCH_MAX_AGE_MS = 60000;
+const GPS_LAUNCH_MAX_AGE_MS = 0;
 
 function PendingSubmitButton({
   label,
@@ -80,7 +80,7 @@ export function PrivateBoatOutingPanel({
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
