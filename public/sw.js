@@ -1,4 +1,4 @@
-const CACHE_VERSION = "qcrc-pwa-v5";
+const CACHE_VERSION = "qcrc-pwa-v6";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
@@ -19,6 +19,36 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+  const title = payload.title || "QCRC notification";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || "You have a new club notification.",
+      icon: payload.icon || "/icon-192.png",
+      badge: payload.badge || "/icon-192.png",
+      data: { url: payload.url || "/notifications" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const requestedUrl = new URL(event.notification.data?.url || "/notifications", self.location.origin);
+  const url = requestedUrl.origin === self.location.origin ? requestedUrl.href : new URL("/notifications", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => client.url.startsWith(self.location.origin));
+      return existing ? existing.focus().then(() => existing.navigate(url)) : self.clients.openWindow(url);
+    }),
+  );
 });
 
 function isSafePageRoute(url) {

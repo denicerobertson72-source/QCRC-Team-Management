@@ -13,6 +13,7 @@ import { sendSms } from "@/lib/sms";
 import { appendCrewNamesToNotes } from "@/lib/crew";
 import { getAppUrl } from "@/lib/app-url";
 import { generateAndSendMemberAuthLink, listAllAuthUsersByEmail } from "@/lib/auth-links";
+import { sendPushNotifications } from "@/lib/push";
 
 function skillLevelToClearance(level: string) {
   switch (level) {
@@ -1382,7 +1383,7 @@ export async function submitDamageAction(formData: FormData) {
         const profile = Array.isArray(impacted.profiles) ? impacted.profiles[0] : impacted.profiles;
         const boat = Array.isArray(impacted.boats) ? impacted.boats[0] : impacted.boats;
         if (profile?.id) {
-          await supabase.from("notification_events").upsert(
+          const { error: notificationError } = await supabase.from("notification_events").upsert(
             {
               notification_key: `boat-out:${damageReportId}:${impacted.id}`,
               notification_type: "boat_out_of_service",
@@ -1395,6 +1396,11 @@ export async function submitDamageAction(formData: FormData) {
             },
             { onConflict: "notification_key" },
           );
+          if (notificationError) throw notificationError;
+          await sendPushNotifications([profile.id], "boat_out_of_service", {
+            boat_name: boat?.name ?? boatId,
+            reservation_start: impacted.start_time,
+          });
         }
 
         if (profile?.email) {
@@ -1820,6 +1826,7 @@ export async function addTeamAnnouncementAction(formData: FormData) {
   const body = String(formData.get("body") ?? "").trim();
   const startsAt = String(formData.get("starts_at") ?? "").trim();
   const endsAt = String(formData.get("ends_at") ?? "").trim();
+  const sendPush = String(formData.get("send_push") ?? "") === "on";
   const destination = new URL("/", "http://local");
 
   if (!title || !body) {
@@ -1828,19 +1835,50 @@ export async function addTeamAnnouncementAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { error } = await supabase.from("team_announcements").insert({
-    title,
-    body,
-    starts_at: startsAt ? easternLocalInputToIso(startsAt) : null,
-    ends_at: endsAt ? easternLocalInputToIso(endsAt) : null,
-    is_published: true,
-    created_by: user.id,
-  });
+  const { data: announcement, error } = await supabase
+    .from("team_announcements")
+    .insert({
+      title,
+      body,
+      starts_at: startsAt ? easternLocalInputToIso(startsAt) : null,
+      ends_at: endsAt ? easternLocalInputToIso(endsAt) : null,
+      is_published: true,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     destination.searchParams.set("announcement_status", "error");
     destination.searchParams.set("announcement_message", error.message || "Unable to post announcement.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  if (sendPush) {
+    const { data: recipients, error: recipientsError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("status", "active");
+    if (recipientsError) {
+      console.error("Could not load team announcement push recipients", { message: recipientsError.message });
+    } else {
+      const memberIds = (recipients ?? []).map((recipient) => recipient.id);
+      const payload = { title, body };
+      const notifications = memberIds.map((memberId) => ({
+        notification_key: `team-announcement:${announcement.id}:${memberId}`,
+        notification_type: "team_announcement",
+        member_id: memberId,
+        payload,
+      }));
+      if (notifications.length > 0) {
+        const { error: notificationError } = await supabase.from("notification_events").insert(notifications);
+        if (notificationError) {
+          console.error("Could not create team announcement notification events", { message: notificationError.message });
+        } else {
+          await sendPushNotifications(memberIds, "team_announcement", payload);
+        }
+      }
+    }
   }
 
   revalidatePath("/");
@@ -2134,6 +2172,9 @@ export async function saveRowingMeetupMembershipAction(formData: FormData) {
           .from("notification_events")
           .upsert(notifications, { onConflict: "notification_key" });
         if (notificationError) throw notificationError;
+        await sendPushNotifications(recipientIds, "rowing_meetup_signup", {
+          member_name: profileRow.full_name ?? user.email ?? "A new rower",
+        });
       }
     }
   }
@@ -2399,6 +2440,10 @@ async function publishLineupBoardInternal(
     .from("notification_events")
     .upsert(notifications, { onConflict: "notification_key" });
   if (notificationError) throw notificationError;
+  await sendPushNotifications(recipientIds, "lineup_published", {
+    title: boardDetail.title,
+    lineup_board_id: lineupBoardId,
+  });
 
   const { data: recipients, error: recipientError } = await supabase
     .from("profiles")
@@ -2626,6 +2671,12 @@ export async function cancelSessionAdminAction(formData: FormData) {
         .from("notification_events")
         .upsert(notifications, { onConflict: "notification_key" });
       if (notificationError) throw notificationError;
+      await sendPushNotifications(recipientIds, "session_cancelled", {
+        title: sessionRow.title,
+        starts_at: sessionRow.starts_at,
+        session_type: sessionRow.session_type,
+        cancelled_reason: cancelledReason || "Cancelled by coach/admin",
+      });
 
       const { data: recipients, error: recipientError } = await supabase
         .from("profiles")

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTransactionalEmail } from "@/lib/email";
+import { sendPushNotifications } from "@/lib/push";
 
 function ensureCronAuthorized(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -29,7 +30,10 @@ async function markNotification(admin: ReturnType<typeof createAdminClient>, key
     payload,
   });
 
-  if (!error) return true;
+  if (!error) {
+    await sendPushNotifications([memberId], "billing_reminder", payload);
+    return true;
+  }
   if (error.code === "23505") return false;
   throw error;
 }

@@ -98,6 +98,10 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             <Field label="Optional end time">
               <input name="ends_at" type="datetime-local" />
             </Field>
+            <label className="member-checkbox-row">
+              <input name="send_push" type="checkbox" />
+              <span>Send push notification to active members</span>
+            </label>
             <Button type="submit">Post Announcement</Button>
           </form>
         ) : null}

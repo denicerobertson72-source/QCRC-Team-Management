@@ -27,6 +27,18 @@ For production email delivery, also configure:
 
 See [docs/email-delivery-setup.md](/Users/robertsonde/Documents/New%20project/Coding%20Projects/QCRC%20Team%20Management/docs/email-delivery-setup.md) for the production email setup.
 
+### Web Push setup
+
+Apply `sql/v1/035_web_push_subscriptions.sql` in Supabase, then add these Vercel production environment variables:
+
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT` (a `mailto:` address or the deployed app URL)
+
+Use one persistent VAPID key pair per deployment. Members enable notifications from `/notifications`; on iPhone and iPad, QCRC must first be installed to the Home Screen (iOS/iPadOS 16.4+).
+
+See [docs/web-push-setup.md](/Users/robertsonde/Documents/New%20project/Coding%20Projects/QCRC%20Team%20Management/docs/web-push-setup.md) for deployment and device testing.
+
 ## Install + run
 ```bash
 npm install

@@ -6,6 +6,7 @@ import { getMyNotifications } from "@/lib/queries";
 import { markAllNotificationsReadAction, markNotificationReadAction } from "@/lib/actions";
 import { formatEasternDateTime } from "@/lib/time";
 import Link from "next/link";
+import { PushNotificationSettings } from "@/components/PushNotificationSettings";
 
 function notificationTitle(notification: { notification_type: string; payload: Record<string, unknown> }) {
   if (notification.notification_type === "boat_out_of_service") {
@@ -26,6 +27,9 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "rowing_meetup_signup") {
     return "Rowing Meetup alert";
   }
+  if (notification.notification_type === "team_announcement") {
+    return String(notification.payload.title ?? "Team announcement");
+  }
   return notification.notification_type.replaceAll("_", " ");
 }
 
@@ -45,6 +49,9 @@ function notificationBody(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "rowing_meetup_signup") {
     return `${String(notification.payload.member_name ?? "A new rower")} joined Rowing Meetup. Open the meetup page to check their availability.`;
   }
+  if (notification.notification_type === "team_announcement") {
+    return String(notification.payload.body ?? "A new team announcement was posted.");
+  }
   return "";
 }
 
@@ -61,6 +68,7 @@ function notificationHref(notification: { notification_type: string; payload: Re
     if (sessionType === "saturday_coached_row") return "/programs/saturday";
     return "/programs";
   }
+  if (notification.notification_type === "team_announcement") return "/";
   return null;
 }
 
@@ -84,6 +92,14 @@ export default async function NotificationsPage() {
             ) : undefined
           }
         />
+
+        <Card subtle className="stack">
+          <div>
+            <h3>Push notifications</h3>
+            <p className="muted">Receive QCRC alerts even when the app is closed. On iPhone and iPad, install QCRC to your Home Screen first.</p>
+          </div>
+          <PushNotificationSettings />
+        </Card>
 
         <div className="stack">
           {notifications.length === 0 ? <Card subtle>No notifications yet.</Card> : null}
