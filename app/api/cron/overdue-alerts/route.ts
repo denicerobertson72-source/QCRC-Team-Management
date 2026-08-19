@@ -12,17 +12,23 @@ function ensureCronAuthorized(request: Request) {
   return header === `Bearer ${secret}`;
 }
 
-async function markNotification(admin: ReturnType<typeof createAdminClient>, key: string, memberId: string, reservationId: string) {
+async function markNotification(
+  admin: ReturnType<typeof createAdminClient>,
+  key: string,
+  memberId: string,
+  reservationId: string,
+  payload: Record<string, unknown>,
+) {
   const { error } = await admin.from("notification_events").insert({
     notification_key: key,
     notification_type: "overdue_boat_alert",
     member_id: memberId,
     reservation_id: reservationId,
-    payload: {},
+    payload,
   });
 
   if (!error) {
-    await sendPushNotifications([memberId], "overdue_boat_alert", {});
+    await sendPushNotifications([memberId], "overdue_boat_alert", payload);
     return true;
   }
   if (error.code === "23505") return false;
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
       .select("id, checked_out_at, checkout_location, river_direction, boats(name), profiles!reservations_created_by_fkey(id,full_name,email,phone,sms_opt_in)")
       .eq("status", "checked_out")
       .lte("checked_out_at", thresholdIso),
-    admin.from("profiles").select("email, phone, sms_opt_in").eq("role", "admin").eq("status", "active"),
+    admin.from("profiles").select("id, email, phone, sms_opt_in").eq("role", "admin").eq("status", "active"),
   ]);
 
   if (reservationError) {
@@ -62,12 +68,32 @@ export async function GET(request: Request) {
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     if (!profile?.id) continue;
 
+    const alertPayload = {
+      boat_name: boat?.name ?? row.id,
+      rower_name: profile.full_name ?? "Unknown rower",
+      checked_out_at: row.checked_out_at,
+      checkout_location: row.checkout_location,
+      river_direction: row.river_direction,
+    };
     const shouldSend = await markNotification(
       admin,
       `overdue:${row.id}:${row.checked_out_at}`,
       profile.id,
       row.id,
+      alertPayload,
     );
+
+    // Admin alerts use their own keys so a newly added admin is notified even if this outing was already flagged.
+    for (const adminProfile of admins ?? []) {
+      if (adminProfile.id === profile.id) continue;
+      await markNotification(
+        admin,
+        `overdue-admin:${row.id}:${row.checked_out_at}:${adminProfile.id}`,
+        adminProfile.id,
+        row.id,
+        alertPayload,
+      );
+    }
     if (!shouldSend) continue;
 
     const recipients = [...new Set([profile.email, ...adminEmails].filter(Boolean))];

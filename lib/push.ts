@@ -22,7 +22,11 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
     case "session_cancelled":
       return { title: `Session cancelled: ${String(payload.title ?? "Session")}`, body: `Reason: ${String(payload.cancelled_reason ?? "Cancelled by coach/admin")}`, url: "/programs" };
     case "overdue_boat_alert":
-      return { title: "Overdue boat alert", body: "An active outing has been overdue for more than two hours.", url: "/reservations" };
+      return {
+        title: `Emergency: ${String(payload.boat_name ?? "Boat")} overdue`,
+        body: `${String(payload.rower_name ?? "A rower")} has been on the water for more than two hours.`,
+        url: "/reservations",
+      };
     case "billing_reminder":
       return { title: "Billing reminder", body: `Reminder for ${String(payload.category ?? "billing")} due on ${String(payload.renewal_date ?? "")}.`, url: "/account/security" };
     case "rowing_meetup_signup":
