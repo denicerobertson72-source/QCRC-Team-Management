@@ -30,6 +30,9 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "team_announcement") {
     return String(notification.payload.title ?? "Team announcement");
   }
+  if (notification.notification_type === "damage_report_submitted") {
+    return `Damage report: ${String(notification.payload.boat_name ?? "Boat")}`;
+  }
   return notification.notification_type.replaceAll("_", " ");
 }
 
@@ -52,6 +55,9 @@ function notificationBody(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "team_announcement") {
     return String(notification.payload.body ?? "A new team announcement was posted.");
   }
+  if (notification.notification_type === "damage_report_submitted") {
+    return `Severity ${String(notification.payload.severity ?? "not set")}: ${String(notification.payload.description ?? "Open the damage queue for details.")}`;
+  }
   return "";
 }
 
@@ -69,6 +75,7 @@ function notificationHref(notification: { notification_type: string; payload: Re
     return "/programs";
   }
   if (notification.notification_type === "team_announcement") return "/";
+  if (notification.notification_type === "damage_report_submitted") return "/admin/damage";
   return null;
 }
 

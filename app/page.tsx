@@ -29,8 +29,11 @@ const QUICK_LINKS = [
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ profile }, announcements] = await Promise.all([ensureProfile(), getActiveTeamAnnouncements()]);
+  const [{ profile, supabase }, announcements] = await Promise.all([ensureProfile(), getActiveTeamAnnouncements()]);
   const isAdmin = profile?.role === "admin";
+  const races = isAdmin
+    ? (await supabase.from("race_events").select("id, title, event_date").order("event_date", { ascending: true })).data ?? []
+    : [];
   const displayName = profile?.full_name?.trim() && !profile.full_name.includes("@") ? profile.full_name.trim() : "";
   const links = isAdmin ? [...QUICK_LINKS, { href: "/admin", label: "Admin", description: "Manage members, boats, safety, and programs." }] : QUICK_LINKS;
 
@@ -98,9 +101,29 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             <Field label="Optional end time">
               <input name="ends_at" type="datetime-local" />
             </Field>
+            <Field label="Audience">
+              <select name="audience_type" defaultValue="all">
+                <option value="all">All active members</option>
+                <option value="training_beginner_intermediate">Training: Beginner / Intermediate</option>
+                <option value="training_advanced">Training: Advanced</option>
+                <option value="saturday_community_row">Saturday Community Row</option>
+                <option value="race">Racing: specific race</option>
+                <option value="meetup">Rowing Meetup members</option>
+              </select>
+            </Field>
+            <Field label="Race (only for a Racing audience)">
+              <select name="race_event_id" defaultValue="">
+                <option value="">Choose a race</option>
+                {races.map((race) => (
+                  <option key={race.id} value={race.id}>
+                    {race.title} — {race.event_date}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <label className="member-checkbox-row">
               <input name="send_push" type="checkbox" />
-              <span>Send push notification to active members</span>
+              <span>Send push notification to this audience</span>
             </label>
             <Button type="submit">Post Announcement</Button>
           </form>

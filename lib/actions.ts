@@ -1369,6 +1369,41 @@ export async function submitDamageAction(formData: FormData) {
       damageReportId = inserted.id;
     }
 
+    // Damage reports are durable notifications for active admins, with Push as an additional best-effort channel.
+    try {
+      const admin = createAdminClient();
+      const [{ data: admins, error: adminsError }, { data: boat, error: boatError }] = await Promise.all([
+        admin.from("profiles").select("id").eq("role", "admin").eq("status", "active"),
+        supabase.from("boats").select("name").eq("id", boatId).maybeSingle(),
+      ]);
+      if (adminsError) throw adminsError;
+      if (boatError) throw boatError;
+
+      const adminIds = (admins ?? []).map((admin) => admin.id);
+      const payload = {
+        boat_name: boat?.name ?? "Boat",
+        severity,
+        description: finalDescription,
+      };
+      if (adminIds.length > 0) {
+        const { error: notificationError } = await admin.from("notification_events").upsert(
+          adminIds.map((memberId) => ({
+            notification_key: `damage-report:${damageReportId}:${memberId}`,
+            notification_type: "damage_report_submitted",
+            member_id: memberId,
+            payload,
+          })),
+          { onConflict: "notification_key" },
+        );
+        if (notificationError) throw notificationError;
+        await sendPushNotifications(adminIds, "damage_report_submitted", payload);
+      }
+    } catch (notificationError) {
+      console.error("Could not notify admins about a damage report", {
+        message: notificationError instanceof Error ? notificationError.message : "Unknown error",
+      });
+    }
+
     if (severity >= 3) {
       const { data: impactedReservations, error: impactedError } = await supabase
         .from("reservations")
@@ -1820,20 +1855,65 @@ export async function updateBoatStatusAdminAction(formData: FormData) {
   revalidatePath("/reserve");
 }
 
-export async function addTeamAnnouncementAction(formData: FormData) {
-  const { supabase, user } = await assertSiteAdmin();
+type AnnouncementAudience =
+  | "all"
+  | "training_beginner_intermediate"
+  | "training_advanced"
+  | "saturday_community_row"
+  | "race"
+  | "meetup";
+
+function parseAnnouncementAudience(value: string): AnnouncementAudience | null {
+  return ["all", "training_beginner_intermediate", "training_advanced", "saturday_community_row", "race", "meetup"].includes(value)
+    ? (value as AnnouncementAudience)
+    : null;
+}
+
+async function getAnnouncementRecipientIds(supabase: any, audience: AnnouncementAudience, raceEventId: string | null) {
+  if (audience === "all") {
+    const { data, error } = await supabase.from("profiles").select("id").eq("status", "active");
+    if (error) throw error;
+    return (data ?? []).map((row: { id: string }) => row.id);
+  }
+
+  let groupRows: { member_id: string }[] | null = null;
+  let groupError: { message: string } | null = null;
+  if (audience === "meetup") {
+    ({ data: groupRows, error: groupError } = await supabase.from("rowing_meetup_members").select("member_id"));
+  } else if (audience === "race" && raceEventId) {
+    ({ data: groupRows, error: groupError } = await supabase.from("race_signups").select("member_id").eq("race_event_id", raceEventId));
+  } else if (audience === "saturday_community_row") {
+    ({ data: groupRows, error: groupError } = await supabase.from("program_signups").select("member_id").eq("program_type", "saturday_coached_row"));
+  } else {
+    const trainingGroup = audience === "training_beginner_intermediate" ? "beginner_intermediate" : "advanced";
+    ({ data: groupRows, error: groupError } = await supabase
+      .from("program_signups")
+      .select("member_id")
+      .eq("program_type", "coached_training")
+      .eq("training_group", trainingGroup));
+  }
+  if (groupError) throw groupError;
+
+  const groupMemberIds = [...new Set((groupRows ?? []).map((row) => row.member_id))];
+  if (groupMemberIds.length === 0) return [];
+  const { data: activeProfiles, error: profileError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("status", "active")
+    .in("id", groupMemberIds);
+  if (profileError) throw profileError;
+  return (activeProfiles ?? []).map((row: { id: string }) => row.id);
+}
+
+async function createAnnouncement(formData: FormData, audience: AnnouncementAudience, user: { id: string }, supabase: any) {
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   const startsAt = String(formData.get("starts_at") ?? "").trim();
   const endsAt = String(formData.get("ends_at") ?? "").trim();
   const sendPush = String(formData.get("send_push") ?? "") === "on";
-  const destination = new URL("/", "http://local");
-
-  if (!title || !body) {
-    destination.searchParams.set("announcement_status", "error");
-    destination.searchParams.set("announcement_message", "Announcement title and message are required.");
-    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-  }
+  const raceEventId = audience === "race" ? String(formData.get("race_event_id") ?? "").trim() : null;
+  if (!title || !body) throw new Error("Announcement title and message are required.");
+  if (audience === "race" && !raceEventId) throw new Error("Choose a race for this announcement.");
 
   const { data: announcement, error } = await supabase
     .from("team_announcements")
@@ -1844,25 +1924,17 @@ export async function addTeamAnnouncementAction(formData: FormData) {
       ends_at: endsAt ? easternLocalInputToIso(endsAt) : null,
       is_published: true,
       created_by: user.id,
+      audience_type: audience,
+      audience_race_event_id: raceEventId,
     })
     .select("id")
     .single();
 
-  if (error) {
-    destination.searchParams.set("announcement_status", "error");
-    destination.searchParams.set("announcement_message", error.message || "Unable to post announcement.");
-    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-  }
+  if (error) throw error;
 
   if (sendPush) {
-    const { data: recipients, error: recipientsError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("status", "active");
-    if (recipientsError) {
-      console.error("Could not load team announcement push recipients", { message: recipientsError.message });
-    } else {
-      const memberIds = (recipients ?? []).map((recipient) => recipient.id);
+    try {
+      const memberIds: string[] = await getAnnouncementRecipientIds(supabase, audience, raceEventId);
       const payload = { title, body };
       const notifications = memberIds.map((memberId) => ({
         notification_key: `team-announcement:${announcement.id}:${memberId}`,
@@ -1878,12 +1950,63 @@ export async function addTeamAnnouncementAction(formData: FormData) {
           await sendPushNotifications(memberIds, "team_announcement", payload);
         }
       }
+    } catch (error) {
+      console.error("Could not prepare announcement push delivery", { message: error instanceof Error ? error.message : "Unknown error" });
     }
+  }
+
+  return announcement;
+}
+
+export async function addTeamAnnouncementAction(formData: FormData) {
+  const { supabase, user } = await assertSiteAdmin();
+  const destination = new URL("/", "http://local");
+  const audience = parseAnnouncementAudience(String(formData.get("audience_type") ?? "all"));
+  if (!audience) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", "Choose a valid announcement audience.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  try {
+    await createAnnouncement(formData, audience!, user, supabase);
+  } catch (error) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", error instanceof Error ? error.message : "Unable to post announcement.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
   revalidatePath("/");
   destination.searchParams.set("announcement_status", "success");
   destination.searchParams.set("announcement_message", "Announcement posted.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function addMeetupAnnouncementAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const destination = new URL("/programs/meetup", "http://local");
+  const { data: membership, error: membershipError } = await supabase
+    .from("rowing_meetup_members")
+    .select("member_id")
+    .eq("member_id", user.id)
+    .maybeSingle();
+  if (membershipError || !membership) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", "Only current Rowing Meetup members can post to the Meetup group.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  try {
+    await createAnnouncement(formData, "meetup", user, supabase);
+  } catch (error) {
+    destination.searchParams.set("announcement_status", "error");
+    destination.searchParams.set("announcement_message", error instanceof Error ? error.message : "Unable to post Meetup announcement.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+  revalidatePath("/");
+  revalidatePath("/programs/meetup");
+  destination.searchParams.set("announcement_status", "success");
+  destination.searchParams.set("announcement_message", "Meetup announcement posted.");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 

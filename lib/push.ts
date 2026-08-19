@@ -29,6 +29,12 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
       return { title: "Rowing Meetup alert", body: `${String(payload.member_name ?? "A new rower")} joined Rowing Meetup.`, url: "/programs/meetup" };
     case "team_announcement":
       return { title: String(payload.title ?? "Team announcement"), body: String(payload.body ?? "A new team announcement was posted."), url: "/" };
+    case "damage_report_submitted":
+      return {
+        title: `Damage report: ${String(payload.boat_name ?? "Boat")}`,
+        body: `Severity ${String(payload.severity ?? "not set")}: ${String(payload.description ?? "Open the damage queue for details.")}`,
+        url: "/admin/damage",
+      };
     default:
       return { title: "QCRC notification", body: "You have a new club notification.", url: "/notifications" };
   }

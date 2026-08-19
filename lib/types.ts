@@ -208,5 +208,7 @@ export type TeamAnnouncement = {
   starts_at: string | null;
   ends_at: string | null;
   is_published: boolean;
+  audience_type: string;
+  audience_race_event_id: string | null;
   created_at: string;
 };

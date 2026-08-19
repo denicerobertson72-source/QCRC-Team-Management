@@ -663,7 +663,7 @@ export async function getActiveTeamAnnouncements() {
   const { supabase } = await ensureProfile();
   const { data, error } = await supabase
     .from("team_announcements")
-    .select("id, title, body, starts_at, ends_at, is_published, created_at")
+    .select("id, title, body, starts_at, ends_at, is_published, audience_type, audience_race_event_id, created_at")
     .eq("is_published", true)
     .order("starts_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });

@@ -3,12 +3,17 @@ import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { FlashNotice } from "@/components/ui/FlashNotice";
 import {
   addRowingMeetupAvailabilityAction,
   removeRowingMeetupAvailabilityAction,
   saveRowingMeetupMembershipAction,
+  addMeetupAnnouncementAction,
 } from "@/lib/actions";
-import { getRowingMeetupState } from "@/lib/queries";
+import { getActiveTeamAnnouncements, getRowingMeetupState } from "@/lib/queries";
+import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
+
+type SearchParams = Promise<{ announcement_status?: string; announcement_message?: string }>;
 
 const weekdayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const meetupTimeOptions = [
@@ -58,8 +63,13 @@ function formatTimeLabel(value: string) {
   });
 }
 
-export default async function RowingMeetupPage() {
-  const { myMembership, myAvailability, members, availabilityByMember } = await getRowingMeetupState();
+export default async function RowingMeetupPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const [{ myMembership, myAvailability, members, availabilityByMember }, announcements] = await Promise.all([
+    getRowingMeetupState(),
+    getActiveTeamAnnouncements(),
+  ]);
+  const meetupAnnouncements = announcements.filter((announcement) => announcement.audience_type === "meetup");
 
   return (
     <>
@@ -72,6 +82,10 @@ export default async function RowingMeetupPage() {
             subtitle={`Opt in to connect with other rowers, share weekly availability, and receive alerts when new meetup members join. Current pool: ${members.length} rower${members.length === 1 ? "" : "s"}.`}
           />
         </section>
+
+        {params.announcement_status && params.announcement_message ? (
+          <FlashNotice status={params.announcement_status === "success" ? "success" : "error"} message={params.announcement_message} />
+        ) : null}
 
         <form action={saveRowingMeetupMembershipAction} className="card form-grid">
           <h3>{myMembership ? "Update Meetup Profile" : "Join Rowing Meetup"}</h3>
@@ -114,7 +128,42 @@ export default async function RowingMeetupPage() {
         </form>
 
         {myMembership ? (
-          <Card className="stack">
+          <>
+            <form action={addMeetupAnnouncementAction} className="card form-grid">
+              <h3>Message Meetup Members</h3>
+              <p className="muted">This announcement is visible only to current Rowing Meetup members.</p>
+              <Field label="Title">
+                <input name="title" placeholder="Looking for a partner Saturday morning" required />
+              </Field>
+              <Field label="Message">
+                <textarea name="body" rows={3} required />
+              </Field>
+              <Field label="Show starting">
+                <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} />
+              </Field>
+              <Field label="Optional end time">
+                <input name="ends_at" type="datetime-local" />
+              </Field>
+              <label className="member-checkbox-row">
+                <input name="send_push" type="checkbox" />
+                <span>Send push notification to Meetup members</span>
+              </label>
+              <Button type="submit">Post Meetup Announcement</Button>
+            </form>
+
+            <Card className="stack">
+              <h3>Meetup Announcements</h3>
+              {meetupAnnouncements.length === 0 ? <p className="muted">No Meetup announcements yet.</p> : null}
+              {meetupAnnouncements.map((announcement) => (
+                <Card key={announcement.id} subtle className="stack">
+                  <h4>{announcement.title}</h4>
+                  <p className="muted">Posted {formatEasternDateTime(announcement.created_at)} ET</p>
+                  <div className="announcement-body">{announcement.body}</div>
+                </Card>
+              ))}
+            </Card>
+
+            <Card className="stack">
             <h3>My Availability</h3>
             <form action={addRowingMeetupAvailabilityAction} className="form-grid">
               <div className="row">
@@ -174,7 +223,8 @@ export default async function RowingMeetupPage() {
                 </Card>
               ))}
             </div>
-          </Card>
+            </Card>
+          </>
         ) : null}
 
         <Card className="stack">
