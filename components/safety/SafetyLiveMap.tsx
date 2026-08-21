@@ -4,6 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RowingLocationPoint, SafetyLiveMapState } from "@/lib/types";
 
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener: (type: "release", listener: () => void) => void;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
+};
+
 declare global {
   interface Window {
     mapboxgl?: any;
@@ -163,6 +172,7 @@ export function SafetyLiveMap({
   const [sharingEnabled, setSharingEnabled] = useState(false);
   const [sharingMessage, setSharingMessage] = useState<string | null>(null);
   const [sharingMessageKind, setSharingMessageKind] = useState<"success" | "error">("success");
+  const [wakeLockActive, setWakeLockActive] = useState(false);
   const [radarVisible, setRadarVisible] = useState(false);
   const [selectedRadarId, setSelectedRadarId] = useState(weatherRadarSources[0]?.id ?? "");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -171,6 +181,7 @@ export function SafetyLiveMap({
   const watchIdRef = useRef<number | null>(null);
   const lastUploadAtRef = useRef<number>(0);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   if (!supabaseRef.current) {
     supabaseRef.current = createClient();
@@ -397,6 +408,49 @@ export function SafetyLiveMap({
     ? state.outings.find((outing) => outing.outing_id === myActiveOutingId) ?? null
     : null;
 
+  useEffect(() => {
+    if (!sharingEnabled) {
+      void wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+      return;
+    }
+
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      const wakeLock = (navigator as WakeLockNavigator).wakeLock;
+      if (!wakeLock || document.visibilityState !== "visible" || wakeLockRef.current) return;
+      try {
+        const sentinel = await wakeLock.request("screen");
+        if (cancelled) {
+          await sentinel.release();
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        setWakeLockActive(true);
+        sentinel.addEventListener("release", () => {
+          wakeLockRef.current = null;
+          setWakeLockActive(false);
+        });
+      } catch {
+        setWakeLockActive(false);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void requestWakeLock();
+    };
+
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      const sentinel = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (sentinel) void sentinel.release();
+    };
+  }, [sharingEnabled]);
+
   function fitMapToOutings() {
     const map = mapRef.current;
     if (!map || state.outings.length === 0 || !window.mapboxgl) return;
@@ -552,6 +606,7 @@ export function SafetyLiveMap({
                 : "Launch an outing to begin live sharing and route capture."}
           </p>
           {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
+          {wakeLockActive ? <p className="success">Screen stay-awake mode is active while you share location.</p> : null}
           {weatherRadarTileUrl ? (
             <p className="muted">
               Radar source: {selectedRadarSource?.label ?? "Configured radar"}

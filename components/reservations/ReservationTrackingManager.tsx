@@ -5,6 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import type { TrackableOuting } from "@/lib/types";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, parseOutingKey } from "@/lib/live-tracking";
 
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener: (type: "release", listener: () => void) => void;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
+};
+
 function formatTrackingTime(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -24,10 +33,13 @@ export function ReservationTrackingManager({
   const [message, setMessage] = useState<string | null>(null);
   const [status, setStatus] = useState<"success" | "error" | null>(null);
   const [isPageVisible, setIsPageVisible] = useState(true);
+  const [trackingActive, setTrackingActive] = useState(false);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const activeOutingRef = useRef<TrackableOuting | null>(null);
   const lastUploadAtRef = useRef<number>(0);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   if (!supabaseRef.current) {
     supabaseRef.current = createClient();
@@ -62,6 +74,7 @@ export function ReservationTrackingManager({
         : null;
 
     if (!activeOuting) {
+      setTrackingActive(false);
       activeOutingRef.current = null;
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
@@ -74,6 +87,7 @@ export function ReservationTrackingManager({
     }
 
     activeOutingRef.current = activeOuting;
+    setTrackingActive(true);
     if (!navigator.geolocation || watchIdRef.current !== null) {
       return;
     }
@@ -121,7 +135,7 @@ export function ReservationTrackingManager({
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0,
+        maximumAge: 15000,
         timeout: 20000,
       },
     );
@@ -134,6 +148,49 @@ export function ReservationTrackingManager({
     };
   }, [currentUserId, outings]);
 
+  useEffect(() => {
+    if (!trackingActive) {
+      void wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+      return;
+    }
+
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      const wakeLock = (navigator as WakeLockNavigator).wakeLock;
+      if (!wakeLock || document.visibilityState !== "visible" || wakeLockRef.current) return;
+      try {
+        const sentinel = await wakeLock.request("screen");
+        if (cancelled) {
+          await sentinel.release();
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        setWakeLockActive(true);
+        sentinel.addEventListener("release", () => {
+          wakeLockRef.current = null;
+          setWakeLockActive(false);
+        });
+      } catch {
+        setWakeLockActive(false);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void requestWakeLock();
+    };
+
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      const sentinel = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (sentinel) void sentinel.release();
+    };
+  }, [trackingActive]);
+
   if (!message || !status) return null;
   return (
     <div className="stack" style={{ gap: "0.35rem" }}>
@@ -145,6 +202,7 @@ export function ReservationTrackingManager({
       ) : (
         <p className="muted">For the live map to keep moving, keep QCRC open and the phone awake while you are on the water.</p>
       )}
+      {wakeLockActive ? <p className="success">Screen stay-awake mode is active while live tracking runs.</p> : null}
     </div>
   );
 }

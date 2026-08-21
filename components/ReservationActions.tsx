@@ -10,8 +10,10 @@ import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/l
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { formatEasternLocalInput, toEasternDateTimeLocalValue } from "@/lib/time";
 
-const GPS_LAUNCH_TIMEOUT_MS = 8000;
-const GPS_LAUNCH_MAX_AGE_MS = 0;
+// A launch needs a usable position, not a brand-new high-accuracy GPS lock. iOS can take longer
+// than a few seconds to obtain the latter even when location permission is correctly allowed.
+const GPS_LAUNCH_TIMEOUT_MS = 20000;
+const GPS_LAUNCH_MAX_AGE_MS = 60000;
 
 function PendingSubmitButton({
   label,
@@ -90,7 +92,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
+          enableHighAccuracy: false,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });

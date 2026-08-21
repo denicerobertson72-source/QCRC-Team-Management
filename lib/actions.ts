@@ -315,7 +315,11 @@ function csvRowsToObjects(text: string) {
     return [] as Record<string, string>[];
   }
 
-  const headers = rows[0].map((header) => header.trim().toLowerCase());
+  const headers = rows[0].map((header) => {
+    const normalized = header.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (normalized === "email_address") return "email";
+    return normalized;
+  });
   return rows.slice(1).map((cells) => {
     const record: Record<string, string> = {};
     headers.forEach((header, index) => {
@@ -621,6 +625,11 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   const records = csvRowsToObjects(text);
   if (records.length === 0) {
     redirect("/admin/members?import_status=error&import_message=The%20CSV%20file%20did%20not%20contain%20any%20rows.");
+  }
+  if (!Object.prototype.hasOwnProperty.call(records[0], "email")) {
+    redirect(
+      "/admin/members?import_status=error&import_message=The%20CSV%20must%20include%20an%20email%20column.%20Use%20email%20or%20Email%20Address%20as%20the%20header.",
+    );
   }
 
   const { data: existingProfiles, error: existingProfilesError } = await admin
