@@ -87,14 +87,14 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
                 <span className="member-summary-hint">Expand</span>
               </summary>
               <form action={createRowingMeetupCallAction} className="meetup-details form-grid">
-                <p className="muted">Calls automatically disappear once their end time passes. Current Meetup members receive a notification.</p>
+                <p className="muted">Calls automatically disappear once their Rowing end time passes. Current Meetup members receive a notification.</p>
                 <Field label="What are you looking for?">
                   <textarea name="message" rows={3} placeholder="Anyone want to row Sunday morning?" required maxLength={500} />
                 </Field>
-                <Field label="Start time">
+                <Field label="Rowing start time">
                   <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} required />
                 </Field>
-                <Field label="End time">
+                <Field label="Rowing end time">
                   <input name="ends_at" type="datetime-local" required />
                 </Field>
                 <Field label="Launch location (optional)">
@@ -185,10 +185,10 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
                             <Field label="Update the call">
                               <textarea name="message" rows={3} defaultValue={call.message} required maxLength={500} />
                             </Field>
-                            <Field label="Start time">
+                            <Field label="Rowing start time">
                               <input name="starts_at" type="datetime-local" defaultValue={toEasternDateTimeLocalValue(call.starts_at)} required />
                             </Field>
-                            <Field label="End time">
+                            <Field label="Rowing end time">
                               <input name="ends_at" type="datetime-local" defaultValue={toEasternDateTimeLocalValue(call.ends_at)} required />
                             </Field>
                             <Field label="Launch location (optional)">
