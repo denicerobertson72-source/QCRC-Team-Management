@@ -2450,6 +2450,40 @@ export async function saveRowingMeetupCallInterestAction(formData: FormData) {
   revalidatePath("/programs/meetup");
 }
 
+export async function updateRowingMeetupCallAction(formData: FormData) {
+  const { supabase, user } = await requireRowingMeetupMember();
+  const callId = String(formData.get("call_id") ?? "");
+  const message = String(formData.get("message") ?? "").trim();
+  const startsAt = String(formData.get("starts_at") ?? "").trim();
+  const endsAt = String(formData.get("ends_at") ?? "").trim();
+  const launchLocation = String(formData.get("launch_location") ?? "").trim();
+  const boatClassId = String(formData.get("boat_class_id") ?? "any");
+
+  if (!callId || !message || !startsAt || !endsAt) throw new Error("A message, start time, and end time are required.");
+  if (!["any", "1x", "2x", "4x"].includes(boatClassId)) throw new Error("Choose a valid boat preference.");
+
+  const startsAtIso = easternLocalInputToIso(startsAt);
+  const endsAtIso = easternLocalInputToIso(endsAt);
+  if (!startsAtIso || !endsAtIso) throw new Error("Enter valid start and end times.");
+  if (new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) throw new Error("The call must end after it starts.");
+
+  const { error } = await supabase
+    .from("rowing_meetup_calls")
+    .update({
+      message,
+      starts_at: startsAtIso,
+      ends_at: endsAtIso,
+      launch_location: launchLocation || null,
+      boat_class_id: boatClassId,
+    })
+    .eq("id", callId)
+    .eq("created_by", user.id)
+    .eq("status", "open");
+  if (error) throw error;
+
+  revalidatePath("/programs/meetup");
+}
+
 export async function removeRowingMeetupCallInterestAction(formData: FormData) {
   const { supabase, user } = await requireRowingMeetupMember();
   const callId = String(formData.get("call_id") ?? "");

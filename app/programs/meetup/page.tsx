@@ -10,9 +10,10 @@ import {
   removeRowingMeetupCallInterestAction,
   saveRowingMeetupCallInterestAction,
   saveRowingMeetupMembershipAction,
+  updateRowingMeetupCallAction,
 } from "@/lib/actions";
 import { getActiveRowingMeetupCalls, getRowingMeetupState } from "@/lib/queries";
-import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
+import { formatEasternDateTime, nowEasternDateTimeLocalValue, toEasternDateTimeLocalValue } from "@/lib/time";
 
 type SearchParams = Promise<{ call_status?: string; call_message?: string }>;
 
@@ -173,10 +174,42 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
                         </form>
                       )
                     ) : (
-                      <form action={closeRowingMeetupCallAction}>
-                        <input type="hidden" name="call_id" value={call.id} />
-                        <Button type="submit" variant="secondary">Close Call</Button>
-                      </form>
+                      <div className="stack">
+                        <details className="card-subtle meetup-response-editor">
+                          <summary>
+                            <strong>Manage your call</strong>
+                            <span className="member-summary-hint">Edit call</span>
+                          </summary>
+                          <form action={updateRowingMeetupCallAction} className="meetup-details form-grid">
+                            <input type="hidden" name="call_id" value={call.id} />
+                            <Field label="Update the call">
+                              <textarea name="message" rows={3} defaultValue={call.message} required maxLength={500} />
+                            </Field>
+                            <Field label="Start time">
+                              <input name="starts_at" type="datetime-local" defaultValue={toEasternDateTimeLocalValue(call.starts_at)} required />
+                            </Field>
+                            <Field label="End time">
+                              <input name="ends_at" type="datetime-local" defaultValue={toEasternDateTimeLocalValue(call.ends_at)} required />
+                            </Field>
+                            <Field label="Launch location (optional)">
+                              <input name="launch_location" defaultValue={call.launch_location ?? ""} maxLength={100} />
+                            </Field>
+                            <Field label="Boat preference">
+                              <select name="boat_class_id" defaultValue={call.boat_class_id}>
+                                <option value="any">Any boat</option>
+                                <option value="1x">1x</option>
+                                <option value="2x">2x</option>
+                                <option value="4x">4x</option>
+                              </select>
+                            </Field>
+                            <Button type="submit">Save Call Updates</Button>
+                          </form>
+                        </details>
+                        <form action={closeRowingMeetupCallAction}>
+                          <input type="hidden" name="call_id" value={call.id} />
+                          <Button type="submit" variant="secondary">Close Call</Button>
+                        </form>
+                      </div>
                     )}
                   </Card>
                 );
