@@ -15,6 +15,7 @@ import type {
   SafetyEntry,
   SafetyResource,
   TeamAnnouncement,
+  UnavailableBoatWindow,
 } from "@/lib/types";
 import { easternLocalInputToIso, getEasternDateKey } from "@/lib/time";
 import { splitNotesAndCrew } from "@/lib/crew";
@@ -230,6 +231,28 @@ export async function getAvailableBoatIds(start: string, end: string, boatClassI
   // Keep deployments safe if the migration has not reached Supabase yet.
   const fallback = await getAvailableBoats(start, end, boatClassId);
   return fallback.map((boat) => boat.id);
+}
+
+export async function getUnavailableBoatWindows(start: string, end: string, boatClassId?: string) {
+  const { supabase } = await ensureProfile();
+  const startIso = easternLocalInputToIso(start);
+  const endIso = easternLocalInputToIso(end);
+
+  if (!startIso || !endIso) return [];
+
+  const { data, error } = await supabase.rpc("unavailable_boats_for_window", {
+    p_start_time: startIso,
+    p_end_time: endIso,
+    p_boat_class_id: boatClassId || null,
+  });
+
+  // The reservation search remains usable until the supporting migration is applied.
+  if (error) {
+    console.error("Could not load unavailable boat timing", error.message);
+    return [];
+  }
+
+  return (data ?? []) as UnavailableBoatWindow[];
 }
 
 export async function getBoatAvailabilityBlocks() {

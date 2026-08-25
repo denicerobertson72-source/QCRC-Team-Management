@@ -54,6 +54,12 @@ export type Reservation = {
   boats?: { name: string } | null;
 };
 
+export type UnavailableBoatWindow = {
+  boat_id: string;
+  reservation_status: "reserved" | "checked_out" | string;
+  expected_return_at: string;
+};
+
 export type PrivateBoatOuting = {
   id: string;
   member_id: string;

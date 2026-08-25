@@ -1,6 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { ReservationForm } from "@/components/ReservationForm";
-import { getAvailableBoatIds, getBoats, getMyProfileSummary } from "@/lib/queries";
+import { getAvailableBoatIds, getBoats, getMyProfileSummary, getUnavailableBoatWindows } from "@/lib/queries";
 import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { deriveReservationEndLocal } from "@/lib/reservations";
-import { formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/time";
+import { formatEasternDateTime, formatEasternLocalInput, nowEasternDateTimeLocalValue } from "@/lib/time";
 
 type ReserveSearchParams = Promise<{
   start?: string;
@@ -40,8 +40,9 @@ export default async function ReservePage({
     boatClassId ? `&boatClassId=${encodeURIComponent(boatClassId)}` : ""
   }${params.boatName ? `&boatName=${encodeURIComponent(params.boatName)}` : ""}${skillLevel ? `&skillLevel=${encodeURIComponent(skillLevel)}` : ""}${weightClass ? `&weightClass=${encodeURIComponent(weightClass)}` : ""}${onlyAvailable ? "&onlyAvailable=true" : ""}`;
 
-  const [availableBoatIds, allBoats, profile] = await Promise.all([
+  const [availableBoatIds, unavailableBoatWindows, allBoats, profile] = await Promise.all([
     getAvailableBoatIds(start, end ?? start, boatClassId || undefined),
+    getUnavailableBoatWindows(start, end ?? start, boatClassId || undefined),
     getBoats(),
     getMyProfileSummary(),
   ]);
@@ -58,6 +59,11 @@ export default async function ReservePage({
     return true;
   });
   const visibleBoats = onlyAvailable ? filteredBoats.filter((boat) => boat.status === "available" && availableIds.has(boat.id)) : filteredBoats;
+  const unavailableByBoatId = new Map(unavailableBoatWindows.map((window) => [window.boat_id, window]));
+  const unavailableBoats = filteredBoats.flatMap((boat) => {
+    const window = unavailableByBoatId.get(boat.id);
+    return window ? [{ boat, window }] : [];
+  });
 
   return (
     <>
@@ -164,6 +170,33 @@ export default async function ReservePage({
             );
           })}
         </div>
+
+        {unavailableBoats.length > 0 ? (
+          <section className="stack">
+            <div className="page-title">
+              <div>
+                <h3>Unavailable for this time</h3>
+                <p className="muted">These eligible boats overlap your selected rowing time.</p>
+              </div>
+            </div>
+            <div className="grid">
+              {unavailableBoats.map(({ boat, window }) => (
+                <Card key={boat.id} subtle className="stack">
+                  <div className="page-title">
+                    <div>
+                      <h3>{boat.name}</h3>
+                      <p className="muted">{boat.boat_class_id}</p>
+                    </div>
+                    <StatusChip label={window.reservation_status === "checked_out" ? "signed out" : "reserved"} kind="reserved" />
+                  </div>
+                  <p className="muted">
+                    {window.reservation_status === "checked_out" ? "Expected return" : "Reserved until"}: {formatEasternDateTime(window.expected_return_at)} ET
+                  </p>
+                </Card>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </main>
     </>
   );
