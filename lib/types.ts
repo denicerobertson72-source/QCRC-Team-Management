@@ -154,6 +154,29 @@ export type RowingMeetupAvailability = {
   end_time: string;
 };
 
+export type RowingMeetupCallInterest = {
+  id: string;
+  member_id: string;
+  full_name: string;
+  skill_level: string;
+  comment: string | null;
+  created_at: string;
+};
+
+export type RowingMeetupCall = {
+  id: string;
+  created_by: string;
+  creator_name: string;
+  creator_skill_level: string;
+  message: string;
+  starts_at: string;
+  ends_at: string;
+  launch_location: string | null;
+  boat_class_id: "any" | "1x" | "2x" | "4x" | string;
+  status: "open" | "closed" | string;
+  interests: RowingMeetupCallInterest[];
+};
+
 export type OverdueBoatAlert = {
   reservation_id: string;
   boat_name: string;

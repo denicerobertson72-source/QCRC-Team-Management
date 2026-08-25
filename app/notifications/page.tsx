@@ -27,6 +27,9 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "rowing_meetup_signup") {
     return "Rowing Meetup alert";
   }
+  if (notification.notification_type === "rowing_call_created") {
+    return "New rowing call";
+  }
   if (notification.notification_type === "team_announcement") {
     return String(notification.payload.title ?? "Team announcement");
   }
@@ -52,6 +55,9 @@ function notificationBody(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "rowing_meetup_signup") {
     return `${String(notification.payload.member_name ?? "A new rower")} joined Rowing Meetup. Open the meetup page to check their availability.`;
   }
+  if (notification.notification_type === "rowing_call_created") {
+    return `${String(notification.payload.message ?? "A Meetup member is looking for a row.")} Boat: ${String(notification.payload.boat_class_id ?? "any")}.`;
+  }
   if (notification.notification_type === "team_announcement") {
     return String(notification.payload.body ?? "A new team announcement was posted.");
   }
@@ -65,6 +71,7 @@ function notificationHref(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "lineup_published") return "/lineups";
   if (notification.notification_type === "boat_out_of_service") return "/reserve";
   if (notification.notification_type === "rowing_meetup_signup") return "/programs/meetup";
+  if (notification.notification_type === "rowing_call_created") return "/programs/meetup";
   if (notification.notification_type === "overdue_boat_alert") return "/reservations";
   if (notification.notification_type === "billing_reminder") return "/account/security";
   if (notification.notification_type === "session_cancelled") {

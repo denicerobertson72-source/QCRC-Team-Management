@@ -5,71 +5,25 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import {
-  addRowingMeetupAvailabilityAction,
-  removeRowingMeetupAvailabilityAction,
+  closeRowingMeetupCallAction,
+  createRowingMeetupCallAction,
+  removeRowingMeetupCallInterestAction,
+  saveRowingMeetupCallInterestAction,
   saveRowingMeetupMembershipAction,
-  addMeetupAnnouncementAction,
 } from "@/lib/actions";
-import { getActiveTeamAnnouncements, getRowingMeetupState } from "@/lib/queries";
+import { getActiveRowingMeetupCalls, getRowingMeetupState } from "@/lib/queries";
 import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
 
-type SearchParams = Promise<{ announcement_status?: string; announcement_message?: string }>;
+type SearchParams = Promise<{ call_status?: string; call_message?: string }>;
 
-const weekdayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const meetupTimeOptions = [
-  "5:00 AM",
-  "5:30 AM",
-  "6:00 AM",
-  "6:30 AM",
-  "7:00 AM",
-  "7:30 AM",
-  "8:00 AM",
-  "8:30 AM",
-  "9:00 AM",
-  "9:30 AM",
-  "10:00 AM",
-  "10:30 AM",
-  "11:00 AM",
-  "11:30 AM",
-  "12:00 PM",
-  "12:30 PM",
-  "1:00 PM",
-  "1:30 PM",
-  "2:00 PM",
-  "2:30 PM",
-  "3:00 PM",
-  "3:30 PM",
-  "4:00 PM",
-  "4:30 PM",
-  "5:00 PM",
-  "5:30 PM",
-  "6:00 PM",
-  "6:30 PM",
-  "7:00 PM",
-  "7:30 PM",
-  "8:00 PM",
-];
-
-function formatTimeLabel(value: string) {
-  const [hourRaw, minuteRaw] = value.split(":");
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw ?? "0");
-  const date = new Date(Date.UTC(2000, 0, 1, hour, minute));
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "UTC",
-  });
+function boatLabel(value: string) {
+  if (value === "any") return "Any boat";
+  return value;
 }
 
 export default async function RowingMeetupPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ myMembership, myAvailability, members, availabilityByMember }, announcements] = await Promise.all([
-    getRowingMeetupState(),
-    getActiveTeamAnnouncements(),
-  ]);
-  const meetupAnnouncements = announcements.filter((announcement) => announcement.audience_type === "meetup");
+  const [{ myMembership, members }, calls] = await Promise.all([getRowingMeetupState(), getActiveRowingMeetupCalls()]);
 
   return (
     <>
@@ -79,23 +33,24 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
           <span className="eyebrow">Programs</span>
           <PageTitle
             title="Rowing Meetup"
-            subtitle={`Opt in to connect with other rowers, share weekly availability, and receive alerts when new meetup members join. Current pool: ${members.length} rower${members.length === 1 ? "" : "s"}.`}
+            subtitle={`Find a partner or crew for a near-term row. Current pool: ${members.length} rower${members.length === 1 ? "" : "s"}.`}
           />
         </section>
 
-        {params.announcement_status && params.announcement_message ? (
-          <FlashNotice status={params.announcement_status === "success" ? "success" : "error"} message={params.announcement_message} />
+        {params.call_status && params.call_message ? (
+          <FlashNotice status={params.call_status === "success" ? "success" : "error"} message={params.call_message} />
         ) : null}
 
         <form action={saveRowingMeetupMembershipAction} className="card form-grid">
-          <h3>{myMembership ? "Update Meetup Profile" : "Join Rowing Meetup"}</h3>
+          <h3>{myMembership ? "My Meetup Profile" : "Join Rowing Meetup"}</h3>
+          <p className="muted">Your name, rowing level, and preferred boat types help other members find the right crew.</p>
           <Field label="Participation">
             <select name="joined" defaultValue={myMembership ? "true" : "false"}>
-              <option value="true">{myMembership ? "stay opted in" : "join meetup"}</option>
-              <option value="false">leave meetup</option>
+              <option value="true">{myMembership ? "stay opted in" : "join Meetup"}</option>
+              <option value="false">leave Meetup</option>
             </select>
           </Field>
-          <Field label="Skill Level">
+          <Field label="Rowing Level">
             <select name="skill_level" defaultValue={myMembership?.skill_level ?? "Beginner"}>
               <option value="Beginner">Beginner</option>
               <option value="Intermediate">Intermediate</option>
@@ -105,156 +60,114 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
           </Field>
           <Field label="Boat Preferences">
             <div className="row">
-              <label>
-                <input type="checkbox" name="wants_1x" value="true" defaultChecked={myMembership ? myMembership.wants_1x : false} /> 1x
-              </label>
-              <label>
-                <input type="checkbox" name="wants_2x" value="true" defaultChecked={myMembership ? myMembership.wants_2x : true} /> 2x
-              </label>
-              <label>
-                <input type="checkbox" name="wants_4x" value="true" defaultChecked={myMembership ? myMembership.wants_4x : true} /> 4x
-              </label>
+              <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={myMembership?.wants_1x ?? false} /> 1x</label>
+              <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={myMembership?.wants_2x ?? true} /> 2x</label>
+              <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={myMembership?.wants_4x ?? true} /> 4x</label>
             </div>
-          </Field>
-          <Field label="Notes (optional)">
-            <textarea
-              name="notes"
-              rows={3}
-              defaultValue={myMembership?.notes ?? ""}
-              placeholder="Anything helpful for matching, such as morning-only or prefers longer rows."
-            />
           </Field>
           <Button type="submit">{myMembership ? "Save Meetup Profile" : "Join Meetup"}</Button>
         </form>
 
         {myMembership ? (
           <>
-            <form action={addMeetupAnnouncementAction} className="card form-grid">
-              <h3>Message Meetup Members</h3>
-              <p className="muted">This announcement is visible only to current Rowing Meetup members.</p>
-              <Field label="Title">
-                <input name="title" placeholder="Looking for a partner Saturday morning" required />
+            <form action={createRowingMeetupCallAction} className="card form-grid">
+              <h3>Create a Rowing Call</h3>
+              <p className="muted">Calls automatically disappear once their end time passes. Current Meetup members receive a notification.</p>
+              <Field label="What are you looking for?">
+                <textarea name="message" rows={3} placeholder="Anyone want to row Sunday morning?" required maxLength={500} />
               </Field>
-              <Field label="Message">
-                <textarea name="body" rows={3} required />
+              <Field label="Start time">
+                <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} required />
               </Field>
-              <Field label="Show starting">
-                <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} />
+              <Field label="End time">
+                <input name="ends_at" type="datetime-local" required />
               </Field>
-              <Field label="Optional end time">
-                <input name="ends_at" type="datetime-local" />
+              <Field label="Launch location (optional)">
+                <input name="launch_location" placeholder="Ohio River" maxLength={100} />
               </Field>
-              <label className="member-checkbox-row">
-                <input name="send_push" type="checkbox" />
-                <span>Send push notification to Meetup members</span>
-              </label>
-              <Button type="submit">Post Meetup Announcement</Button>
+              <Field label="Boat preference">
+                <select name="boat_class_id" defaultValue="any">
+                  <option value="any">Any boat</option>
+                  <option value="1x">1x</option>
+                  <option value="2x">2x</option>
+                  <option value="4x">4x</option>
+                </select>
+              </Field>
+              <Button type="submit">Post Rowing Call</Button>
             </form>
 
-            <Card className="stack">
-              <h3>Meetup Announcements</h3>
-              {meetupAnnouncements.length === 0 ? <p className="muted">No Meetup announcements yet.</p> : null}
-              {meetupAnnouncements.map((announcement) => (
-                <Card key={announcement.id} subtle className="stack">
-                  <h4>{announcement.title}</h4>
-                  <p className="muted">Posted {formatEasternDateTime(announcement.created_at)} ET</p>
-                  <div className="announcement-body">{announcement.body}</div>
-                </Card>
-              ))}
-            </Card>
-
-            <Card className="stack">
-            <h3>My Availability</h3>
-            <form action={addRowingMeetupAvailabilityAction} className="form-grid">
-              <div className="row">
-                <Field label="Weekday">
-                  <select name="weekday" defaultValue="1">
-                    {weekdayLabels.map((label, index) => (
-                      <option key={label} value={index}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Start Time">
-                  <div className="stack" style={{ gap: "0.55rem" }}>
-                    <select name="start_time_preset" defaultValue="7:00 AM">
-                      {meetupTimeOptions.map((option) => (
-                        <option key={`start-${option}`} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <input name="start_time" placeholder="Or type a custom time" autoComplete="off" />
-                  </div>
-                </Field>
-                <Field label="End Time">
-                  <div className="stack" style={{ gap: "0.55rem" }}>
-                    <select name="end_time_preset" defaultValue="8:30 AM">
-                      {meetupTimeOptions.map((option) => (
-                        <option key={`end-${option}`} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    <input name="end_time" placeholder="Or type a custom time" autoComplete="off" />
-                  </div>
-                </Field>
+            <section className="stack">
+              <div className="page-title">
+                <h3>Upcoming Rowing Calls</h3>
+                <span className="muted">Only current calls are shown.</span>
               </div>
-              <p className="muted">Use the dropdowns as-is, or type a custom time like 6, 6:30, 6am, or 6:30pm.</p>
-              <Button type="submit" variant="secondary">
-                Add Availability Slot
-              </Button>
-            </form>
-
-            <div className="stack">
-              {myAvailability.length === 0 ? <p className="muted">No availability added yet.</p> : null}
-              {myAvailability.map((slot) => (
-                <Card key={slot.id} subtle className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <span>
-                    {weekdayLabels[slot.weekday]} | {formatTimeLabel(slot.start_time)} - {formatTimeLabel(slot.end_time)}
-                  </span>
-                  <form action={removeRowingMeetupAvailabilityAction}>
-                    <input type="hidden" name="slot_id" value={slot.id} />
-                    <Button type="submit" variant="secondary">
-                      Remove
-                    </Button>
-                  </form>
-                </Card>
-              ))}
-            </div>
-            </Card>
+              {calls.length === 0 ? <Card subtle>No active rowing calls right now.</Card> : null}
+              {calls.map((call) => {
+                const myInterest = call.interests.find((interest) => interest.member_id === myMembership.member_id) ?? null;
+                const isCreator = call.created_by === myMembership.member_id;
+                return (
+                  <Card key={call.id} className="stack">
+                    <div className="page-title">
+                      <div>
+                        <h3>{call.message}</h3>
+                        <p className="muted">Posted by {call.creator_name} · {call.creator_skill_level}</p>
+                      </div>
+                      <strong>{boatLabel(call.boat_class_id)}</strong>
+                    </div>
+                    <p className="muted">
+                      {formatEasternDateTime(call.starts_at)}–{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeStyle: "short" }).format(new Date(call.ends_at))} ET
+                      {call.launch_location ? ` · ${call.launch_location}` : ""}
+                    </p>
+                    <div className="stack">
+                      <strong>Interested Rowers ({call.interests.length})</strong>
+                      {call.interests.length === 0 ? <p className="muted">No responses yet.</p> : null}
+                      {call.interests.map((interest) => (
+                        <p key={interest.id} className="muted">
+                          {interest.full_name} · {interest.skill_level}{interest.comment ? ` — ${interest.comment}` : ""}
+                        </p>
+                      ))}
+                    </div>
+                    {!isCreator ? (
+                      <div className="stack">
+                        <form action={saveRowingMeetupCallInterestAction} className="stack">
+                          <input type="hidden" name="call_id" value={call.id} />
+                          <Field label={myInterest ? "Update your response" : "Interested? Add an optional note"}>
+                            <input name="comment" defaultValue={myInterest?.comment ?? ""} placeholder="I can make it after 8:15." maxLength={300} />
+                          </Field>
+                          <Button type="submit">{myInterest ? "Update Interest" : "I’m Interested"}</Button>
+                        </form>
+                        {myInterest ? (
+                          <form action={removeRowingMeetupCallInterestAction}>
+                            <input type="hidden" name="call_id" value={call.id} />
+                            <Button type="submit" variant="secondary">Remove Interest</Button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <form action={closeRowingMeetupCallAction}>
+                        <input type="hidden" name="call_id" value={call.id} />
+                        <Button type="submit" variant="secondary">Close Call</Button>
+                      </form>
+                    )}
+                  </Card>
+                );
+              })}
+            </section>
           </>
         ) : null}
 
         <Card className="stack">
           <h3>Meetup Roster</h3>
-          {members.length === 0 ? <p className="muted">No one has joined the meetup yet.</p> : null}
-          <div className="stack">
-            {members.map((member) => (
-              <Card key={member.member_id} subtle className="stack">
-                <div className="page-title">
-                  <h4>{member.full_name}</h4>
-                  <span className="muted">{member.skill_level}</span>
-                </div>
-                <p className="muted">
-                  Boat preferences: {[member.wants_1x ? "1x" : null, member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}
-                </p>
-                {member.notes ? <p>{member.notes}</p> : null}
-                <div className="stack" style={{ gap: "0.4rem" }}>
-                  {(availabilityByMember[member.member_id] ?? []).length === 0 ? (
-                    <p className="muted">No availability posted yet.</p>
-                  ) : (
-                    (availabilityByMember[member.member_id] ?? []).map((slot) => (
-                      <span key={slot.id} className="muted">
-                        {weekdayLabels[slot.weekday]} | {formatTimeLabel(slot.start_time)} - {formatTimeLabel(slot.end_time)}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
+          {members.length === 0 ? <p className="muted">No one has joined Meetup yet.</p> : null}
+          {members.map((member) => (
+            <Card key={member.member_id} subtle className="stack">
+              <div className="page-title">
+                <h4>{member.full_name}</h4>
+                <span className="muted">{member.skill_level}</span>
+              </div>
+              <p className="muted">Boat preferences: {[member.wants_1x ? "1x" : null, member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}</p>
+            </Card>
+          ))}
         </Card>
       </main>
     </>

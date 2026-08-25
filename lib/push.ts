@@ -31,6 +31,12 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
       return { title: "Billing reminder", body: `Reminder for ${String(payload.category ?? "billing")} due on ${String(payload.renewal_date ?? "")}.`, url: "/account/security" };
     case "rowing_meetup_signup":
       return { title: "Rowing Meetup alert", body: `${String(payload.member_name ?? "A new rower")} joined Rowing Meetup.`, url: "/programs/meetup" };
+    case "rowing_call_created":
+      return {
+        title: "New rowing call",
+        body: `${String(payload.message ?? "A Meetup member is looking for a row.")} Boat: ${String(payload.boat_class_id ?? "any")}.`,
+        url: "/programs/meetup",
+      };
     case "team_announcement":
       return { title: String(payload.title ?? "Team announcement"), body: String(payload.body ?? "A new team announcement was posted."), url: "/" };
     case "damage_report_submitted":

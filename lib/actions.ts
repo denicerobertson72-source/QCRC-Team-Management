@@ -2358,6 +2358,122 @@ export async function removeRowingMeetupAvailabilityAction(formData: FormData) {
   revalidatePath("/programs/meetup");
 }
 
+async function requireRowingMeetupMember() {
+  const { supabase, user } = await ensureProfile();
+  const { data: membership, error } = await supabase
+    .from("rowing_meetup_members")
+    .select("member_id")
+    .eq("member_id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!membership) throw new Error("Join Rowing Meetup before posting or responding to a rowing call.");
+  return { supabase, user };
+}
+
+export async function createRowingMeetupCallAction(formData: FormData) {
+  const { supabase, user } = await requireRowingMeetupMember();
+  const message = String(formData.get("message") ?? "").trim();
+  const startsAt = String(formData.get("starts_at") ?? "").trim();
+  const endsAt = String(formData.get("ends_at") ?? "").trim();
+  const launchLocation = String(formData.get("launch_location") ?? "").trim();
+  const boatClassId = String(formData.get("boat_class_id") ?? "any");
+  if (!message || !startsAt || !endsAt) throw new Error("A message, start time, and end time are required.");
+  if (!["any", "1x", "2x", "4x"].includes(boatClassId)) throw new Error("Choose a valid boat preference.");
+
+  const startsAtIso = easternLocalInputToIso(startsAt);
+  const endsAtIso = easternLocalInputToIso(endsAt);
+  if (!startsAtIso || !endsAtIso) throw new Error("Enter valid start and end times.");
+  if (new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) throw new Error("The call must end after it starts.");
+
+  const { data: call, error } = await supabase
+    .from("rowing_meetup_calls")
+    .insert({
+      created_by: user.id,
+      message,
+      starts_at: startsAtIso,
+      ends_at: endsAtIso,
+      launch_location: launchLocation || null,
+      boat_class_id: boatClassId,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  // A new call is a short-term Meetup alert, while the call record remains the source of truth.
+  try {
+    const admin = createAdminClient();
+    const { data: membershipRows, error: membershipError } = await admin
+      .from("rowing_meetup_members")
+      .select("member_id")
+      .neq("member_id", user.id);
+    if (membershipError) throw membershipError;
+    const candidateIds = [...new Set((membershipRows ?? []).map((row) => row.member_id))];
+    const { data: activeProfiles, error: activeError } = candidateIds.length
+      ? await admin.from("profiles").select("id").eq("status", "active").in("id", candidateIds)
+      : { data: [], error: null };
+    if (activeError) throw activeError;
+    const recipientIds = (activeProfiles ?? []).map((profile) => profile.id);
+    if (recipientIds.length > 0) {
+      const payload = { message, starts_at: startsAtIso, boat_class_id: boatClassId, call_id: call.id };
+      const { error: notificationError } = await admin.from("notification_events").insert(
+        recipientIds.map((memberId) => ({
+          notification_key: `rowing-call:${call.id}:${memberId}`,
+          notification_type: "rowing_call_created",
+          member_id: memberId,
+          payload,
+        })),
+      );
+      if (notificationError) throw notificationError;
+      await sendPushNotifications(recipientIds, "rowing_call_created", payload);
+    }
+  } catch (notificationError) {
+    console.error("Could not notify Meetup members about a rowing call", {
+      message: notificationError instanceof Error ? notificationError.message : "Unknown error",
+    });
+  }
+
+  revalidatePath("/programs/meetup");
+  revalidatePath("/notifications");
+  redirect("/programs/meetup?call_status=success&call_message=Your%20rowing%20call%20is%20live.");
+}
+
+export async function saveRowingMeetupCallInterestAction(formData: FormData) {
+  const { supabase, user } = await requireRowingMeetupMember();
+  const callId = String(formData.get("call_id") ?? "");
+  const comment = String(formData.get("comment") ?? "").trim();
+  if (!callId) throw new Error("Rowing call not found.");
+  const { error } = await supabase.from("rowing_meetup_call_interests").upsert(
+    { call_id: callId, member_id: user.id, comment: comment || null },
+    { onConflict: "call_id,member_id" },
+  );
+  if (error) throw error;
+  revalidatePath("/programs/meetup");
+}
+
+export async function removeRowingMeetupCallInterestAction(formData: FormData) {
+  const { supabase, user } = await requireRowingMeetupMember();
+  const callId = String(formData.get("call_id") ?? "");
+  const { error } = await supabase
+    .from("rowing_meetup_call_interests")
+    .delete()
+    .eq("call_id", callId)
+    .eq("member_id", user.id);
+  if (error) throw error;
+  revalidatePath("/programs/meetup");
+}
+
+export async function closeRowingMeetupCallAction(formData: FormData) {
+  const { supabase, user } = await requireRowingMeetupMember();
+  const callId = String(formData.get("call_id") ?? "");
+  const { error } = await supabase
+    .from("rowing_meetup_calls")
+    .update({ status: "closed" })
+    .eq("id", callId)
+    .eq("created_by", user.id);
+  if (error) throw error;
+  revalidatePath("/programs/meetup");
+}
+
 export async function addRaceEventAdminAction(formData: FormData) {
   const { supabase, user } = await assertAdmin();
   const title = String(formData.get("title") ?? "");

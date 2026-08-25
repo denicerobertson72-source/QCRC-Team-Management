@@ -10,7 +10,7 @@ import type {
   ProfileSummary,
   ProgramSession,
   Reservation,
-  RowingMeetupAvailability,
+  RowingMeetupCall,
   RowingMeetupMember,
   SafetyEntry,
   SafetyResource,
@@ -711,27 +711,20 @@ export async function getPublishedSafetyResources() {
 export async function getRowingMeetupState() {
   const { supabase, user } = await ensureProfile();
 
-  const [{ data: myMembership, error: membershipError }, { data: allMembers, error: membersError }, { data: slots, error: slotsError }] =
-    await Promise.all([
-      supabase
-        .from("rowing_meetup_members")
-        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
-        .eq("member_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("rowing_meetup_members")
-        .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("rowing_meetup_availability")
-        .select("id, member_id, weekday, start_time, end_time")
-        .order("weekday", { ascending: true })
-        .order("start_time", { ascending: true }),
-    ]);
+  const [{ data: myMembership, error: membershipError }, { data: allMembers, error: membersError }] = await Promise.all([
+    supabase
+      .from("rowing_meetup_members")
+      .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
+      .eq("member_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("rowing_meetup_members")
+      .select("member_id, skill_level, wants_1x, wants_2x, wants_4x, notes, created_at")
+      .order("created_at", { ascending: true }),
+  ]);
 
   if (membershipError) throw membershipError;
   if (membersError) throw membersError;
-  if (slotsError) throw slotsError;
   const profileNamesById = await getProfileNamesById((allMembers ?? []).map((row: any) => row.member_id));
 
   const members: RowingMeetupMember[] = (allMembers ?? []).map((row: any) => {
@@ -747,9 +740,6 @@ export async function getRowingMeetupState() {
     };
   });
 
-  const availability = (slots ?? []) as RowingMeetupAvailability[];
-  const myAvailability = availability.filter((slot) => slot.member_id === user.id);
-
   return {
     myMembership: myMembership
       ? {
@@ -762,11 +752,54 @@ export async function getRowingMeetupState() {
           created_at: myMembership.created_at,
         }
       : null,
-    myAvailability,
     members,
-    availabilityByMember: availability.reduce<Record<string, RowingMeetupAvailability[]>>((acc, slot) => {
-      acc[slot.member_id] = [...(acc[slot.member_id] ?? []), slot];
-      return acc;
-    }, {}),
   };
+}
+
+export async function getActiveRowingMeetupCalls() {
+  const { supabase } = await ensureProfile();
+  const nowIso = new Date().toISOString();
+  const { data: callRows, error: callError } = await supabase
+    .from("rowing_meetup_calls")
+    .select("id, created_by, message, starts_at, ends_at, launch_location, boat_class_id, status")
+    .eq("status", "open")
+    .gte("ends_at", nowIso)
+    .order("starts_at", { ascending: true });
+  if (callError) throw callError;
+
+  const callIds = (callRows ?? []).map((call) => call.id);
+  const { data: interestRows, error: interestError } = callIds.length
+    ? await supabase
+        .from("rowing_meetup_call_interests")
+        .select("id, call_id, member_id, comment, created_at")
+        .in("call_id", callIds)
+        .order("created_at", { ascending: true })
+    : { data: [], error: null };
+  if (interestError) throw interestError;
+
+  const { data: memberRows, error: membersError } = await supabase
+    .from("rowing_meetup_members")
+    .select("member_id, skill_level");
+  if (membersError) throw membersError;
+  const skillByMemberId = new Map((memberRows ?? []).map((member) => [member.member_id, member.skill_level]));
+  const profileNamesById = await getProfileNamesById([
+    ...(callRows ?? []).map((call) => call.created_by),
+    ...(interestRows ?? []).map((interest) => interest.member_id),
+  ]);
+
+  return (callRows ?? []).map((call) => ({
+    ...call,
+    creator_name: profileNamesById.get(call.created_by) ?? "Unknown",
+    creator_skill_level: skillByMemberId.get(call.created_by) ?? "Meetup member",
+    interests: (interestRows ?? [])
+      .filter((interest) => interest.call_id === call.id)
+      .map((interest) => ({
+        id: interest.id,
+        member_id: interest.member_id,
+        full_name: profileNamesById.get(interest.member_id) ?? "Unknown",
+        skill_level: skillByMemberId.get(interest.member_id) ?? "Meetup member",
+        comment: interest.comment,
+        created_at: interest.created_at,
+      })),
+  })) as RowingMeetupCall[];
 }
