@@ -79,15 +79,8 @@ export function PwaExperience() {
       void registration.update().catch(() => undefined);
 
       const updateDismissed = window.sessionStorage.getItem(UPDATE_DISMISSED_KEY) === "true";
-      const shouldAutoApply = isStandaloneMode();
-
       const maybePromptForUpdate = (worker: ServiceWorker | null) => {
         if (!worker) {
-          return;
-        }
-        if (shouldAutoApply) {
-          setWaitingWorker(worker);
-          worker.postMessage({ type: "SKIP_WAITING" });
           return;
         }
         if (updateDismissed) {

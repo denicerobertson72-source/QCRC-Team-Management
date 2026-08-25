@@ -1,4 +1,4 @@
-const CACHE_VERSION = "qcrc-pwa-v6";
+const CACHE_VERSION = "qcrc-pwa-v7";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
