@@ -41,60 +41,75 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
           <FlashNotice status={params.call_status === "success" ? "success" : "error"} message={params.call_message} />
         ) : null}
 
-        <form action={saveRowingMeetupMembershipAction} className="card form-grid">
-          <h3>{myMembership ? "My Meetup Profile" : "Join Rowing Meetup"}</h3>
-          <p className="muted">Your name, rowing level, and preferred boat types help other members find the right crew.</p>
-          <Field label="Participation">
-            <select name="joined" defaultValue={myMembership ? "true" : "false"}>
-              <option value="true">{myMembership ? "stay opted in" : "join Meetup"}</option>
-              <option value="false">leave Meetup</option>
-            </select>
-          </Field>
-          <Field label="Rowing Level">
-            <select name="skill_level" defaultValue={myMembership?.skill_level ?? "Beginner"}>
-              <option value="Beginner">Beginner</option>
-              <option value="Intermediate">Intermediate</option>
-              <option value="Advanced">Advanced</option>
-              <option value="Elite">Elite</option>
-            </select>
-          </Field>
-          <Field label="Boat Preferences">
-            <div className="row">
-              <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={myMembership?.wants_1x ?? false} /> 1x</label>
-              <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={myMembership?.wants_2x ?? true} /> 2x</label>
-              <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={myMembership?.wants_4x ?? true} /> 4x</label>
+        <details className="card meetup-collapsible">
+          <summary className="meetup-summary">
+            <div>
+              <h3>{myMembership ? "My Meetup Profile" : "Join Rowing Meetup"}</h3>
+              <p className="muted">{myMembership ? `${myMembership.skill_level} · Update your preferences or leave Meetup.` : "Set your rowing level and boat preferences to join."}</p>
             </div>
-          </Field>
-          <Button type="submit">{myMembership ? "Save Meetup Profile" : "Join Meetup"}</Button>
-        </form>
+            <span className="member-summary-hint">Expand</span>
+          </summary>
+          <form action={saveRowingMeetupMembershipAction} className="meetup-details form-grid">
+            <Field label="Participation">
+              <select name="joined" defaultValue={myMembership ? "true" : "false"}>
+                <option value="true">{myMembership ? "stay opted in" : "join Meetup"}</option>
+                <option value="false">leave Meetup</option>
+              </select>
+            </Field>
+            <Field label="Rowing Level">
+              <select name="skill_level" defaultValue={myMembership?.skill_level ?? "Beginner"}>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+                <option value="Elite">Elite</option>
+              </select>
+            </Field>
+            <Field label="Boat Preferences">
+              <div className="row">
+                <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={myMembership?.wants_1x ?? false} /> 1x</label>
+                <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={myMembership?.wants_2x ?? true} /> 2x</label>
+                <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={myMembership?.wants_4x ?? true} /> 4x</label>
+              </div>
+            </Field>
+            <Button type="submit">{myMembership ? "Save Meetup Profile" : "Join Meetup"}</Button>
+          </form>
+        </details>
 
         {myMembership ? (
           <>
-            <form action={createRowingMeetupCallAction} className="card form-grid">
-              <h3>Create a Rowing Call</h3>
-              <p className="muted">Calls automatically disappear once their end time passes. Current Meetup members receive a notification.</p>
-              <Field label="What are you looking for?">
-                <textarea name="message" rows={3} placeholder="Anyone want to row Sunday morning?" required maxLength={500} />
-              </Field>
-              <Field label="Start time">
-                <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} required />
-              </Field>
-              <Field label="End time">
-                <input name="ends_at" type="datetime-local" required />
-              </Field>
-              <Field label="Launch location (optional)">
-                <input name="launch_location" placeholder="Ohio River" maxLength={100} />
-              </Field>
-              <Field label="Boat preference">
-                <select name="boat_class_id" defaultValue="any">
-                  <option value="any">Any boat</option>
-                  <option value="1x">1x</option>
-                  <option value="2x">2x</option>
-                  <option value="4x">4x</option>
-                </select>
-              </Field>
-              <Button type="submit">Post Rowing Call</Button>
-            </form>
+            <details className="card meetup-collapsible">
+              <summary className="meetup-summary">
+                <div>
+                  <h3>Create a Rowing Call</h3>
+                  <p className="muted">Ask current Meetup members to join a near-term row.</p>
+                </div>
+                <span className="member-summary-hint">Expand</span>
+              </summary>
+              <form action={createRowingMeetupCallAction} className="meetup-details form-grid">
+                <p className="muted">Calls automatically disappear once their end time passes. Current Meetup members receive a notification.</p>
+                <Field label="What are you looking for?">
+                  <textarea name="message" rows={3} placeholder="Anyone want to row Sunday morning?" required maxLength={500} />
+                </Field>
+                <Field label="Start time">
+                  <input name="starts_at" type="datetime-local" defaultValue={nowEasternDateTimeLocalValue()} required />
+                </Field>
+                <Field label="End time">
+                  <input name="ends_at" type="datetime-local" required />
+                </Field>
+                <Field label="Launch location (optional)">
+                  <input name="launch_location" placeholder="Ohio River" maxLength={100} />
+                </Field>
+                <Field label="Boat preference">
+                  <select name="boat_class_id" defaultValue="any">
+                    <option value="any">Any boat</option>
+                    <option value="1x">1x</option>
+                    <option value="2x">2x</option>
+                    <option value="4x">4x</option>
+                  </select>
+                </Field>
+                <Button type="submit">Post Rowing Call</Button>
+              </form>
+            </details>
 
             <section className="stack">
               <div className="page-title">
@@ -128,21 +143,35 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
                       ))}
                     </div>
                     {!isCreator ? (
-                      <div className="stack">
+                      myInterest ? (
+                        <details className="card-subtle meetup-response-editor">
+                          <summary>
+                            <strong>You’re interested</strong>
+                            <span className="member-summary-hint">Edit response</span>
+                          </summary>
+                          <div className="meetup-details stack">
+                            <form action={saveRowingMeetupCallInterestAction} className="stack">
+                              <input type="hidden" name="call_id" value={call.id} />
+                              <Field label="Update your response">
+                                <input name="comment" defaultValue={myInterest.comment ?? ""} placeholder="I can make it after 8:15." maxLength={300} />
+                              </Field>
+                              <Button type="submit">Save Updated Response</Button>
+                            </form>
+                            <form action={removeRowingMeetupCallInterestAction}>
+                              <input type="hidden" name="call_id" value={call.id} />
+                              <Button type="submit" variant="secondary">Remove Interest</Button>
+                            </form>
+                          </div>
+                        </details>
+                      ) : (
                         <form action={saveRowingMeetupCallInterestAction} className="stack">
                           <input type="hidden" name="call_id" value={call.id} />
-                          <Field label={myInterest ? "Update your response" : "Interested? Add an optional note"}>
-                            <input name="comment" defaultValue={myInterest?.comment ?? ""} placeholder="I can make it after 8:15." maxLength={300} />
+                          <Field label="Interested? Add an optional note">
+                            <input name="comment" placeholder="I can make it after 8:15." maxLength={300} />
                           </Field>
-                          <Button type="submit">{myInterest ? "Update Interest" : "I’m Interested"}</Button>
+                          <Button type="submit">I’m Interested</Button>
                         </form>
-                        {myInterest ? (
-                          <form action={removeRowingMeetupCallInterestAction}>
-                            <input type="hidden" name="call_id" value={call.id} />
-                            <Button type="submit" variant="secondary">Remove Interest</Button>
-                          </form>
-                        ) : null}
-                      </div>
+                      )
                     ) : (
                       <form action={closeRowingMeetupCallAction}>
                         <input type="hidden" name="call_id" value={call.id} />
@@ -156,19 +185,27 @@ export default async function RowingMeetupPage({ searchParams }: { searchParams:
           </>
         ) : null}
 
-        <Card className="stack">
-          <h3>Meetup Roster</h3>
-          {members.length === 0 ? <p className="muted">No one has joined Meetup yet.</p> : null}
-          {members.map((member) => (
-            <Card key={member.member_id} subtle className="stack">
-              <div className="page-title">
-                <h4>{member.full_name}</h4>
-                <span className="muted">{member.skill_level}</span>
-              </div>
-              <p className="muted">Boat preferences: {[member.wants_1x ? "1x" : null, member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}</p>
-            </Card>
-          ))}
-        </Card>
+        <details className="card meetup-collapsible">
+          <summary className="meetup-summary">
+            <div>
+              <h3>Meetup Roster</h3>
+              <p className="muted">{members.length} current Meetup member{members.length === 1 ? "" : "s"}.</p>
+            </div>
+            <span className="member-summary-hint">Expand</span>
+          </summary>
+          <div className="meetup-details stack">
+            {members.length === 0 ? <p className="muted">No one has joined Meetup yet.</p> : null}
+            {members.map((member) => (
+              <Card key={member.member_id} subtle className="stack">
+                <div className="page-title">
+                  <h4>{member.full_name}</h4>
+                  <span className="muted">{member.skill_level}</span>
+                </div>
+                <p className="muted">Boat preferences: {[member.wants_1x ? "1x" : null, member.wants_2x ? "2x" : null, member.wants_4x ? "4x" : null].filter(Boolean).join(", ") || "none set"}</p>
+              </Card>
+            ))}
+          </div>
+        </details>
       </main>
     </>
   );

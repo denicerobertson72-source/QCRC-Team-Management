@@ -573,6 +573,41 @@ a:hover {
   border-top: 1px solid var(--line);
 }
 
+.meetup-collapsible {
+  display: grid;
+  gap: 0;
+}
+
+.meetup-collapsible summary,
+.meetup-response-editor summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.meetup-collapsible summary::-webkit-details-marker,
+.meetup-response-editor summary::-webkit-details-marker {
+  display: none;
+}
+
+.meetup-summary,
+.meetup-response-editor summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.meetup-summary > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.meetup-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
 .lineup-unassigned-list {
   align-items: stretch;
 }
