@@ -197,13 +197,16 @@ export function LineupBuilder({
               </select>
             </div>
           </div>
-          <div className="stack">
-            {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").map((boat) => (
-              <label key={boat.id}><input type="checkbox" name="boat_ids" value={boat.id} /> {boat.name}</label>
-            ))}
-            {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").length === 0 ? <p className="muted">No available fleet boats of this size.</p> : null}
-            {newBoatClass === "1x" ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
-          </div>
+          <details className="card-subtle lineup-fleet-picker">
+            <summary>Choose available {newBoatClass} boats</summary>
+            <div className="stack lineup-fleet-picker-options">
+              {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").map((boat) => (
+                <label key={boat.id}><input type="checkbox" name="boat_ids" value={boat.id} /> {boat.name}</label>
+              ))}
+              {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").length === 0 ? <p className="muted">No available fleet boats of this size.</p> : null}
+              {newBoatClass === "1x" ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
+            </div>
+          </details>
           <Button type="submit">Add Selected Boats</Button>
         </form>
       ) : null}

@@ -652,6 +652,15 @@ a:hover {
   font-weight: 700;
 }
 
+.lineup-fleet-picker summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lineup-fleet-picker-options {
+  margin-top: 0.8rem;
+}
+
 .lineup-top-actions {
   display: grid;
   gap: 0.85rem;
