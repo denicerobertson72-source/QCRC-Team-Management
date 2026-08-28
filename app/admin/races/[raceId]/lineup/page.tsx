@@ -64,6 +64,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
 
   const detail = await getLineupBoardDetail(board.id);
   const roster = await getRosterForBoard("racing", race.id);
+  const { data: fleetBoats } = await supabase.from("boats").select("id, name, boat_class_id, status").order("boat_class_id").order("name");
 
   return (
     <>
@@ -88,6 +89,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             isPublished={detail.board.is_published}
             allowMultiSeat
             returnTo={returnTo}
+            fleetBoats={fleetBoats ?? []}
           />
 
           <div className="stack lineup-race-times">

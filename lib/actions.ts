@@ -2657,6 +2657,7 @@ export async function createLineupBoardAdminAction(formData: FormData) {
 }
 
 function seatCountFromClass(boatClassId: string) {
+  if (boatClassId === "8x") return 8;
   if (boatClassId === "2x") return 2;
   if (boatClassId === "4x") return 4;
   return 1;
@@ -2665,9 +2666,19 @@ function seatCountFromClass(boatClassId: string) {
 export async function addLineupBoatAdminAction(formData: FormData) {
   const { supabase } = await assertAdmin();
   const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
-  const boatName = String(formData.get("boat_name") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "4x");
+  const boatIds = formData.getAll("boat_ids").map(String).filter(Boolean);
+  const includePrivateBoat = String(formData.get("private_boat") ?? "false") === "true";
   const returnTo = String(formData.get("return_to") ?? "");
+  if (boatIds.length === 0 && !(boatClassId === "1x" && includePrivateBoat)) throw new Error("Select at least one boat.");
+
+  const { data: fleetBoats, error: fleetError } = boatIds.length
+    ? await supabase.from("boats").select("id, name, boat_class_id, status").in("id", boatIds)
+    : { data: [], error: null };
+  if (fleetError) throw fleetError;
+  const selectedBoats = (fleetBoats ?? []).filter((boat) => boat.boat_class_id === boatClassId && boat.status === "available");
+  if (selectedBoats.length !== boatIds.length) throw new Error("One or more selected fleet boats are unavailable or do not match that boat size.");
+  const entries = [...selectedBoats.map((boat) => ({ boat_name: boat.name, boat_class_id: boat.boat_class_id, fleet_boat_id: boat.id })), ...(includePrivateBoat ? [{ boat_name: "Private boat", boat_class_id: "1x", fleet_boat_id: null }] : [])];
 
   const { data: existingBoats, error: existingError } = await supabase
     .from("lineup_boats")
@@ -2676,26 +2687,14 @@ export async function addLineupBoatAdminAction(formData: FormData) {
     .order("sort_order", { ascending: true })
     .limit(1);
   if (existingError) throw existingError;
-  const nextSortOrder = (existingBoats?.[0]?.sort_order ?? 0) - 1;
+  const nextSortOrder = (existingBoats?.[0]?.sort_order ?? 0) - entries.length;
 
   const { data, error } = await supabase
     .from("lineup_boats")
-    .insert({
-      lineup_board_id: lineupBoardId,
-      boat_name: boatName,
-      boat_class_id: boatClassId,
-      sort_order: nextSortOrder,
-    })
-    .select("id")
-    .single();
+    .insert(entries.map((entry, index) => ({ lineup_board_id: lineupBoardId, ...entry, sort_order: nextSortOrder + index })))
+    .select("id, boat_class_id");
   if (error) throw error;
-
-  const seatCount = seatCountFromClass(boatClassId);
-  const seatRows = Array.from({ length: seatCount }, (_, idx) => ({
-    lineup_boat_id: data.id,
-    seat_number: idx + 1,
-    member_id: null as string | null,
-  }));
+  const seatRows = (data ?? []).flatMap((boat) => Array.from({ length: seatCountFromClass(boat.boat_class_id) }, (_, idx) => ({ lineup_boat_id: boat.id, seat_number: idx + 1, member_id: null as string | null })));
 
   const { error: seatError } = await supabase.from("lineup_seats").insert(seatRows);
   if (seatError) throw seatError;

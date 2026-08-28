@@ -21,6 +21,7 @@ type Boat = {
   boat_class_id: string;
   seats: Seat[];
 };
+type FleetBoat = { id: string; name: string; boat_class_id: string; status: string };
 
 function seatLabel(boatClassId: string, seatNumber: number) {
   if (boatClassId === "1x") return "Sculler";
@@ -57,6 +58,7 @@ export function LineupBuilder({
   isPublished = false,
   allowMultiSeat = false,
   returnTo,
+  fleetBoats = [],
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -69,8 +71,10 @@ export function LineupBuilder({
   isPublished?: boolean;
   allowMultiSeat?: boolean;
   returnTo?: string;
+  fleetBoats?: FleetBoat[];
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
+  const [newBoatClass, setNewBoatClass] = useState("4x");
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -181,22 +185,26 @@ export function LineupBuilder({
         <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-          <h3>Add Boat</h3>
+          <h3>Add Fleet Boats</h3>
           <div className="lineup-add-boat-fields">
             <div>
-              <label className="field-label">Boat Name</label>
-              <input name="boat_name" required />
-            </div>
-            <div>
-              <label className="field-label">Class</label>
-              <select name="boat_class_id" defaultValue="4x">
+              <label className="field-label">Boat size</label>
+              <select name="boat_class_id" value={newBoatClass} onChange={(event) => setNewBoatClass(event.target.value)}>
                 <option value="1x">1x</option>
                 <option value="2x">2x</option>
                 <option value="4x">4x</option>
+                <option value="8x">8x</option>
               </select>
             </div>
           </div>
-          <Button type="submit">Add Boat</Button>
+          <div className="stack">
+            {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").map((boat) => (
+              <label key={boat.id}><input type="checkbox" name="boat_ids" value={boat.id} /> {boat.name}</label>
+            ))}
+            {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").length === 0 ? <p className="muted">No available fleet boats of this size.</p> : null}
+            {newBoatClass === "1x" ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
+          </div>
+          <Button type="submit">Add Selected Boats</Button>
         </form>
       ) : null}
 

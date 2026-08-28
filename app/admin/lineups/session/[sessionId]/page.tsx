@@ -30,7 +30,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, title, starts_at, session_type")
+    .select("id, title, starts_at, ends_at, session_type")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -73,6 +73,16 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
 
   const detail = await getLineupBoardDetail(board.id);
   const roster = await getRosterForBoard(boardType, undefined, session.id);
+  const [{ data: fleetBoats }, { data: conflictingReservations }] = await Promise.all([
+    supabase.from("boats").select("id, name, boat_class_id, status").order("boat_class_id").order("name"),
+    supabase
+      .from("reservations")
+      .select("boat_id")
+      .in("status", ["reserved", "checked_out"])
+      .lt("start_time", session.ends_at)
+      .gt("end_time", session.starts_at),
+  ]);
+  const unavailableFleetBoatIds = new Set((conflictingReservations ?? []).map((reservation) => reservation.boat_id));
 
   return (
     <>
@@ -100,6 +110,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             lineupBoardId={board.id}
             isPublished={detail.board.is_published}
             returnTo={returnTo}
+            fleetBoats={(fleetBoats ?? []).map((boat) => ({ ...boat, status: unavailableFleetBoatIds.has(boat.id) ? "reserved" : boat.status }))}
           />
         </Card>
       </main>
