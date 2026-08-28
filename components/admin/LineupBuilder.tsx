@@ -145,6 +145,9 @@ export function LineupBuilder({
   const assignmentsJson = JSON.stringify(
     localBoats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id }))),
   );
+  const boatsWithOpenSeats = localBoats
+    .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
+    .filter((item) => item.openSeats > 0);
 
   return (
     <div className="stack">
@@ -217,10 +220,30 @@ export function LineupBuilder({
         </div>
       ) : null}
 
+      {boatsWithOpenSeats.length > 0 ? (
+        <div className="card lineup-open-seats-summary">
+          <div className="page-title">
+            <div>
+              <h3>Open Seats</h3>
+              <p className="muted">Tap a boat to jump directly to the remaining assignment.</p>
+            </div>
+          </div>
+          <div className="stack" style={{ gap: "0.45rem" }}>
+            {boatsWithOpenSeats.map(({ boat, openSeats }) => (
+              <a key={boat.id} href={`#lineup-boat-${boat.id}`} className="lineup-open-seat-link">
+                {openSeats} person{openSeats === 1 ? "" : "s"} missing from {boat.boat_name} ({boat.boat_class_id})
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid">
-        {localBoats.map((boat) => (
-          <div key={boat.id} className="card stack lineup-boat-card">
-            <div className="page-title lineup-boat-header">
+        {localBoats.map((boat) => {
+          const openSeats = boat.seats.filter((seat) => !seat.member_id).length;
+          return (
+          <details key={boat.id} id={`lineup-boat-${boat.id}`} className="card lineup-boat-card lineup-boat-collapsible" open={openSeats > 0}>
+            <summary className="lineup-boat-summary">
               <div className="stack">
                 <h3>
                   {boat.boat_name} ({boat.boat_class_id})
@@ -229,6 +252,11 @@ export function LineupBuilder({
                   {boat.seats.filter((seat) => seat.member_id).length}/{boat.seats.length} seats assigned
                 </span>
               </div>
+              <span className={openSeats > 0 ? "error" : "member-summary-hint"}>
+                {openSeats > 0 ? `${openSeats} open` : "Assigned · expand"}
+              </span>
+            </summary>
+            <div className="lineup-boat-details stack">
               <form action={removeBoatAction} className="inline-form lineup-boat-remove">
                 <input type="hidden" name="lineup_boat_id" value={boat.id} />
                 {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
@@ -236,7 +264,6 @@ export function LineupBuilder({
                   Remove Boat
                 </Button>
               </form>
-            </div>
             {orderedSeats(boat.boat_class_id, boat.seats).map((seat) => (
               <div
                 key={seat.id}
@@ -277,8 +304,10 @@ export function LineupBuilder({
                 </Button>
               </div>
             ))}
-          </div>
-        ))}
+            </div>
+          </details>
+          );
+        })}
       </div>
 
       {localBoats.length === 0 ? <p className="muted">No boats added yet.</p> : null}

@@ -616,6 +616,42 @@ a:hover {
   align-content: start;
 }
 
+.lineup-boat-collapsible {
+  display: grid;
+  gap: 0;
+  scroll-margin-top: 1rem;
+}
+
+.lineup-boat-collapsible summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.lineup-boat-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.lineup-boat-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.lineup-boat-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.lineup-open-seats-summary {
+  align-content: start;
+}
+
+.lineup-open-seat-link {
+  font-weight: 700;
+}
+
 .lineup-top-actions {
   display: grid;
   gap: 0.85rem;
