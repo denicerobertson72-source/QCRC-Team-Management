@@ -22,7 +22,7 @@ declare global {
 
 const MAPBOX_GL_VERSION = "v3.23.1";
 const DEFAULT_CENTER: [number, number] = [-84.512, 39.1031];
-const LOCATION_UPLOAD_INTERVAL_MS = 15000;
+const LOCATION_UPLOAD_INTERVAL_MS = 5 * 60 * 1000;
 
 function shortRowerName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);

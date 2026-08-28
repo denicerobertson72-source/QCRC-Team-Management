@@ -14,6 +14,8 @@ type WakeLockNavigator = Navigator & {
   wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
 };
 
+const LOCATION_UPLOAD_INTERVAL_MS = 5 * 60 * 1000;
+
 function formatTrackingTime(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -98,7 +100,7 @@ export function ReservationTrackingManager({
         if (!outing) return;
 
         const now = Date.now();
-        if (now - lastUploadAtRef.current < 30000) return;
+        if (now - lastUploadAtRef.current < LOCATION_UPLOAD_INTERVAL_MS) return;
         lastUploadAtRef.current = now;
 
         const recordedAt = new Date(position.timestamp).toISOString();
@@ -126,7 +128,7 @@ export function ReservationTrackingManager({
           setMessage(`Live tracking upload failed: ${error.message}`);
         } else {
           setStatus("success");
-          setMessage(`Live location sharing active. Last upload: ${formatTrackingTime(recordedAt)} ET.`);
+          setMessage(`Live location sharing active. Last ping: ${formatTrackingTime(recordedAt)} ET (updates every 5 minutes).`);
         }
       },
       (error) => {
