@@ -5,6 +5,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { saveRaceSignupAction } from "@/lib/actions";
 import { getRaceEventsWithMySignup } from "@/lib/queries";
+import { SignupRoster } from "@/components/SignupRoster";
 
 export default async function RacingProgramPage() {
   const events = await getRaceEventsWithMySignup();
@@ -25,6 +26,7 @@ export default async function RacingProgramPage() {
                 {event.event_date}
                 {event.location ? ` | ${event.location}` : ""}
               </p>
+              <SignupRoster names={event.attendee_names} />
               {event.my_signup?.comments ? (
                 <Card subtle>
                   <strong>Saved comment</strong>

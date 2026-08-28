@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { getMyTrainingGroupAssignment, getNextProgramSessionMonth, getProgramSessionsForMonth } from "@/lib/queries";
 import { toggleSessionSignupAction } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
+import { SignupRoster } from "@/components/SignupRoster";
 import { formatEasternDateTime, formatEasternMonthLabel } from "@/lib/time";
 
 type SearchParams = Promise<{ month?: string; view?: string }>;
@@ -152,6 +153,7 @@ export default async function TrainingBIPage({ searchParams }: { searchParams: S
               <Card key={session.id} className="stack">
                 <h3>{prettyDateTime(session.starts_at)}</h3>
                 <p className="muted">Arrival 5:10 PM ET | Total signups: {session.signup_count}</p>
+                <SignupRoster names={session.attendee_names} />
                 {session.is_cancelled ? (
                   <p className="error">Cancelled{session.cancelled_reason ? `: ${session.cancelled_reason}` : ""}</p>
                 ) : (
@@ -189,6 +191,7 @@ export default async function TrainingBIPage({ searchParams }: { searchParams: S
                         <p className="calendar-session-copy">
                           {sessionDayFormatter.format(new Date(session.starts_at))} | Total signups: {session.signup_count}
                         </p>
+                        <SignupRoster names={session.attendee_names} />
                         {session.is_cancelled ? (
                           <p className="error">Cancelled{session.cancelled_reason ? `: ${session.cancelled_reason}` : ""}</p>
                         ) : (

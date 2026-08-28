@@ -3,7 +3,7 @@
 import { useMemo, useRef } from "react";
 import type { FormEvent } from "react";
 import { useFormStatus } from "react-dom";
-import { privateBoatLaunchAction, privateBoatReturnAction, updatePrivateBoatGateStatusAction } from "@/lib/actions";
+import { privateBoatLaunchAction, privateBoatReturnAction } from "@/lib/actions";
 import type { PrivateBoatOuting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
@@ -51,11 +51,9 @@ function describeUnknownLocationError(error: unknown) {
 export function PrivateBoatOutingPanel({
   canLaunch,
   activeOuting,
-  recentReturnedOuting,
 }: {
   canLaunch: boolean;
   activeOuting: PrivateBoatOuting | null;
-  recentReturnedOuting: PrivateBoatOuting | null;
 }) {
   const resumeSubmitRef = useRef(false);
   const launchOutingId = useMemo(() => crypto.randomUUID(), []);
@@ -113,12 +111,12 @@ export function PrivateBoatOutingPanel({
     }
   }
 
-  if (!canLaunch && !activeOuting && !recentReturnedOuting) return null;
+  if (!canLaunch && !activeOuting) return null;
 
   return (
     <details className="card-subtle" open>
       <summary>
-        {activeOuting ? "Show private boat return options" : recentReturnedOuting ? "Show private boat gate options" : "Show private boat launch options"}
+        {activeOuting ? "Show private boat return options" : "Show private boat launch options"}
       </summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
         {!activeOuting && canLaunch ? (
@@ -136,6 +134,7 @@ export function PrivateBoatOutingPanel({
               <option value="Upriver">Upriver</option>
               <option value="Downriver">Downriver</option>
             </select>
+            <input name="launch_comment" placeholder="Comments for other rowers (optional)" maxLength={500} />
             <PendingSubmitButton label="Launch Private Boat" pendingLabel="Launching..." />
           </form>
         ) : null}
@@ -145,18 +144,6 @@ export function PrivateBoatOutingPanel({
             <input type="hidden" name="private_outing_id" value={activeOuting.id} />
             <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
             <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
-          </form>
-        ) : null}
-
-        {recentReturnedOuting ? (
-          <form action={updatePrivateBoatGateStatusAction} className="inline-form">
-            <input type="hidden" name="private_outing_id" value={recentReturnedOuting.id} />
-            <span className="muted">Gate status</span>
-            <select name="gate_status" defaultValue={recentReturnedOuting.gate_status ?? "locked"} required>
-              <option value="locked">Gate locked</option>
-              <option value="unlocked">Gate left unlocked</option>
-            </select>
-            <PendingSubmitButton label="Save Gate Status" pendingLabel="Saving Gate..." variant="secondary" />
           </form>
         ) : null}
       </div>

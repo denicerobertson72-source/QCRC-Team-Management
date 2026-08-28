@@ -228,6 +228,7 @@ export type ProgramSession = {
   cancelled_reason: string | null;
   my_signed_up: boolean;
   signup_count: number;
+  attendee_names: string[];
 };
 
 export type TeamAnnouncement = {

@@ -3,6 +3,7 @@ import { TopNav } from "@/components/TopNav";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { SignupRoster } from "@/components/SignupRoster";
 import { getProgramSessionsForMonth } from "@/lib/queries";
 import { toggleSessionSignupAction } from "@/lib/actions";
 import { formatEasternDateTime, formatEasternMonthLabel, formatEasternTimeOffset, getEasternDateKey } from "@/lib/time";
@@ -57,6 +58,7 @@ export default async function SaturdayProgramPage({ searchParams }: { searchPara
             <Card key={session.id} className="stack">
               <h3>{prettyDateTime(session.starts_at)}</h3>
               <p className="muted">Arrival {formatEasternTimeOffset(session.starts_at, -20)} ET | Signups: {session.signup_count}</p>
+              <SignupRoster names={session.attendee_names} />
 
               {session.is_cancelled ? (
                 <p className="error">Cancelled{session.cancelled_reason ? `: ${session.cancelled_reason}` : ""}</p>

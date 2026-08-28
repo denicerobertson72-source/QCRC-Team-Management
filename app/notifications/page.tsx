@@ -2,8 +2,8 @@ import { TopNav } from "@/components/TopNav";
 import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Button } from "@/components/ui/Button";
-import { getMyNotifications } from "@/lib/queries";
-import { markAllNotificationsReadAction, markNotificationReadAction } from "@/lib/actions";
+import { getMyLaunchNotificationOptIn, getMyNotifications } from "@/lib/queries";
+import { markAllNotificationsReadAction, saveLaunchNotificationOptInAction } from "@/lib/actions";
 import { formatEasternDateTime } from "@/lib/time";
 import Link from "next/link";
 import { PushNotificationSettings } from "@/components/PushNotificationSettings";
@@ -36,6 +36,7 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "damage_report_submitted") {
     return `Damage report: ${String(notification.payload.boat_name ?? "Boat")}`;
   }
+  if (notification.notification_type === "rower_launched") return `${String(notification.payload.boat_name ?? "A boat")} launched`;
   return notification.notification_type.replaceAll("_", " ");
 }
 
@@ -64,6 +65,7 @@ function notificationBody(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "damage_report_submitted") {
     return `Severity ${String(notification.payload.severity ?? "not set")}: ${String(notification.payload.description ?? "Open the damage queue for details.")}`;
   }
+  if (notification.notification_type === "rower_launched") return String(notification.payload.launch_comment ?? "A QCRC rower has launched and is on the water.");
   return "";
 }
 
@@ -83,11 +85,12 @@ function notificationHref(notification: { notification_type: string; payload: Re
   }
   if (notification.notification_type === "team_announcement") return "/";
   if (notification.notification_type === "damage_report_submitted") return "/admin/damage";
+  if (notification.notification_type === "rower_launched") return "/safety";
   return null;
 }
 
 export default async function NotificationsPage() {
-  const notifications = await getMyNotifications();
+  const [notifications, launchNotificationsEnabled] = await Promise.all([getMyNotifications(), getMyLaunchNotificationOptIn()]);
 
   return (
     <>
@@ -115,6 +118,19 @@ export default async function NotificationsPage() {
           <PushNotificationSettings />
         </Card>
 
+        <Card subtle className="stack">
+          <div>
+            <h3>Launching notifications</h3>
+            <p className="muted">Opt in to alerts when another QCRC rower launches. Push notifications are sent if you have enabled them above.</p>
+          </div>
+          <form action={saveLaunchNotificationOptInAction} className="inline-form">
+            <input type="hidden" name="enabled" value={launchNotificationsEnabled ? "false" : "true"} />
+            <Button type="submit" variant={launchNotificationsEnabled ? "secondary" : "primary"}>
+              {launchNotificationsEnabled ? "Stop Launch Alerts" : "Notify Me When Rowers Launch"}
+            </Button>
+          </form>
+        </Card>
+
         <div className="stack">
           {notifications.length === 0 ? <Card subtle>No notifications yet.</Card> : null}
           {notifications.map((notification) => (
@@ -127,19 +143,9 @@ export default async function NotificationsPage() {
               </div>
               <p>{notificationBody(notification)}</p>
               <div className="notification-actions">
-                {notificationHref(notification) ? (
-                  <Link href={notificationHref(notification)!} className="cta-link">
-                    Open
-                  </Link>
-                ) : null}
-                {notification.read_at === null ? (
-                  <form action={markNotificationReadAction}>
-                    <input type="hidden" name="notification_id" value={notification.id} />
-                    <Button type="submit" variant="secondary">
-                      Mark Read
-                    </Button>
-                  </form>
-                ) : null}
+                <Link href={`/notifications/open?id=${encodeURIComponent(notification.id)}&to=${encodeURIComponent(notificationHref(notification) ?? "/notifications")}`} className="cta-link">
+                  Open
+                </Link>
               </div>
             </Card>
           ))}

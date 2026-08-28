@@ -34,8 +34,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
   const reservationStatus = params.reservation_status === "error" ? "error" : params.reservation_status === "success" ? "success" : null;
   const reservationMessage = params.reservation_message ?? "";
   const activePrivateOuting = privateOutings.find((outing) => outing.status === "checked_out") ?? null;
-  const recentReturnedPrivateOuting = privateOutings.find((outing) => outing.status === "checked_in") ?? null;
-  const canLaunchPrivateBoat = Boolean(profile.owns_private_boat && profile.boat_storage_fee_ok && !activePrivateOuting);
+  const canLaunchPrivateBoat = Boolean(profile.owns_private_boat && !activePrivateOuting);
   const todayKey = getEasternDateKey(new Date());
   const tomorrowKey = getEasternDateKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const todayOthers = otherReservations.filter((row) => row.date_key === todayKey);
@@ -49,7 +48,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
           <span className="eyebrow">Boat Desk</span>
           <PageTitle
             title="My Reservations"
-            subtitle={`Active outings: ${activeCount}. Returned outings stay here only until gate status is saved, then they drop off this list while staying in club history.`}
+            subtitle={`Active outings: ${activeCount}. Record gate status from the Home page after returning; reservations do not remain here past their reservation day.`}
             actions={
               <Link href="/reserve" className="cta-link">
                 Create a reservation
@@ -73,7 +72,6 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
               <h3>Private Boat</h3>
               <p className="muted">
                 Launch and return your private boat here for safety tracking.
-                {!profile.boat_storage_fee_ok ? " Boat storage dues must be current before launch is available." : ""}
               </p>
               {activePrivateOuting?.checked_out_at ? (
                 <p className="muted">Launched: {formatDateTime(activePrivateOuting.checked_out_at)}</p>
@@ -81,7 +79,6 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
               <PrivateBoatOutingPanel
                 canLaunch={canLaunchPrivateBoat}
                 activeOuting={activePrivateOuting}
-                recentReturnedOuting={recentReturnedPrivateOuting}
               />
             </Card>
           ) : null}

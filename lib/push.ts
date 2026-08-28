@@ -45,6 +45,12 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
         body: `Severity ${String(payload.severity ?? "not set")}: ${String(payload.description ?? "Open the damage queue for details.")}`,
         url: "/admin/damage",
       };
+    case "rower_launched":
+      return {
+        title: `${String(payload.boat_name ?? "A boat")} launched`,
+        body: String(payload.launch_comment ?? "A QCRC rower has launched and is on the water."),
+        url: "/safety",
+      };
     default:
       return { title: "QCRC notification", body: "You have a new club notification.", url: "/notifications" };
   }

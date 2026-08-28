@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useFormStatus } from "react-dom";
-import { cancelReservationAction, checkinAction, checkoutAction, updateReservationAction, updateReservationGateStatusAction } from "@/lib/actions";
+import { cancelReservationAction, checkinAction, checkoutAction, updateReservationAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
@@ -65,13 +65,12 @@ function describeUnknownLocationError(error: unknown) {
 export function ReservationActions({ reservation }: { reservation: Reservation }) {
   const canCheckout = reservation.status === "reserved";
   const canCheckin = reservation.status === "checked_out";
-  const canUpdateGate = reservation.status === "checked_in";
   const resumeSubmitRef = useRef(false);
   const [showEdit, setShowEdit] = useState(false);
   const [startTime, setStartTime] = useState(() => toEasternDateTimeLocalValue(reservation.start_time));
   const derivedEndTime = useMemo(() => deriveReservationEndLocal(startTime) ?? "", [startTime]);
 
-  if (!canCheckout && !canCheckin && !canUpdateGate) return null;
+  if (!canCheckout && !canCheckin) return null;
 
   async function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
     if (resumeSubmitRef.current) {
@@ -142,6 +141,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
               <option value="Upriver">Upriver</option>
               <option value="Downriver">Downriver</option>
             </select>
+            <input name="launch_comment" placeholder="Comments for other rowers (optional)" defaultValue={reservation.notes ?? ""} maxLength={500} />
             <PendingSubmitButton label="Launching" pendingLabel="Launching..." />
           </form>
 
@@ -208,7 +208,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
 
   return (
     <details className="card-subtle">
-      <summary>{canCheckin ? "Show return options" : "Show gate options"}</summary>
+      <summary>Show return options</summary>
       <div className="row" style={{ marginTop: "0.8rem" }}>
 
         {canCheckin ? (
@@ -216,18 +216,6 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
             <input type="hidden" name="reservation_id" value={reservation.id} />
             <input name="notes" placeholder="Condition notes" />
             <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
-          </form>
-        ) : null}
-
-        {canUpdateGate ? (
-          <form action={updateReservationGateStatusAction} className="inline-form">
-            <input type="hidden" name="reservation_id" value={reservation.id} />
-            <span className="muted">Gate status</span>
-            <select name="gate_status" defaultValue={reservation.gate_status ?? "locked"} required>
-              <option value="locked">Gate locked</option>
-              <option value="unlocked">Gate left unlocked</option>
-            </select>
-            <PendingSubmitButton label="Save Gate Status" pendingLabel="Saving Gate..." variant="secondary" />
           </form>
         ) : null}
       </div>

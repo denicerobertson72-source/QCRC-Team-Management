@@ -10,7 +10,7 @@ import { formatCurrencyStatusLine, sendTransactionalEmail } from "@/lib/email";
 import { formatEasternDateTime } from "@/lib/time";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { sendSms } from "@/lib/sms";
-import { appendCrewNamesToNotes } from "@/lib/crew";
+import { appendCrewNamesToNotes, splitNotesAndCrew } from "@/lib/crew";
 import { getAppUrl } from "@/lib/app-url";
 import { generateAndSendMemberAuthLink, listAllAuthUsersByEmail } from "@/lib/auth-links";
 import { sendPushNotifications } from "@/lib/push";
@@ -49,6 +49,33 @@ async function assertAdmin() {
 async function assertSiteAdmin() {
   const { supabase, user } = await ensureSiteAdmin();
   return { supabase, user };
+}
+
+async function notifyLaunchSubscribers(sourceId: string, launchingMemberId: string, payload: { boat_name: string; launch_comment: string | null }) {
+  try {
+    const admin = createAdminClient();
+    const { data: optIns, error: optInError } = await admin.from("launch_notification_members").select("member_id");
+    if (optInError) throw optInError;
+    const candidateIds = [...new Set((optIns ?? []).map((row) => row.member_id).filter((memberId) => memberId !== launchingMemberId))];
+    const { data: activeProfiles, error: activeError } = candidateIds.length
+      ? await admin.from("profiles").select("id").eq("status", "active").in("id", candidateIds)
+      : { data: [], error: null };
+    if (activeError) throw activeError;
+    const recipientIds = (activeProfiles ?? []).map((profile) => profile.id);
+    if (recipientIds.length === 0) return;
+    const { error: eventError } = await admin.from("notification_events").insert(
+      recipientIds.map((memberId) => ({
+        notification_key: `launch:${sourceId}:${memberId}`,
+        notification_type: "rower_launched",
+        member_id: memberId,
+        payload,
+      })),
+    );
+    if (eventError) throw eventError;
+    await sendPushNotifications(recipientIds, "rower_launched", payload);
+  } catch (error) {
+    console.error("Could not notify launch subscribers", { message: error instanceof Error ? error.message : "Unknown error" });
+  }
 }
 
 function locationPointFromForm(formData: FormData) {
@@ -1078,6 +1105,7 @@ export async function checkoutAction(formData: FormData) {
   const reservationId = String(formData.get("reservation_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
+  const launchComment = String(formData.get("launch_comment") ?? "").trim();
   const launchPoint = locationPointFromForm(formData);
 
   const destination = new URL("/reservations", "http://local");
@@ -1099,8 +1127,22 @@ export async function checkoutAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  if (direction) {
-    const updateResult = await supabase.from("reservations").update({ river_direction: direction }).eq("id", reservationId);
+  if (direction || launchComment) {
+    const { data: reservationForComment, error: reservationForCommentError } = await supabase
+      .from("reservations")
+      .select("notes, boats(name)")
+      .eq("id", reservationId)
+      .eq("created_by", user.id)
+      .single();
+    if (reservationForCommentError) throw reservationForCommentError;
+    const existingCrew = splitNotesAndCrew(reservationForComment.notes).crewNames.join(", ");
+    const updateResult = await supabase
+      .from("reservations")
+      .update({
+        ...(direction ? { river_direction: direction } : {}),
+        ...(launchComment ? { notes: appendCrewNamesToNotes(launchComment, existingCrew) } : {}),
+      })
+      .eq("id", reservationId);
     if (updateResult.error) {
       destination.searchParams.set("reservation_status", "error");
       destination.searchParams.set("reservation_message", updateResult.error.message || "Launch recorded, but direction was not saved.");
@@ -1119,6 +1161,19 @@ export async function checkoutAction(formData: FormData) {
     destination.searchParams.set("reservation_message", locationError.message || "Launch recorded, but the first location point was not saved.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
+
+  const { data: reservationForLaunchNotification } = await supabase
+    .from("reservations")
+    .select("boats(name)")
+    .eq("id", reservationId)
+    .eq("created_by", user.id)
+    .maybeSingle();
+  const boatRelation = reservationForLaunchNotification?.boats as { name?: string } | { name?: string }[] | null;
+  const boatName = Array.isArray(boatRelation) ? boatRelation[0]?.name : boatRelation?.name;
+  await notifyLaunchSubscribers(reservationId, user.id, {
+    boat_name: boatName || "A boat",
+    launch_comment: launchComment || null,
+  });
 
   revalidatePath("/reservations");
   revalidatePath("/reserve");
@@ -1184,6 +1239,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
+  const launchComment = String(formData.get("launch_comment") ?? "").trim();
   const launchPoint = locationPointFromForm(formData);
   const destination = new URL("/reservations", "http://local");
 
@@ -1203,12 +1259,6 @@ export async function privateBoatLaunchAction(formData: FormData) {
   if (!profile?.owns_private_boat) {
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", "Your account is not marked as a private boat owner.");
-    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-  }
-
-  if (!profile.boat_storage_fee_ok) {
-    destination.searchParams.set("reservation_status", "error");
-    destination.searchParams.set("reservation_message", "Private boat launch is unavailable until boat storage dues are current.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
@@ -1233,7 +1283,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
     checked_out_at: new Date().toISOString(),
     checkout_location: location || null,
     river_direction: direction || null,
-    notes: null,
+    notes: launchComment || null,
   });
 
   if (error) {
@@ -1253,6 +1303,8 @@ export async function privateBoatLaunchAction(formData: FormData) {
     destination.searchParams.set("reservation_message", locationError.message || "Private boat launch recorded, but the first location point was not saved.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
+
+  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", launch_comment: launchComment || null });
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1540,6 +1592,16 @@ export async function markNotificationReadAction(formData: FormData) {
     .eq("id", notificationId)
     .eq("member_id", user.id);
 
+  if (error) throw error;
+  revalidatePath("/notifications");
+}
+
+export async function saveLaunchNotificationOptInAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const enabled = String(formData.get("enabled") ?? "false") === "true";
+  const { error } = enabled
+    ? await supabase.from("launch_notification_members").upsert({ member_id: user.id }, { onConflict: "member_id" })
+    : await supabase.from("launch_notification_members").delete().eq("member_id", user.id);
   if (error) throw error;
   revalidatePath("/notifications");
 }

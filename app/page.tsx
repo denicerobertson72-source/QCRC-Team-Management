@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { ensureProfile } from "@/lib/auth";
-import { addTeamAnnouncementAction, deleteTeamAnnouncementAction } from "@/lib/actions";
-import { getActiveTeamAnnouncements } from "@/lib/queries";
+import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, updatePrivateBoatGateStatusAction, updateReservationGateStatusAction } from "@/lib/actions";
+import { getActiveTeamAnnouncements, getMyPrivateBoatOutings, getMyReservations } from "@/lib/queries";
 import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
 
 type SearchParams = Promise<{
@@ -29,7 +29,12 @@ const QUICK_LINKS = [
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ profile, supabase }, announcements] = await Promise.all([ensureProfile(), getActiveTeamAnnouncements()]);
+  const [{ profile, supabase }, announcements, reservations, privateOutings] = await Promise.all([
+    ensureProfile(),
+    getActiveTeamAnnouncements(),
+    getMyReservations(),
+    getMyPrivateBoatOutings(),
+  ]);
   const isAdmin = profile?.role === "admin";
   const races = isAdmin
     ? (await supabase.from("race_events").select("id, title, event_date").order("event_date", { ascending: true })).data ?? []
@@ -85,6 +90,42 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             ))}
           </div>
         </Card>
+
+        {(() => {
+          const pendingReservations = reservations.filter((reservation) => reservation.status === "checked_in" && !reservation.gate_status);
+          const pendingPrivateOutings = privateOutings.filter((outing) => outing.status === "checked_in" && !outing.gate_status);
+          if (pendingReservations.length + pendingPrivateOutings.length === 0) return null;
+          return (
+            <Card className="stack">
+              <div className="page-title">
+                <h3>Gate Check</h3>
+                <span className="muted">Please record the gate status after returning from the marina.</span>
+              </div>
+              {pendingReservations.map((reservation) => (
+                <form key={reservation.id} action={updateReservationGateStatusAction} className="inline-form">
+                  <input type="hidden" name="reservation_id" value={reservation.id} />
+                  <strong>{reservation.boats?.name ?? "Boat"}</strong>
+                  <select name="gate_status" defaultValue="locked" aria-label={`Gate status for ${reservation.boats?.name ?? "boat"}`}>
+                    <option value="locked">Gate locked</option>
+                    <option value="unlocked">Gate left unlocked</option>
+                  </select>
+                  <Button type="submit" variant="secondary">Save Gate Status</Button>
+                </form>
+              ))}
+              {pendingPrivateOutings.map((outing) => (
+                <form key={outing.id} action={updatePrivateBoatGateStatusAction} className="inline-form">
+                  <input type="hidden" name="private_outing_id" value={outing.id} />
+                  <strong>Private Boat</strong>
+                  <select name="gate_status" defaultValue="locked" aria-label="Gate status for private boat outing">
+                    <option value="locked">Gate locked</option>
+                    <option value="unlocked">Gate left unlocked</option>
+                  </select>
+                  <Button type="submit" variant="secondary">Save Gate Status</Button>
+                </form>
+              ))}
+            </Card>
+          );
+        })()}
 
         {isAdmin ? (
           <form action={addTeamAnnouncementAction} className="card form-grid">

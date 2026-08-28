@@ -88,9 +88,9 @@ export async function getMyReservations() {
       boats: Array.isArray(row.boats) ? (row.boats[0] ?? null) : row.boats,
     }))
     .filter((row) => {
-      if (row.status === "cancelled") {
-        return todayStartIso ? row.updated_at >= todayStartIso : false;
-      }
+      // The reservation desk is for today's work. Older rows remain in the
+      // club audit/safety history but do not linger past the reservation day.
+      if (!todayStartIso || row.start_time < todayStartIso) return false;
       if (row.status !== "checked_in") return true;
       return !row.gate_status;
     });
@@ -293,6 +293,7 @@ export async function getMyTrainingGroupAssignment() {
 export async function getRaceEventsWithMySignup() {
   const { supabase, user } = await ensureProfile();
   const todayEastern = getEasternDateKey(new Date());
+  const admin = createAdminClient();
   const [{ data: events, error: eventsError }, { data: signups, error: signupsError }] = await Promise.all([
     supabase
       .from("race_events")
@@ -306,6 +307,11 @@ export async function getRaceEventsWithMySignup() {
   ]);
   if (signupsError) throw signupsError;
   if (eventsError) throw eventsError;
+  const raceEventIds = (events ?? []).map((event) => event.id);
+  const { data: allSignups, error: allSignupsError } = raceEventIds.length
+    ? await admin.from("race_signups").select("race_event_id, profiles(full_name)").in("race_event_id", raceEventIds)
+    : { data: [], error: null };
+  if (allSignupsError) throw allSignupsError;
 
   const signupByRace = new Map<
     string,
@@ -323,9 +329,17 @@ export async function getRaceEventsWithMySignup() {
     });
   }
 
+  const attendeeNamesByRace = new Map<string, string[]>();
+  for (const signup of allSignups ?? []) {
+    const names = attendeeNamesByRace.get(signup.race_event_id) ?? [];
+    names.push(profileNameFromRelation(signup.profiles));
+    attendeeNamesByRace.set(signup.race_event_id, names);
+  }
+
   return (events ?? []).map((event) => ({
     ...event,
     my_signup: signupByRace.get(event.id) ?? null,
+    attendee_names: attendeeNamesByRace.get(event.id) ?? [],
   }));
 }
 
@@ -496,15 +510,19 @@ export async function getProgramSessionsForMonth(programTypes: string[], monthSt
 
   const { data: allSignups, error: signupError } = await admin
     .from("session_signups")
-    .select("session_id, member_id")
+    .select("session_id, member_id, profiles(full_name)")
     .in("session_id", sessionIds);
   if (signupError) throw signupError;
 
   const countBySession = new Map<string, number>();
+  const attendeeNamesBySession = new Map<string, string[]>();
   const mine = new Set<string>();
 
   for (const signup of allSignups ?? []) {
     countBySession.set(signup.session_id, (countBySession.get(signup.session_id) ?? 0) + 1);
+    const names = attendeeNamesBySession.get(signup.session_id) ?? [];
+    names.push(profileNameFromRelation(signup.profiles));
+    attendeeNamesBySession.set(signup.session_id, names);
     if (signup.member_id === user.id) {
       mine.add(signup.session_id);
     }
@@ -516,6 +534,7 @@ export async function getProgramSessionsForMonth(programTypes: string[], monthSt
     ...session,
     my_signed_up: mine.has(session.id),
     signup_count: countBySession.get(session.id) ?? 0,
+    attendee_names: attendeeNamesBySession.get(session.id) ?? [],
   })) as ProgramSession[];
 }
 
@@ -567,6 +586,20 @@ export async function getMyNotifications(limit = 50) {
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as NotificationEvent[];
+}
+
+export async function getMyLaunchNotificationOptIn() {
+  const { supabase, user } = await ensureProfile();
+  const { data, error } = await supabase
+    .from("launch_notification_members")
+    .select("member_id")
+    .eq("member_id", user.id)
+    .maybeSingle();
+  if (error) {
+    // Keeps the notification page working until the opt-in migration is applied.
+    return false;
+  }
+  return Boolean(data);
 }
 
 export async function getUnreadNotificationCount() {
