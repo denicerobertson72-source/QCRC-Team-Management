@@ -43,6 +43,7 @@ export default async function BoatsPage({ searchParams }: { searchParams: BoatsS
               <option value="1x">1x</option>
               <option value="2x">2x</option>
               <option value="4x">4x</option>
+              <option value="8x">8x (Octuple)</option>
             </select>
           </Field>
           <p className="muted">

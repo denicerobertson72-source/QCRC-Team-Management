@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ReservationTimeFields } from "@/components/ReservationTimeFields";
 
 export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: string; returnTo: string }) {
-  const additionalSeats = boat.boat_class_id === "4x" ? 3 : boat.boat_class_id === "2x" ? 1 : 0;
+  const additionalSeats = boat.boat_class_id === "8x" ? 7 : boat.boat_class_id === "4x" ? 3 : boat.boat_class_id === "2x" ? 1 : 0;
   const crewLabel =
     additionalSeats === 0
       ? null

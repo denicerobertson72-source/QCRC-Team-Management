@@ -70,6 +70,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               <option value="1x">1x</option>
               <option value="2x">2x</option>
               <option value="4x">4x</option>
+              <option value="8x">8x (Octuple)</option>
             </select>
           </Field>
           <Field label="Boat brand / type">
@@ -126,6 +127,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
                   <option value="1x">1x</option>
                   <option value="2x">2x</option>
                   <option value="4x">4x</option>
+                  <option value="8x">8x (Octuple)</option>
                 </select>
               </Field>
               <Field label="Boat brand / type">
