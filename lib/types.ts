@@ -56,8 +56,9 @@ export type Reservation = {
 
 export type UnavailableBoatWindow = {
   boat_id: string;
-  reservation_status: "reserved" | "checked_out" | string;
-  expected_return_at: string;
+  reservation_status: "reserved" | "checked_out" | "availability_block" | string;
+  expected_return_at: string | null;
+  availability_title: string | null;
 };
 
 export type PrivateBoatOuting = {
