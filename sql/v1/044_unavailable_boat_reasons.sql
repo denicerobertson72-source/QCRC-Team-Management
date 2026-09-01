@@ -1,4 +1,6 @@
 -- V1.44: explain whether a boat is unavailable because of another outing or a club block.
+drop function if exists public.unavailable_boats_for_window(timestamptz, timestamptz, text);
+
 create or replace function public.unavailable_boats_for_window(p_start_time timestamptz, p_end_time timestamptz, p_boat_class_id text default null)
 returns table(boat_id uuid, reservation_status text, expected_return_at timestamptz, availability_title text)
 language sql stable security definer set search_path = public as $$
