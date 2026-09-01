@@ -551,9 +551,7 @@ export function SafetyLiveMap({
         <div className="stack" style={{ gap: "0.35rem" }}>
           <h3>Live River Map</h3>
           <span className="muted">
-            {state.can_manage_all_boats
-              ? "Admins and coaches can monitor all active boats."
-              : "You can monitor only your active outing while on the water."}
+            All signed-in QCRC rowers can view active boats on the river.
           </span>
         </div>
         <div className="quick-links">
@@ -597,13 +595,9 @@ export function SafetyLiveMap({
 
       <div className="grid">
         <div className="card-subtle stack">
-          <strong>{state.can_manage_all_boats ? "Safety Dashboard View" : "My Live Outing"}</strong>
+          <strong>Live Safety View</strong>
           <p className="muted">
-            {state.can_manage_all_boats
-              ? `${state.outings.length} active boat${state.outings.length === 1 ? "" : "s"} visible on the river map.`
-              : myOuting
-                ? `Tracking ${myOuting.boat_name} while you are checked out.`
-                : "Launch an outing to begin live sharing and route capture."}
+            {`${state.outings.length} active boat${state.outings.length === 1 ? "" : "s"} visible on the river map.`}
           </p>
           {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
           {wakeLockActive ? <p className="success">Screen stay-awake mode is active while you share location.</p> : null}

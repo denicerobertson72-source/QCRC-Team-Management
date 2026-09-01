@@ -51,7 +51,7 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
-async function notifyLaunchSubscribers(sourceId: string, launchingMemberId: string, payload: { boat_name: string; launch_comment: string | null }) {
+async function notifyLaunchSubscribers(sourceId: string, launchingMemberId: string, payload: { boat_name: string; launch_comment: string | null }, notificationType = "rower_launched") {
   try {
     const admin = createAdminClient();
     const { data: optIns, error: optInError } = await admin.from("launch_notification_members").select("member_id");
@@ -65,14 +65,14 @@ async function notifyLaunchSubscribers(sourceId: string, launchingMemberId: stri
     if (recipientIds.length === 0) return;
     const { error: eventError } = await admin.from("notification_events").insert(
       recipientIds.map((memberId) => ({
-        notification_key: `launch:${sourceId}:${memberId}`,
-        notification_type: "rower_launched",
+        notification_key: `${notificationType}:${sourceId}:${memberId}`,
+        notification_type: notificationType,
         member_id: memberId,
         payload,
       })),
     );
     if (eventError) throw eventError;
-    await sendPushNotifications(recipientIds, "rower_launched", payload);
+    await sendPushNotifications(recipientIds, notificationType, payload);
   } catch (error) {
     console.error("Could not notify launch subscribers", { message: error instanceof Error ? error.message : "Unknown error" });
   }
@@ -1184,7 +1184,7 @@ export async function checkoutAction(formData: FormData) {
 }
 
 export async function checkinAction(formData: FormData) {
-  const { supabase } = await ensureProfile();
+  const { supabase, user } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const notes = String(formData.get("notes") ?? "");
   const destination = new URL("/reservations", "http://local");
@@ -1199,6 +1199,11 @@ export async function checkinAction(formData: FormData) {
     destination.searchParams.set("reservation_message", error.message || "Unable to mark returned.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
+
+  const { data: returnedReservation } = await supabase.from("reservations").select("boats(name)").eq("id", reservationId).maybeSingle();
+  const boatRelation = returnedReservation?.boats as { name?: string } | { name?: string }[] | null;
+  const boatName = Array.isArray(boatRelation) ? boatRelation[0]?.name : boatRelation?.name;
+  await notifyLaunchSubscribers(reservationId, user.id, { boat_name: boatName || "A boat", launch_comment: null }, "rower_returned");
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1335,6 +1340,8 @@ export async function privateBoatReturnAction(formData: FormData) {
     destination.searchParams.set("reservation_message", error.message || "Unable to mark private boat returned.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
+
+  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", launch_comment: null }, "rower_returned");
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -2201,43 +2208,25 @@ export async function addRecurringBoatAvailabilityBlocksAdminAction(formData: Fo
     throw new Error("Recurring availability date range is invalid.");
   }
 
-  const inserts: Array<{
-    title: string;
-    starts_at: string | null;
-    ends_at: string | null;
-    applies_to_membership_type: string | null;
-    applies_to_boat_class_id: string | null;
-    is_active: boolean;
-    notes: string | null;
-    created_by: string;
-  }> = [];
+  const startsAtIso = easternLocalInputToIso(`${startDate}T${dailyStartTime}`);
+  const endsAtIso = easternLocalInputToIso(`${endDate}T${dailyEndTime}`);
+  if (!startsAtIso || !endsAtIso || dailyEndTime <= dailyStartTime) throw new Error("Enter a valid daily time window.");
 
-  for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-    const dayOfWeek = cursor.getDay() as WeekdayNumber;
-    if (!weekdays.includes(dayOfWeek)) continue;
-
-    const year = cursor.getFullYear();
-    const month = String(cursor.getMonth() + 1).padStart(2, "0");
-    const day = String(cursor.getDate()).padStart(2, "0");
-    const datePart = `${year}-${month}-${day}`;
-
-    inserts.push({
-      title,
-      starts_at: easternLocalInputToIso(`${datePart}T${dailyStartTime}`),
-      ends_at: easternLocalInputToIso(`${datePart}T${dailyEndTime}`),
-      applies_to_membership_type: membershipType || null,
-      applies_to_boat_class_id: boatClassId || null,
-      is_active: isActive,
-      notes: notes || null,
-      created_by: user.id,
-    });
-  }
-
-  if (inserts.length === 0) {
-    throw new Error("No dates matched the selected weekday pattern.");
-  }
-
-  const { error } = await supabase.from("boat_availability_blocks").insert(inserts);
+  const { error } = await supabase.from("boat_availability_blocks").insert({
+    title,
+    starts_at: startsAtIso,
+    ends_at: endsAtIso,
+    applies_to_membership_type: membershipType || null,
+    applies_to_boat_class_id: boatClassId || null,
+    is_active: isActive,
+    notes: notes || null,
+    created_by: user.id,
+    recurrence_start_date: startDate,
+    recurrence_end_date: endDate,
+    recurrence_weekdays: weekdays,
+    daily_start_time: dailyStartTime,
+    daily_end_time: dailyEndTime,
+  });
   if (error) throw error;
 
   revalidatePath("/admin/availability");
@@ -2254,6 +2243,23 @@ export async function updateBoatAvailabilityBlockAdminAction(formData: FormData)
   const boatClassId = String(formData.get("applies_to_boat_class_id") ?? "");
   const isActive = String(formData.get("is_active") ?? "false") === "true";
   const notes = String(formData.get("notes") ?? "");
+  const isRecurring = String(formData.get("is_recurring") ?? "false") === "true";
+
+  if (isRecurring) {
+    const startDate = String(formData.get("start_date") ?? "");
+    const endDate = String(formData.get("end_date") ?? "");
+    const dailyStartTime = String(formData.get("daily_start_time") ?? "");
+    const dailyEndTime = String(formData.get("daily_end_time") ?? "");
+    const weekdays = formData.getAll("weekdays").map((value) => weekdayNumberFromCode(String(value))).filter((value): value is WeekdayNumber => value !== null);
+    const startsAtIso = easternLocalInputToIso(`${startDate}T${dailyStartTime}`);
+    const endsAtIso = easternLocalInputToIso(`${endDate}T${dailyEndTime}`);
+    if (!startDate || !endDate || !startsAtIso || !endsAtIso || endDate < startDate || dailyEndTime <= dailyStartTime || weekdays.length === 0) {
+      throw new Error("Enter a valid date range, daily time window, and at least one weekday.");
+    }
+    const { error } = await supabase.from("boat_availability_blocks").update({ title, starts_at: startsAtIso, ends_at: endsAtIso, applies_to_membership_type: membershipType || null, applies_to_boat_class_id: boatClassId || null, is_active: isActive, notes: notes || null, recurrence_start_date: startDate, recurrence_end_date: endDate, recurrence_weekdays: weekdays, daily_start_time: dailyStartTime, daily_end_time: dailyEndTime }).eq("id", blockId);
+    if (error) throw error;
+    revalidatePath("/admin/availability"); revalidatePath("/reserve"); return;
+  }
 
   const startsAtIso = easternLocalInputToIso(startsAt);
   const endsAtIso = easternLocalInputToIso(endsAt);
@@ -2271,6 +2277,15 @@ export async function updateBoatAvailabilityBlockAdminAction(formData: FormData)
     })
     .eq("id", blockId);
 
+  if (error) throw error;
+  revalidatePath("/admin/availability");
+  revalidatePath("/reserve");
+}
+
+export async function deleteBoatAvailabilityBlockAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const blockId = String(formData.get("block_id") ?? "");
+  const { error } = await supabase.from("boat_availability_blocks").delete().eq("id", blockId);
   if (error) throw error;
   revalidatePath("/admin/availability");
   revalidatePath("/reserve");

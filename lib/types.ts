@@ -214,6 +214,11 @@ export type BoatAvailabilityBlock = {
   applies_to_boat_class_id: "1x" | "2x" | "4x" | string | null;
   is_active: boolean;
   notes: string | null;
+  recurrence_start_date: string | null;
+  recurrence_end_date: string | null;
+  recurrence_weekdays: number[] | null;
+  daily_start_time: string | null;
+  daily_end_time: string | null;
 };
 
 export type ProgramSession = {

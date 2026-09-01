@@ -51,6 +51,12 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
         body: String(payload.launch_comment ?? "A QCRC rower has launched and is on the water."),
         url: "/safety",
       };
+    case "rower_returned":
+      return {
+        title: `${String(payload.boat_name ?? "A boat")} returned`,
+        body: "A QCRC rower has returned to the marina.",
+        url: "/safety",
+      };
     default:
       return { title: "QCRC notification", body: "You have a new club notification.", url: "/notifications" };
   }

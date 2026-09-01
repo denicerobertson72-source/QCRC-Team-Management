@@ -38,10 +38,8 @@ export async function getSafetyLiveMapState(
   role: string | null | undefined,
   onWater: SafetyEntry[],
 ): Promise<SafetyLiveMapState> {
-  const canManageAllBoats = canManageSafetyMap(role);
-  const activeReservations = canManageAllBoats
-    ? onWater
-    : onWater.filter((entry) => entry.created_by === userId);
+  const canManageAllBoats = true;
+  const activeReservations = onWater;
 
   const reservationIds = activeReservations.map((entry) => entry.id);
   if (reservationIds.length === 0) {

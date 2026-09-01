@@ -259,7 +259,8 @@ export async function getBoatAvailabilityBlocks() {
   const { supabase } = await ensureProfile();
   const { data, error } = await supabase
     .from("boat_availability_blocks")
-    .select("id, title, starts_at, ends_at, applies_to_membership_type, applies_to_boat_class_id, is_active, notes")
+    .select("id, title, starts_at, ends_at, applies_to_membership_type, applies_to_boat_class_id, is_active, notes, recurrence_start_date, recurrence_end_date, recurrence_weekdays, daily_start_time, daily_end_time")
+    .gte("ends_at", new Date().toISOString())
     .order("starts_at", { ascending: true });
 
   if (error) throw error;

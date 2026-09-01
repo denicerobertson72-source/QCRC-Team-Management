@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import {
   addBoatAvailabilityBlockAdminAction,
   addRecurringBoatAvailabilityBlocksAdminAction,
+  deleteBoatAvailabilityBlockAdminAction,
   updateBoatAvailabilityBlockAdminAction,
 } from "@/lib/actions";
 import { getBoatAvailabilityBlocks } from "@/lib/queries";
@@ -13,6 +14,11 @@ import { formatEasternDateTime, toEasternDateTimeLocalValue } from "@/lib/time";
 function toInputDateTime(value: string) {
   return toEasternDateTimeLocalValue(value);
 }
+
+const WEEKDAYS = [
+  ["sun", "Sun", 0], ["mon", "Mon", 1], ["tue", "Tue", 2], ["wed", "Wed", 3],
+  ["thu", "Thu", 4], ["fri", "Fri", 5], ["sat", "Sat", 6],
+] as const;
 
 export default async function AdminAvailabilityPage() {
   const blocks = await getBoatAvailabilityBlocks();
@@ -125,18 +131,29 @@ export default async function AdminAvailabilityPage() {
             <form key={block.id} action={updateBoatAvailabilityBlockAdminAction} className="card form-grid">
               <h3>{block.title}</h3>
               <p className="muted">
-                {formatEasternDateTime(block.starts_at)} ET to {formatEasternDateTime(block.ends_at)} ET
+                {block.recurrence_start_date
+                  ? `${block.recurrence_start_date} to ${block.recurrence_end_date} · ${(block.recurrence_weekdays ?? []).map((day) => WEEKDAYS.find((item) => item[2] === day)?.[1]).filter(Boolean).join(", ")} · ${block.daily_start_time?.slice(0, 5)}–${block.daily_end_time?.slice(0, 5)} ET`
+                  : `${formatEasternDateTime(block.starts_at)} ET to ${formatEasternDateTime(block.ends_at)} ET`}
               </p>
               <input type="hidden" name="block_id" value={block.id} />
+              <input type="hidden" name="is_recurring" value={block.recurrence_start_date ? "true" : "false"} />
               <Field label="Title">
                 <input name="title" defaultValue={block.title} required />
               </Field>
-              <Field label="Starts (date and time)">
-                <input name="starts_at" type="datetime-local" defaultValue={toInputDateTime(block.starts_at)} required />
-              </Field>
-              <Field label="Ends (date and time)">
-                <input name="ends_at" type="datetime-local" defaultValue={toInputDateTime(block.ends_at)} required />
-              </Field>
+              {block.recurrence_start_date ? (
+                <>
+                  <Field label="Start date"><input name="start_date" type="date" defaultValue={block.recurrence_start_date} required /></Field>
+                  <Field label="End date"><input name="end_date" type="date" defaultValue={block.recurrence_end_date ?? ""} required /></Field>
+                  <Field label="Daily start time"><input name="daily_start_time" type="time" defaultValue={block.daily_start_time?.slice(0, 5) ?? ""} required /></Field>
+                  <Field label="Daily end time"><input name="daily_end_time" type="time" defaultValue={block.daily_end_time?.slice(0, 5) ?? ""} required /></Field>
+                  <Field label="Weekdays"><div className="row" style={{ flexWrap: "wrap" }}>{WEEKDAYS.map(([code, label, day]) => <label key={code}><input type="checkbox" name="weekdays" value={code} defaultChecked={block.recurrence_weekdays?.includes(day) ?? false} /> {label}</label>)}</div></Field>
+                </>
+              ) : (
+                <>
+                  <Field label="Starts (date and time)"><input name="starts_at" type="datetime-local" defaultValue={toInputDateTime(block.starts_at)} required /></Field>
+                  <Field label="Ends (date and time)"><input name="ends_at" type="datetime-local" defaultValue={toInputDateTime(block.ends_at)} required /></Field>
+                </>
+              )}
               <Field label="Membership group (optional)">
                 <input name="applies_to_membership_type" defaultValue={block.applies_to_membership_type ?? ""} />
               </Field>
@@ -160,6 +177,9 @@ export default async function AdminAvailabilityPage() {
               </Field>
               <Button type="submit" variant="secondary">
                 Update Block
+              </Button>
+              <Button type="submit" formAction={deleteBoatAvailabilityBlockAdminAction} variant="secondary">
+                Delete Block
               </Button>
             </form>
           ))}
