@@ -6,7 +6,7 @@ declare
 begin
   for series in
     select
-      min(id) as keep_id,
+      (array_agg(id order by id))[1] as keep_id,
       array_agg(id) as block_ids,
       min((starts_at at time zone 'America/New_York')::date) as start_date,
       max((ends_at at time zone 'America/New_York')::date) as end_date,
