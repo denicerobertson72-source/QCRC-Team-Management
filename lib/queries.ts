@@ -295,20 +295,23 @@ export async function getRaceEventsWithMySignup() {
   const { supabase, user } = await ensureProfile();
   const todayEastern = getEasternDateKey(new Date());
   const admin = createAdminClient();
-  const [{ data: events, error: eventsError }, { data: signups, error: signupsError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, { data: signups, error: signupsError }, { data: memberProfile, error: memberProfileError }] = await Promise.all([
     supabase
       .from("race_events")
-      .select("id, title, event_date, location, notes")
+      .select("id, title, event_date, location, notes, eligible_skill_levels")
       .gte("event_date", todayEastern)
       .order("event_date", { ascending: true }),
     supabase
       .from("race_signups")
       .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments")
       .eq("member_id", user.id),
+    supabase.from("profiles").select("skill_level").eq("id", user.id).single(),
   ]);
   if (signupsError) throw signupsError;
   if (eventsError) throw eventsError;
-  const raceEventIds = (events ?? []).map((event) => event.id);
+  if (memberProfileError) throw memberProfileError;
+  const visibleEvents = (events ?? []).filter((event) => !event.eligible_skill_levels || event.eligible_skill_levels.includes(memberProfile.skill_level));
+  const raceEventIds = visibleEvents.map((event) => event.id);
   const { data: allSignups, error: allSignupsError } = raceEventIds.length
     ? await admin.from("race_signups").select("race_event_id, profiles(full_name)").in("race_event_id", raceEventIds)
     : { data: [], error: null };
@@ -337,7 +340,7 @@ export async function getRaceEventsWithMySignup() {
     attendeeNamesByRace.set(signup.race_event_id, names);
   }
 
-  return (events ?? []).map((event) => ({
+  return visibleEvents.map((event) => ({
     ...event,
     my_signup: signupByRace.get(event.id) ?? null,
     attendee_names: attendeeNamesByRace.get(event.id) ?? [],

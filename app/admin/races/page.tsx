@@ -5,18 +5,14 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { addRaceEventAdminAction } from "@/lib/actions";
-import { getEasternDateKey } from "@/lib/time";
+import { addRaceEventAdminAction, updateRaceEventAdminAction } from "@/lib/actions";
 
 export default async function AdminRacesPage() {
   const { supabase } = await ensureAdminProfile();
-  const todayEastern = getEasternDateKey(new Date());
-
   const { data: races } = await supabase
     .from("race_events")
-    .select("id, title, event_date, location, notes")
-    .gte("event_date", todayEastern)
-    .order("event_date", { ascending: true });
+    .select("id, title, event_date, location, notes, eligible_skill_levels")
+    .order("event_date", { ascending: false });
 
   const raceIds = (races ?? []).map((r) => r.id);
   const signups = raceIds.length
@@ -48,6 +44,7 @@ export default async function AdminRacesPage() {
           <Field label="Notes">
             <input name="notes" />
           </Field>
+          <Field label="Visible to rower skill levels"><div className="row" style={{ flexWrap: "wrap" }}>{["LTR", "Beginner", "Intermediate", "Advanced", "Elite"].map((level) => <label key={level}><input type="checkbox" name="eligible_skill_levels" value={level} defaultChecked /> {level}</label>)}</div></Field>
           <Button type="submit">Create Race</Button>
         </form>
 
@@ -67,6 +64,15 @@ export default async function AdminRacesPage() {
                   {race.event_date}
                   {race.location ? ` | ${race.location}` : ""}
                 </p>
+                <form action={updateRaceEventAdminAction} className="form-grid">
+                  <input type="hidden" name="race_event_id" value={race.id} />
+                  <Field label="Race title"><input name="title" defaultValue={race.title} required /></Field>
+                  <Field label="Race date"><input name="event_date" type="date" defaultValue={race.event_date} required /></Field>
+                  <Field label="Location"><input name="location" defaultValue={race.location ?? ""} /></Field>
+                  <Field label="Notes"><input name="notes" defaultValue={race.notes ?? ""} /></Field>
+                  <Field label="Visible to rower skill levels"><div className="row" style={{ flexWrap: "wrap" }}>{["LTR", "Beginner", "Intermediate", "Advanced", "Elite"].map((level) => <label key={level}><input type="checkbox" name="eligible_skill_levels" value={level} defaultChecked={(race.eligible_skill_levels ?? ["LTR", "Beginner", "Intermediate", "Advanced", "Elite"]).includes(level)} /> {level}</label>)}</div></Field>
+                  <Button type="submit" variant="secondary">Save Race Posting</Button>
+                </form>
                 <table>
                   <thead>
                     <tr>

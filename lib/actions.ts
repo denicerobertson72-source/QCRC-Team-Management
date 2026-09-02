@@ -2591,16 +2591,34 @@ export async function addRaceEventAdminAction(formData: FormData) {
   const eventDate = String(formData.get("event_date") ?? "");
   const location = String(formData.get("location") ?? "");
   const notes = String(formData.get("notes") ?? "");
+  const eligibleSkillLevels = formData.getAll("eligible_skill_levels").map(String).filter(Boolean);
+  if (eligibleSkillLevels.length === 0) throw new Error("Choose at least one rower skill level.");
 
   const { error } = await supabase.from("race_events").insert({
     title,
     event_date: eventDate,
     location: location || null,
     notes: notes || null,
+    eligible_skill_levels: eligibleSkillLevels,
     created_by: user.id,
   });
   if (error) throw error;
 
+  revalidatePath("/programs/racing");
+  revalidatePath("/admin/races");
+}
+
+export async function updateRaceEventAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const raceEventId = String(formData.get("race_event_id") ?? "");
+  const title = String(formData.get("title") ?? "");
+  const eventDate = String(formData.get("event_date") ?? "");
+  const location = String(formData.get("location") ?? "");
+  const notes = String(formData.get("notes") ?? "");
+  const eligibleSkillLevels = formData.getAll("eligible_skill_levels").map(String).filter(Boolean);
+  if (!raceEventId || !title || !eventDate || eligibleSkillLevels.length === 0) throw new Error("Enter a title, date, and at least one rower skill level.");
+  const { error } = await supabase.from("race_events").update({ title, event_date: eventDate, location: location || null, notes: notes || null, eligible_skill_levels: eligibleSkillLevels }).eq("id", raceEventId);
+  if (error) throw error;
   revalidatePath("/programs/racing");
   revalidatePath("/admin/races");
 }
