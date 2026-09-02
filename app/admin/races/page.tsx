@@ -5,7 +5,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { addRaceEventAdminAction, updateRaceEventAdminAction } from "@/lib/actions";
+import { addRaceEventAdminAction, updateRaceEventAdminAction, updateRaceSignupAdminAction } from "@/lib/actions";
 
 export default async function AdminRacesPage() {
   const { supabase } = await ensureAdminProfile();
@@ -19,7 +19,7 @@ export default async function AdminRacesPage() {
     ? (
         await supabase
           .from("race_signups")
-          .select("race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(full_name)")
+          .select("id, race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(full_name)")
           .in("race_event_id", raceIds)
       ).data ?? []
     : [];
@@ -91,21 +91,24 @@ export default async function AdminRacesPage() {
                     ) : (
                       raceSignups.map((signup, idx) => {
                         const profile = Array.isArray(signup.profiles) ? signup.profiles[0] : signup.profiles;
-                        const prefs = [
-                          signup.wants_1x ? "1x" : null,
-                          signup.wants_2x ? "2x" : null,
-                          signup.wants_4x ? "4x" : null,
-                          signup.wants_8x ? "8x" : null,
-                        ]
-                          .filter(Boolean)
-                          .join(", ");
                         return (
                           <tr key={`${race.id}-${idx}`}>
-                            <td>{profile?.full_name ?? "Unknown"}</td>
-                            <td>{signup.birthdate}</td>
-                            <td>{signup.desired_race_count ?? 1}</td>
-                            <td>{prefs || "-"}</td>
-                            <td>{signup.comments ? <span>{signup.comments}</span> : "-"}</td>
+                            <td colSpan={5}>
+                              <form action={updateRaceSignupAdminAction} className="form-grid">
+                                <input type="hidden" name="signup_id" value={signup.id} />
+                                <strong>{profile?.full_name ?? "Unknown"}</strong>
+                                <Field label="Birthdate"><input name="birthdate" type="date" defaultValue={signup.birthdate} required /></Field>
+                                <Field label="Number of races"><select name="desired_race_count" defaultValue={String(signup.desired_race_count ?? 1)}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}</select></Field>
+                                <div className="row" style={{ flexWrap: "wrap" }}>
+                                  <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={signup.wants_1x} /> 1x</label>
+                                  <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={signup.wants_2x} /> 2x</label>
+                                  <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={signup.wants_4x} /> 4x</label>
+                                  <label><input type="checkbox" name="wants_8x" value="true" defaultChecked={signup.wants_8x} /> 8x</label>
+                                </div>
+                                <Field label="Comments"><input name="comments" defaultValue={signup.comments ?? ""} /></Field>
+                                <Button type="submit" variant="secondary">Save {profile?.full_name ?? "Signup"}</Button>
+                              </form>
+                            </td>
                           </tr>
                         );
                       })

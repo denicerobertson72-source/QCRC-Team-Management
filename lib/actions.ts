@@ -2665,6 +2665,23 @@ export async function saveRaceSignupAction(formData: FormData) {
   revalidatePath("/admin/lineups");
 }
 
+export async function updateRaceSignupAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const signupId = String(formData.get("signup_id") ?? "");
+  const birthdate = String(formData.get("birthdate") ?? "");
+  const desiredRaceCount = Number(formData.get("desired_race_count") ?? 1);
+  const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
+  const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
+  const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
+  const wants8x = String(formData.get("wants_8x") ?? "false") === "true";
+  const comments = String(formData.get("comments") ?? "").trim();
+  if (!signupId || !birthdate || !Number.isInteger(desiredRaceCount) || desiredRaceCount < 1) throw new Error("Enter a valid signup.");
+  const { error } = await supabase.from("race_signups").update({ birthdate, desired_race_count: desiredRaceCount, wants_1x: wants1x, wants_2x: wants2x, wants_4x: wants4x, wants_8x: wants8x, comments: comments || null }).eq("id", signupId);
+  if (error) throw error;
+  revalidatePath("/admin/races");
+  revalidatePath("/programs/racing");
+}
+
 export async function createLineupBoardAdminAction(formData: FormData) {
   const { supabase, user } = await assertAdmin();
   const boardType = String(formData.get("board_type") ?? "");
