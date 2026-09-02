@@ -60,9 +60,6 @@ export default async function RacingProgramPage() {
                   <label>
                     <input type="checkbox" name="wants_4x" value="true" defaultChecked={Boolean(event.my_signup?.wants_4x)} /> 4x
                   </label>
-                  <label>
-                    <input type="checkbox" name="wants_8x" value="true" defaultChecked={Boolean(event.my_signup?.wants_8x)} /> 8x
-                  </label>
                 </div>
 
                 <Field label="Comments (optional)">

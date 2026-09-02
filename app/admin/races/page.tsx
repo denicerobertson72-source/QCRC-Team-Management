@@ -103,7 +103,6 @@ export default async function AdminRacesPage() {
                                   <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={signup.wants_1x} /> 1x</label>
                                   <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={signup.wants_2x} /> 2x</label>
                                   <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={signup.wants_4x} /> 4x</label>
-                                  <label><input type="checkbox" name="wants_8x" value="true" defaultChecked={signup.wants_8x} /> 8x</label>
                                 </div>
                                 <Field label="Comments"><input name="comments" defaultValue={signup.comments ?? ""} /></Field>
                                 <Button type="submit" variant="secondary">Save {profile?.full_name ?? "Signup"}</Button>

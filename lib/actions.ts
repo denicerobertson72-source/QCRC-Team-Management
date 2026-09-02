@@ -2632,7 +2632,6 @@ export async function saveRaceSignupAction(formData: FormData) {
   const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
   const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
   const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
-  const wants8x = String(formData.get("wants_8x") ?? "false") === "true";
   const comments = String(formData.get("comments") ?? "").trim();
 
   if (!attending) {
@@ -2652,7 +2651,7 @@ export async function saveRaceSignupAction(formData: FormData) {
         wants_1x: wants1x,
         wants_2x: wants2x,
         wants_4x: wants4x,
-        wants_8x: wants8x,
+        wants_8x: false,
         comments: comments || null,
       },
       { onConflict: "race_event_id,member_id" },
@@ -2673,10 +2672,9 @@ export async function updateRaceSignupAdminAction(formData: FormData) {
   const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
   const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
   const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
-  const wants8x = String(formData.get("wants_8x") ?? "false") === "true";
   const comments = String(formData.get("comments") ?? "").trim();
   if (!signupId || !birthdate || !Number.isInteger(desiredRaceCount) || desiredRaceCount < 1) throw new Error("Enter a valid signup.");
-  const { error } = await supabase.from("race_signups").update({ birthdate, desired_race_count: desiredRaceCount, wants_1x: wants1x, wants_2x: wants2x, wants_4x: wants4x, wants_8x: wants8x, comments: comments || null }).eq("id", signupId);
+  const { error } = await supabase.from("race_signups").update({ birthdate, desired_race_count: desiredRaceCount, wants_1x: wants1x, wants_2x: wants2x, wants_4x: wants4x, wants_8x: false, comments: comments || null }).eq("id", signupId);
   if (error) throw error;
   revalidatePath("/admin/races");
   revalidatePath("/programs/racing");
