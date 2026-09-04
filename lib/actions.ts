@@ -38,6 +38,20 @@ function clearanceValueFromForm(value: FormDataEntryValue | null) {
   return skillLevelToClearance(raw);
 }
 
+function rowerNameFromProfile(profile: { full_name?: string | null; email?: string | null } | null) {
+  const fullName = profile?.full_name?.trim();
+  if (fullName && !fullName.includes("@")) return fullName;
+  return profile?.email?.split("@")[0] || "A QCRC member";
+}
+
+export async function recordPasswordSetAction() {
+  const { supabase, user } = await ensureProfile();
+  const { error } = await supabase.from("profiles").update({ password_set_at: new Date().toISOString() }).eq("id", user.id);
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/account/security");
+}
+
 async function assertAdmin() {
   const { supabase, user, profile } = await ensureProfile();
   if (profile.role !== "admin" && profile.role !== "equipment_manager" && profile.role !== "coach") {
@@ -51,7 +65,12 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
-async function notifyLaunchSubscribers(sourceId: string, launchingMemberId: string, payload: { boat_name: string; launch_comment: string | null }, notificationType = "rower_launched") {
+async function notifyLaunchSubscribers(
+  sourceId: string,
+  launchingMemberId: string,
+  payload: { boat_name: string; launch_comment?: string | null; return_comment?: string | null },
+  notificationType = "rower_launched",
+) {
   try {
     const admin = createAdminClient();
     const { data: optIns, error: optInError } = await admin.from("launch_notification_members").select("member_id");
@@ -1119,35 +1138,14 @@ export async function checkoutAction(formData: FormData) {
   const { error } = await supabase.rpc("checkout_reservation", {
     p_reservation_id: reservationId,
     p_location: location || null,
+    p_direction: direction || null,
+    p_launch_comment: launchComment || null,
   });
 
   if (error) {
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", error.message || "Unable to launch.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-  }
-
-  if (direction || launchComment) {
-    const { data: reservationForComment, error: reservationForCommentError } = await supabase
-      .from("reservations")
-      .select("notes, boats(name)")
-      .eq("id", reservationId)
-      .eq("created_by", user.id)
-      .single();
-    if (reservationForCommentError) throw reservationForCommentError;
-    const existingCrew = splitNotesAndCrew(reservationForComment.notes).crewNames.join(", ");
-    const updateResult = await supabase
-      .from("reservations")
-      .update({
-        ...(direction ? { river_direction: direction } : {}),
-        ...(launchComment ? { notes: appendCrewNamesToNotes(launchComment, existingCrew) } : {}),
-      })
-      .eq("id", reservationId);
-    if (updateResult.error) {
-      destination.searchParams.set("reservation_status", "error");
-      destination.searchParams.set("reservation_message", updateResult.error.message || "Launch recorded, but direction was not saved.");
-      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
-    }
   }
 
   const { error: locationError } = await supabase.from("rowing_location_points").insert({
@@ -1186,12 +1184,13 @@ export async function checkoutAction(formData: FormData) {
 export async function checkinAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
-  const notes = String(formData.get("notes") ?? "");
+  const returnComment = String(formData.get("return_comment") ?? "").trim();
   const destination = new URL("/reservations", "http://local");
 
   const { error } = await supabase.rpc("checkin_reservation", {
     p_reservation_id: reservationId,
-    p_notes: notes || null,
+    p_notes: null,
+    p_return_comment: returnComment || null,
   });
 
   if (error) {
@@ -1203,7 +1202,7 @@ export async function checkinAction(formData: FormData) {
   const { data: returnedReservation } = await supabase.from("reservations").select("boats(name)").eq("id", reservationId).maybeSingle();
   const boatRelation = returnedReservation?.boats as { name?: string } | { name?: string }[] | null;
   const boatName = Array.isArray(boatRelation) ? boatRelation[0]?.name : boatRelation?.name;
-  await notifyLaunchSubscribers(reservationId, user.id, { boat_name: boatName || "A boat", launch_comment: null }, "rower_returned");
+  await notifyLaunchSubscribers(reservationId, user.id, { boat_name: boatName || "A boat", return_comment: returnComment || null }, "rower_returned");
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1289,6 +1288,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
     checkout_location: location || null,
     river_direction: direction || null,
     notes: launchComment || null,
+    launch_comment: launchComment || null,
   });
 
   if (error) {
@@ -1321,7 +1321,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
 export async function privateBoatReturnAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
-  const notes = String(formData.get("notes") ?? "");
+  const returnComment = String(formData.get("return_comment") ?? "").trim();
   const destination = new URL("/reservations", "http://local");
 
   const { error } = await supabase
@@ -1329,7 +1329,7 @@ export async function privateBoatReturnAction(formData: FormData) {
     .update({
       status: "checked_in",
       checked_in_at: new Date().toISOString(),
-      notes: notes || null,
+      return_comment: returnComment || null,
     })
     .eq("id", privateOutingId)
     .eq("member_id", user.id)
@@ -1341,7 +1341,7 @@ export async function privateBoatReturnAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", launch_comment: null }, "rower_returned");
+  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", return_comment: returnComment || null }, "rower_returned");
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1373,6 +1373,84 @@ export async function updatePrivateBoatGateStatusAction(formData: FormData) {
   revalidatePath("/safety");
   destination.searchParams.set("reservation_status", "success");
   destination.searchParams.set("reservation_message", "Private boat gate status saved.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
+export async function submitSafetyConcernAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const destination = new URL("/", "http://local");
+  const message = String(formData.get("message") ?? "").trim();
+  const photos = formData
+    .getAll("photos")
+    .filter((entry): entry is File => typeof File !== "undefined" && entry instanceof File && entry.size > 0);
+
+  if (!message || message.length > 2000) {
+    destination.searchParams.set("safety_status", "error");
+    destination.searchParams.set("safety_message", "Enter a safety concern of up to 2,000 characters.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+  if (photos.length > 5 || photos.some((photo) => !photo.type.startsWith("image/") || photo.size > 10 * 1024 * 1024)) {
+    destination.searchParams.set("safety_status", "error");
+    destination.searchParams.set("safety_message", "Attach up to five image files, each no larger than 10 MB.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  try {
+    const { data: concern, error } = await supabase
+      .from("safety_concerns")
+      .insert({ created_by: user.id, message })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    const photoRows: { safety_concern_id: string; storage_path: string; mime_type: string; uploaded_by: string }[] = [];
+    for (const photo of photos) {
+      const storagePath = `${user.id}/${concern.id}/${Date.now()}-${sanitizeStorageFileName(photo.name)}`;
+      const { error: uploadError } = await supabase.storage.from("safety-concern-photos").upload(storagePath, photo, {
+        contentType: photo.type,
+        upsert: false,
+      });
+      if (uploadError) throw uploadError;
+      photoRows.push({ safety_concern_id: concern.id, storage_path: storagePath, mime_type: photo.type, uploaded_by: user.id });
+    }
+    if (photoRows.length) {
+      const { error: photoError } = await supabase.from("safety_concern_photos").insert(photoRows);
+      if (photoError) throw photoError;
+    }
+
+    // The concern itself is stored through the member's RLS policy; delivery is
+    // performed with the service role so every active teammate receives it.
+    const admin = createAdminClient();
+    const [{ data: author }, { data: activeMembers, error: membersError }] = await Promise.all([
+      supabase.from("profiles").select("full_name,email").eq("id", user.id).maybeSingle(),
+      admin.from("profiles").select("id").eq("status", "active"),
+    ]);
+    if (membersError) throw membersError;
+
+    const authorName = rowerNameFromProfile(author);
+    const memberIds = (activeMembers ?? []).map((member) => member.id);
+    const payload = { concern_id: concern.id, author_name: authorName, message, photo_count: photoRows.length };
+    if (memberIds.length) {
+      const { error: notificationError } = await admin.from("notification_events").insert(
+        memberIds.map((memberId) => ({
+          notification_key: `safety-concern:${concern.id}:${memberId}`,
+          notification_type: "safety_concern",
+          member_id: memberId,
+          payload,
+        })),
+      );
+      if (notificationError) throw notificationError;
+      await sendPushNotifications(memberIds, "safety_concern", payload);
+    }
+  } catch (error) {
+    destination.searchParams.set("safety_status", "error");
+    destination.searchParams.set("safety_message", error instanceof Error ? error.message : "Unable to post the safety concern.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/");
+  destination.searchParams.set("safety_status", "success");
+  destination.searchParams.set("safety_message", "Safety concern posted and sent to all active members.");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 

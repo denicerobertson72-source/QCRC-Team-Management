@@ -13,6 +13,7 @@ import type {
   RowingMeetupCall,
   RowingMeetupMember,
   SafetyEntry,
+  SafetyConcern,
   SafetyResource,
   TeamAnnouncement,
   UnavailableBoatWindow,
@@ -69,7 +70,7 @@ export async function getMyReservations() {
 
   const { data, error } = await supabase
     .from("reservations")
-    .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, updated_at, boats(name)")
+    .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, launch_comment, return_comment, updated_at, boats(name)")
     .in("status", ["reserved", "checked_out", "checked_in", "cancelled"])
     .or(`created_by.eq.${user.id}`)
     .order("start_time", { ascending: false });
@@ -149,7 +150,7 @@ export async function getMyPrivateBoatOutings() {
   const { supabase, user } = await ensureProfile();
   const { data, error } = await supabase
     .from("private_boat_outings")
-    .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes")
+    .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, launch_comment, return_comment")
     .eq("member_id", user.id)
     .in("status", ["checked_out", "checked_in"])
     .order("checked_out_at", { ascending: false });
@@ -644,6 +645,8 @@ function buildSafetyDashboard(
       river_direction: row.river_direction,
       gate_status: row.gate_status,
       notes: parsed.notes,
+      launch_comment: row.launch_comment ?? null,
+      return_comment: row.return_comment ?? null,
       crew_names: parsed.crewNames,
       status: row.status,
       is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
@@ -668,6 +671,8 @@ function buildSafetyDashboard(
       river_direction: row.river_direction,
       gate_status: row.gate_status,
       notes: row.notes ?? null,
+      launch_comment: row.launch_comment ?? null,
+      return_comment: row.return_comment ?? null,
       crew_names: [],
       status: row.status,
       is_overdue: row.status === "checked_out" && checkedOutTime !== null && now - checkedOutTime >= 2 * 60 * 60 * 1000,
@@ -696,13 +701,13 @@ export async function getSafetyDashboardForSupabase(supabase: any) {
   const [{ data: reservationData, error: reservationError }, { data: privateOutings, error: privateOutingError }] = await Promise.all([
     supabase
       .from("reservations")
-      .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, boats(name), profiles!reservations_created_by_fkey(full_name,email)")
+      .select("id, created_by, start_time, end_time, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, launch_comment, return_comment, boats(name), profiles!reservations_created_by_fkey(full_name,email)")
       .in("status", ["checked_out", "checked_in"])
       .order("checked_out_at", { ascending: false })
       .limit(100),
     supabase
       .from("private_boat_outings")
-      .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, profiles!private_boat_outings_member_id_fkey(full_name,email)")
+      .select("id, member_id, status, checked_out_at, checked_in_at, checkout_location, river_direction, gate_status, notes, launch_comment, return_comment, profiles!private_boat_outings_member_id_fkey(full_name,email)")
       .in("status", ["checked_out", "checked_in"])
       .order("checked_out_at", { ascending: false })
       .limit(100),
@@ -735,6 +740,41 @@ export async function getActiveTeamAnnouncements() {
     const endsAt = announcement.ends_at ? new Date(announcement.ends_at).getTime() : null;
     return (startsAt === null || startsAt <= now) && (endsAt === null || endsAt >= now);
   });
+}
+
+export async function getRecentSafetyConcerns(limit = 20) {
+  const { supabase } = await ensureProfile();
+  const { data, error } = await supabase
+    .from("safety_concerns")
+    .select("id, created_by, message, created_at, profiles!safety_concerns_created_by_fkey(full_name,email), safety_concern_photos(id,storage_path)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const storagePaths = rows.flatMap((row) => {
+    const photos = Array.isArray(row.safety_concern_photos) ? row.safety_concern_photos : [];
+    return photos.map((photo) => (photo && typeof photo === "object" ? String((photo as { storage_path?: string }).storage_path ?? "") : "")).filter(Boolean);
+  });
+  const signedUrlMap = new Map<string, string>();
+  if (storagePaths.length) {
+    const { data: signedUrls } = await supabase.storage.from("safety-concern-photos").createSignedUrls([...new Set(storagePaths)], 60 * 60);
+    for (const signed of signedUrls ?? []) {
+      if (signed.path && signed.signedUrl) signedUrlMap.set(signed.path, signed.signedUrl);
+    }
+  }
+
+  return rows.map((row) => ({
+    id: String(row.id),
+    created_by: String(row.created_by),
+    author_name: rowerNameFromRelation(row.profiles),
+    message: String(row.message),
+    created_at: String(row.created_at),
+    photos: (Array.isArray(row.safety_concern_photos) ? row.safety_concern_photos : []).map((photo) => {
+      const typedPhoto = photo as { id?: string; storage_path?: string };
+      return { id: String(typedPhoto.id), photo_url: typedPhoto.storage_path ? signedUrlMap.get(typedPhoto.storage_path) ?? null : null };
+    }),
+  })) satisfies SafetyConcern[];
 }
 
 export async function getPublishedSafetyResources() {

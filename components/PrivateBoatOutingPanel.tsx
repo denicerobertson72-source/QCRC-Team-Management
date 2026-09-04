@@ -142,7 +142,7 @@ export function PrivateBoatOutingPanel({
         {activeOuting ? (
           <form action={privateBoatReturnAction} className="inline-form" onSubmit={handleReturnSubmit}>
             <input type="hidden" name="private_outing_id" value={activeOuting.id} />
-            <input name="notes" placeholder="Condition notes" defaultValue={activeOuting.notes ?? ""} />
+            <input name="return_comment" placeholder="Return comments for safety (optional)" defaultValue={activeOuting.return_comment ?? ""} maxLength={500} />
             <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
           </form>
         ) : null}

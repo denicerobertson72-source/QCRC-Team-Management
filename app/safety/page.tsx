@@ -143,7 +143,8 @@ export default async function SafetyPage() {
                 ) : entry.river_direction ? (
                   <p>Route: {entry.river_direction}</p>
                 ) : null}
-                {entry.notes ? <p>Comments: {entry.notes}</p> : null}
+                {entry.launch_comment || entry.notes ? <p>Launch comments: {entry.launch_comment ?? entry.notes}</p> : null}
+                {entry.return_comment ? <p>Return comments: {entry.return_comment}</p> : null}
                 <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
               </Card>
             ))}
@@ -158,7 +159,8 @@ export default async function SafetyPage() {
                 <p className="muted">{entry.rower_name}</p>
                 {entry.crew_names.length > 0 ? <p>Boat roster: {[entry.rower_name, ...entry.crew_names].join(", ")}</p> : null}
                 <p>Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET</p>
-                {entry.notes ? <p>Comments: {entry.notes}</p> : null}
+                {entry.launch_comment || entry.notes ? <p>Launch comments: {entry.launch_comment ?? entry.notes}</p> : null}
+                {entry.return_comment ? <p>Return comments: {entry.return_comment}</p> : null}
               </Card>
             ))}
           </Card>
@@ -178,7 +180,8 @@ export default async function SafetyPage() {
                 <th>Return</th>
                 <th>Route</th>
                 <th>Gate</th>
-                <th>Comments</th>
+                <th>Launch Comments</th>
+                <th>Return Comments</th>
               </tr>
             </thead>
             <tbody>
@@ -198,7 +201,8 @@ export default async function SafetyPage() {
                   <td>
                     {entry.gate_status === "locked" ? "Locked" : entry.gate_status === "unlocked" ? "Unlocked" : "-"}
                   </td>
-                  <td>{entry.notes ?? "-"}</td>
+                  <td>{entry.launch_comment ?? entry.notes ?? "-"}</td>
+                  <td>{entry.return_comment ?? "-"}</td>
                 </tr>
               ))}
             </tbody>

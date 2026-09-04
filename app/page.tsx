@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { ensureProfile } from "@/lib/auth";
-import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, updatePrivateBoatGateStatusAction, updateReservationGateStatusAction } from "@/lib/actions";
-import { getActiveTeamAnnouncements, getMyPrivateBoatOutings, getMyReservations } from "@/lib/queries";
+import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, submitSafetyConcernAction, updatePrivateBoatGateStatusAction, updateReservationGateStatusAction } from "@/lib/actions";
+import { getActiveTeamAnnouncements, getMyPrivateBoatOutings, getMyReservations, getRecentSafetyConcerns } from "@/lib/queries";
 import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
+import { MobileFeatureSetup } from "@/components/MobileFeatureSetup";
 
 type SearchParams = Promise<{
   announcement_status?: string;
   announcement_message?: string;
+  safety_status?: string;
+  safety_message?: string;
 }>;
 
 const QUICK_LINKS = [
@@ -29,11 +32,12 @@ const QUICK_LINKS = [
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [{ profile, supabase }, announcements, reservations, privateOutings] = await Promise.all([
+  const [{ profile, supabase }, announcements, reservations, privateOutings, safetyConcerns] = await Promise.all([
     ensureProfile(),
     getActiveTeamAnnouncements(),
     getMyReservations(),
     getMyPrivateBoatOutings(),
+    getRecentSafetyConcerns(),
   ]);
   const isAdmin = profile?.role === "admin";
   const races = isAdmin
@@ -41,6 +45,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
     : [];
   const displayName = profile?.full_name?.trim() && !profile.full_name.includes("@") ? profile.full_name.trim() : "";
   const links = isAdmin ? [...QUICK_LINKS, { href: "/admin", label: "Admin", description: "Manage members, boats, safety, and programs." }] : QUICK_LINKS;
+  const needsPassword = !profile?.password_set_at;
 
   return (
     <>
@@ -60,6 +65,63 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             message={params.announcement_message}
           />
         ) : null}
+        {params.safety_status && params.safety_message ? (
+          <FlashNotice
+            status={params.safety_status === "success" ? "success" : "error"}
+            message={params.safety_message}
+          />
+        ) : null}
+
+        <MobileFeatureSetup />
+
+        {needsPassword ? (
+          <Card className="stack">
+            <div className="page-title">
+              <h3>Set Your QCRC Password</h3>
+              <span className="muted">A password has not been recorded for this account yet.</span>
+            </div>
+            <p>Set one now so you can sign in directly without waiting for an email link.</p>
+            <Link href="/account/security" className="cta-link">Set Password</Link>
+          </Card>
+        ) : null}
+
+        <Card className="stack">
+          <div className="page-title">
+            <h3>Post a Safety Concern</h3>
+            <span className="muted">Every active member receives an in-app alert and a push notification if enabled.</span>
+          </div>
+          <form action={submitSafetyConcernAction} className="form-grid" encType="multipart/form-data">
+            <Field label="What should the team know?">
+              <textarea name="message" rows={4} maxLength={2000} placeholder="Example: Debris reported near the Ohio River launch ramp. Please use caution." required />
+            </Field>
+            <Field label="Photos (optional, up to 5)">
+              <input name="photos" type="file" accept="image/*" multiple />
+            </Field>
+            <Button type="submit">Send Safety Concern to Team</Button>
+          </form>
+          {safetyConcerns.length > 0 ? (
+            <div className="stack">
+              <h4>Recent Safety Concerns</h4>
+              {safetyConcerns.map((concern) => (
+                <Card key={concern.id} subtle className="stack">
+                  <p className="muted">{concern.author_name} · {formatEasternDateTime(concern.created_at)} ET</p>
+                  <p>{concern.message}</p>
+                  {concern.photos.length ? (
+                    <div className="grid">
+                      {concern.photos.map((photo) => photo.photo_url ? (
+                        <a key={photo.id} href={photo.photo_url} target="_blank" rel="noreferrer">
+                          <img src={photo.photo_url} alt="Safety concern attachment" loading="lazy" style={{ width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }} />
+                        </a>
+                      ) : null)}
+                    </div>
+                  ) : null}
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No safety concerns have been posted recently.</p>
+          )}
+        </Card>
 
         <Card className="stack">
           <div className="page-title">

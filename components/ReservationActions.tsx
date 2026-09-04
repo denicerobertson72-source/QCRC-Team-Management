@@ -214,7 +214,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         {canCheckin ? (
           <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
             <input type="hidden" name="reservation_id" value={reservation.id} />
-            <input name="notes" placeholder="Condition notes" />
+            <input name="return_comment" placeholder="Return comments for safety (optional)" maxLength={500} />
             <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
           </form>
         ) : null}

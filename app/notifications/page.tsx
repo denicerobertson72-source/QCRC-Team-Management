@@ -38,6 +38,7 @@ function notificationTitle(notification: { notification_type: string; payload: R
   }
   if (notification.notification_type === "rower_launched") return `${String(notification.payload.boat_name ?? "A boat")} launched`;
   if (notification.notification_type === "rower_returned") return `${String(notification.payload.boat_name ?? "A boat")} returned`;
+  if (notification.notification_type === "safety_concern") return "Safety concern posted";
   return notification.notification_type.replaceAll("_", " ");
 }
 
@@ -67,7 +68,8 @@ function notificationBody(notification: { notification_type: string; payload: Re
     return `Severity ${String(notification.payload.severity ?? "not set")}: ${String(notification.payload.description ?? "Open the damage queue for details.")}`;
   }
   if (notification.notification_type === "rower_launched") return String(notification.payload.launch_comment ?? "A QCRC rower has launched and is on the water.");
-  if (notification.notification_type === "rower_returned") return "A QCRC rower has returned to the marina.";
+  if (notification.notification_type === "rower_returned") return String(notification.payload.return_comment ?? "A QCRC rower has returned to the marina.");
+  if (notification.notification_type === "safety_concern") return `${String(notification.payload.author_name ?? "A teammate")}: ${String(notification.payload.message ?? "Open QCRC for details.")}`;
   return "";
 }
 
@@ -89,6 +91,7 @@ function notificationHref(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "damage_report_submitted") return "/admin/damage";
   if (notification.notification_type === "rower_launched") return "/safety";
   if (notification.notification_type === "rower_returned") return "/safety";
+  if (notification.notification_type === "safety_concern") return "/";
   return null;
 }
 

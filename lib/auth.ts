@@ -22,7 +22,7 @@ export const ensureProfile = cache(async function ensureProfile() {
   const fallbackName = authFullName || (user.email ?? "Unknown Member");
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role")
+    .select("id, full_name, email, role, password_set_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -38,7 +38,7 @@ export const ensureProfile = cache(async function ensureProfile() {
         email: user.email ?? "",
         full_name: fallbackName,
       })
-      .select("id, full_name, email, role")
+      .select("id, full_name, email, role, password_set_at")
       .single();
     if (error) throw error;
     profile = inserted;
@@ -56,7 +56,7 @@ export const ensureProfile = cache(async function ensureProfile() {
           full_name: resolvedName,
         })
         .eq("id", user.id)
-        .select("id, full_name, email, role")
+        .select("id, full_name, email, role, password_set_at")
         .single();
       if (error) throw error;
       profile = updated;

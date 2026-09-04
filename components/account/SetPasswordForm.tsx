@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { recordPasswordSetAction } from "@/lib/actions";
 
 export function SetPasswordForm({
   title = "Set Password",
@@ -48,6 +49,13 @@ export function SetPasswordForm({
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       setError(updateError.message);
+      return;
+    }
+
+    try {
+      await recordPasswordSetAction();
+    } catch {
+      setError("Your password was saved, but we could not update the account reminder. Refresh and try once more.");
       return;
     }
 

@@ -49,6 +49,8 @@ export type Reservation = {
   river_direction?: string | null;
   gate_status?: string | null;
   notes: string | null;
+  launch_comment?: string | null;
+  return_comment?: string | null;
   updated_at?: string;
   crew_names?: string[];
   boats?: { name: string } | null;
@@ -71,6 +73,8 @@ export type PrivateBoatOuting = {
   river_direction: string | null;
   gate_status: string | null;
   notes: string | null;
+  launch_comment?: string | null;
+  return_comment?: string | null;
 };
 
 export type TrackableOuting = {
@@ -93,6 +97,8 @@ export type SafetyEntry = {
   river_direction: string | null;
   gate_status: string | null;
   notes: string | null;
+  launch_comment: string | null;
+  return_comment: string | null;
   crew_names: string[];
   status: string;
   is_overdue: boolean;
@@ -247,4 +253,18 @@ export type TeamAnnouncement = {
   audience_type: string;
   audience_race_event_id: string | null;
   created_at: string;
+};
+
+export type SafetyConcern = {
+  id: string;
+  created_by: string;
+  author_name: string;
+  message: string;
+  created_at: string;
+  photos: SafetyConcernPhoto[];
+};
+
+export type SafetyConcernPhoto = {
+  id: string;
+  photo_url: string | null;
 };
