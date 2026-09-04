@@ -10,6 +10,7 @@ import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, submitSafetyCo
 import { getActiveTeamAnnouncements, getMyPrivateBoatOutings, getMyReservations, getRecentSafetyConcerns } from "@/lib/queries";
 import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
 import { MobileFeatureSetup } from "@/components/MobileFeatureSetup";
+import { PasswordSetupPrompt } from "@/components/PasswordSetupPrompt";
 
 type SearchParams = Promise<{
   announcement_status?: string;
@@ -74,16 +75,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
 
         <MobileFeatureSetup />
 
-        {needsPassword ? (
-          <Card className="stack">
-            <div className="page-title">
-              <h3>Set Your QCRC Password</h3>
-              <span className="muted">A password has not been recorded for this account yet.</span>
-            </div>
-            <p>Set one now so you can sign in directly without waiting for an email link.</p>
-            <Link href="/account/security" className="cta-link">Set Password</Link>
-          </Card>
-        ) : null}
+        <PasswordSetupPrompt needsPassword={needsPassword} email={profile?.email} />
 
         <Card className="stack">
           <div className="page-title">

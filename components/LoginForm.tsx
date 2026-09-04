@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { SetPasswordForm } from "@/components/account/SetPasswordForm";
+import { recordPasswordSetAction } from "@/lib/actions";
 
 export function LoginForm({
   initialError = null,
@@ -130,6 +131,11 @@ export function LoginForm({
         return;
       }
 
+      try {
+        await recordPasswordSetAction();
+      } catch {
+        // A successful authentication should never be blocked by this reminder.
+      }
       if (storageKey) window.localStorage.setItem(storageKey, "1");
       router.replace("/");
       router.refresh();
