@@ -36,8 +36,8 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "damage_report_submitted") {
     return `Damage report: ${String(notification.payload.boat_name ?? "Boat")}`;
   }
-  if (notification.notification_type === "rower_launched") return `${String(notification.payload.boat_name ?? "A boat")} launched`;
-  if (notification.notification_type === "rower_returned") return `${String(notification.payload.boat_name ?? "A boat")} returned`;
+  if (notification.notification_type === "rower_launched") return `${String(notification.payload.rower_name ?? "A QCRC rower")} launched`;
+  if (notification.notification_type === "rower_returned") return `${String(notification.payload.rower_name ?? "A QCRC rower")} returned`;
   if (notification.notification_type === "safety_concern") return "Safety concern posted";
   return notification.notification_type.replaceAll("_", " ");
 }

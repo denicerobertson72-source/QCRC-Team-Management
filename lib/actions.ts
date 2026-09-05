@@ -68,7 +68,7 @@ async function assertSiteAdmin() {
 async function notifyLaunchSubscribers(
   sourceId: string,
   launchingMemberId: string,
-  payload: { boat_name: string; launch_comment?: string | null; return_comment?: string | null },
+  payload: { rower_name: string; launch_comment?: string | null; return_comment?: string | null; occurred_at: string },
   notificationType = "rower_launched",
 ) {
   try {
@@ -1120,7 +1120,7 @@ export async function updateSafetyResourceAdminAction(formData: FormData) {
 }
 
 export async function checkoutAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { supabase, user, profile } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
@@ -1135,7 +1135,7 @@ export async function checkoutAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { error } = await supabase.rpc("checkout_reservation", {
+  const { data: checkedOutReservation, error } = await supabase.rpc("checkout_reservation", {
     p_reservation_id: reservationId,
     p_location: location || null,
     p_direction: direction || null,
@@ -1160,17 +1160,10 @@ export async function checkoutAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { data: reservationForLaunchNotification } = await supabase
-    .from("reservations")
-    .select("boats(name)")
-    .eq("id", reservationId)
-    .eq("created_by", user.id)
-    .maybeSingle();
-  const boatRelation = reservationForLaunchNotification?.boats as { name?: string } | { name?: string }[] | null;
-  const boatName = Array.isArray(boatRelation) ? boatRelation[0]?.name : boatRelation?.name;
   await notifyLaunchSubscribers(reservationId, user.id, {
-    boat_name: boatName || "A boat",
+    rower_name: rowerNameFromProfile(profile),
     launch_comment: launchComment || null,
+    occurred_at: checkedOutReservation?.checked_out_at ?? new Date().toISOString(),
   });
 
   revalidatePath("/reservations");
@@ -1182,12 +1175,12 @@ export async function checkoutAction(formData: FormData) {
 }
 
 export async function checkinAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { supabase, user, profile } = await ensureProfile();
   const reservationId = String(formData.get("reservation_id") ?? "");
   const returnComment = String(formData.get("return_comment") ?? "").trim();
   const destination = new URL("/reservations", "http://local");
 
-  const { error } = await supabase.rpc("checkin_reservation", {
+  const { data: checkedInReservation, error } = await supabase.rpc("checkin_reservation", {
     p_reservation_id: reservationId,
     p_notes: null,
     p_return_comment: returnComment || null,
@@ -1199,10 +1192,12 @@ export async function checkinAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { data: returnedReservation } = await supabase.from("reservations").select("boats(name)").eq("id", reservationId).maybeSingle();
-  const boatRelation = returnedReservation?.boats as { name?: string } | { name?: string }[] | null;
-  const boatName = Array.isArray(boatRelation) ? boatRelation[0]?.name : boatRelation?.name;
-  await notifyLaunchSubscribers(reservationId, user.id, { boat_name: boatName || "A boat", return_comment: returnComment || null }, "rower_returned");
+  await notifyLaunchSubscribers(
+    reservationId,
+    user.id,
+    { rower_name: rowerNameFromProfile(profile), return_comment: returnComment || null, occurred_at: checkedInReservation?.checked_in_at ?? new Date().toISOString() },
+    "rower_returned",
+  );
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1239,7 +1234,7 @@ export async function updateReservationGateStatusAction(formData: FormData) {
 }
 
 export async function privateBoatLaunchAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { supabase, user, profile } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
@@ -1253,14 +1248,14 @@ export async function privateBoatLaunchAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: privateBoatProfile, error: profileError } = await supabase
     .from("profiles")
     .select("full_name, status, owns_private_boat, boat_storage_fee_ok")
     .eq("id", user.id)
     .single();
   if (profileError) throw profileError;
 
-  if (!profile?.owns_private_boat) {
+  if (!privateBoatProfile?.owns_private_boat) {
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", "Your account is not marked as a private boat owner.");
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
@@ -1309,7 +1304,11 @@ export async function privateBoatLaunchAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", launch_comment: launchComment || null });
+  await notifyLaunchSubscribers(privateOutingId, user.id, {
+    rower_name: rowerNameFromProfile(profile),
+    launch_comment: launchComment || null,
+    occurred_at: new Date().toISOString(),
+  });
 
   revalidatePath("/reservations");
   revalidatePath("/safety");
@@ -1319,7 +1318,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
 }
 
 export async function privateBoatReturnAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+  const { supabase, user, profile } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const returnComment = String(formData.get("return_comment") ?? "").trim();
   const destination = new URL("/reservations", "http://local");
@@ -1341,7 +1340,11 @@ export async function privateBoatReturnAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  await notifyLaunchSubscribers(privateOutingId, user.id, { boat_name: "Private Boat", return_comment: returnComment || null }, "rower_returned");
+  await notifyLaunchSubscribers(privateOutingId, user.id, {
+    rower_name: rowerNameFromProfile(profile),
+    return_comment: returnComment || null,
+    occurred_at: new Date().toISOString(),
+  }, "rower_returned");
 
   revalidatePath("/reservations");
   revalidatePath("/safety");

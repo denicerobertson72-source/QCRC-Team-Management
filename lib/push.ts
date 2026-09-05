@@ -47,13 +47,13 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
       };
     case "rower_launched":
       return {
-        title: `${String(payload.boat_name ?? "A boat")} launched`,
+        title: `${String(payload.rower_name ?? "A QCRC rower")} launched`,
         body: String(payload.launch_comment ?? "A QCRC rower has launched and is on the water."),
         url: "/safety",
       };
     case "rower_returned":
       return {
-        title: `${String(payload.boat_name ?? "A boat")} returned`,
+        title: `${String(payload.rower_name ?? "A QCRC rower")} returned`,
         body: String(payload.return_comment ?? "A QCRC rower has returned to the marina."),
         url: "/safety",
       };

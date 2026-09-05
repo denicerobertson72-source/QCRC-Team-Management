@@ -178,6 +178,7 @@ export default async function SafetyPage() {
                 <th>Crew</th>
                 <th>Launch</th>
                 <th>Return</th>
+                <th>Last Activity</th>
                 <th>Route</th>
                 <th>Gate</th>
                 <th>Launch Comments</th>
@@ -193,6 +194,7 @@ export default async function SafetyPage() {
                   <td>{entry.crew_names.length > 0 ? [entry.rower_name, ...entry.crew_names].join(", ") : entry.rower_name}</td>
                   <td>{entry.checked_out_at ? `${formatEasternDateTime(entry.checked_out_at)} ET` : "-"}</td>
                   <td>{entry.checked_in_at ? `${formatEasternDateTime(entry.checked_in_at)} ET` : "-"}</td>
+                  <td>{entry.checked_in_at ? `${formatEasternDateTime(entry.checked_in_at)} ET` : entry.checked_out_at ? `${formatEasternDateTime(entry.checked_out_at)} ET` : "-"}</td>
                   <td>
                     {canManageSafety
                       ? `${entry.checkout_location ?? "-"}${entry.river_direction ? ` / ${entry.river_direction}` : ""}`
