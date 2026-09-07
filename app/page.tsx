@@ -93,7 +93,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           </form>
           {safetyConcerns.length > 0 ? (
             <div className="stack">
-              <h4>Recent Safety Concerns</h4>
+              <h4>Today&apos;s Safety Concerns</h4>
               {safetyConcerns.map((concern) => (
                 <Card key={concern.id} subtle className="stack">
                   <p className="muted">{concern.author_name} · {formatEasternDateTime(concern.created_at)} ET</p>
@@ -111,7 +111,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
               ))}
             </div>
           ) : (
-            <p className="muted">No safety concerns have been posted recently.</p>
+            <p className="muted">No safety concerns have been posted today.</p>
           )}
         </Card>
 

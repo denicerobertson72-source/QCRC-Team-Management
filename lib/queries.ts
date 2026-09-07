@@ -760,9 +760,12 @@ export async function getActiveTeamAnnouncements() {
 
 export async function getRecentSafetyConcerns(limit = 20) {
   const { supabase } = await ensureProfile();
+  const todayEastern = getEasternDateKey(new Date());
+  const todayStart = easternLocalInputToIso(`${todayEastern}T00:00`);
   const { data, error } = await supabase
     .from("safety_concerns")
     .select("id, created_by, message, created_at, profiles!safety_concerns_created_by_fkey(full_name,email), safety_concern_photos(id,storage_path)")
+    .gte("created_at", todayStart)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
