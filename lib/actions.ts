@@ -223,6 +223,9 @@ function csvBooleanValue(value: string | undefined) {
 function normalizeTrainingGroup(value: string | undefined | null) {
   const normalized = (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (!normalized) return null;
+  if (normalized === "none" || normalized === "no" || normalized === "not_assigned" || normalized === "unassigned") {
+    return null;
+  }
   if (
     normalized === "beginner_intermediate" ||
     normalized === "beginner/intermediate" ||
@@ -1725,7 +1728,11 @@ export async function updateMemberAdminAction(formData: FormData) {
   const skillLevel = String(formData.get("skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "Mid-weight");
   const trainingGroupRaw = String(formData.get("training_group") ?? "").trim();
-  const trainingGroup = trainingGroupRaw === "beginner_intermediate" || trainingGroupRaw === "advanced" ? trainingGroupRaw : null;
+  const trainingGroup = normalizeTrainingGroup(trainingGroupRaw);
+
+  if (trainingGroup === undefined) {
+    throw new Error("Training group must be Beginner/Intermediate, Advanced, or None.");
+  }
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from("profiles")

@@ -187,7 +187,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
               `coached_training_group`, `owns_private_boat`, `boat_storage_fee_ok`, `boat_storage_fee_renewal_date`, `sms_opt_in`
             </p>
             <p className="muted">
-              Dates should be in `YYYY-MM-DD` format. Boolean fields accept `true/false`, `yes/no`, or `1/0`. Coached training group accepts `Beginner/Intermediate`, `BI`, `Advanced`, or blank.
+              Dates should be in `YYYY-MM-DD` format. Boolean fields accept `true/false`, `yes/no`, or `1/0`. Coached training group accepts `Beginner/Intermediate`, `BI`, `Advanced`, `None`, or blank.
             </p>
           </Card>
           <Button type="submit">Import CSV</Button>

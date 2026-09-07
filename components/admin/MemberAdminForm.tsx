@@ -114,8 +114,8 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
       </Field>
 
       <Field label="Coached Training Group">
-        <select name="training_group" defaultValue={member.training_group ?? ""}>
-          <option value="">Not assigned</option>
+        <select name="training_group" defaultValue={member.training_group ?? "none"}>
+          <option value="none">None</option>
           <option value="beginner_intermediate">Beginner/Intermediate</option>
           <option value="advanced">Advanced</option>
         </select>
