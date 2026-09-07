@@ -16,6 +16,7 @@ import type {
   SafetyConcern,
   SafetyResource,
   TeamAnnouncement,
+  TrackableOuting,
   UnavailableBoatWindow,
 } from "@/lib/types";
 import { easternLocalInputToIso, getEasternDateKey } from "@/lib/time";
@@ -160,6 +161,21 @@ export async function getMyPrivateBoatOutings() {
     if (row.status !== "checked_in") return true;
     return !row.gate_status;
   });
+}
+
+/** Active outings are intentionally separate from the reservation desk's date filter. */
+export async function getMyActiveTrackableOutings(): Promise<TrackableOuting[]> {
+  const { supabase, user } = await ensureProfile();
+  const [{ data: reservations, error: reservationError }, { data: privateOutings, error: privateOutingError }] = await Promise.all([
+    supabase.from("reservations").select("id, status").eq("created_by", user.id).eq("status", "checked_out"),
+    supabase.from("private_boat_outings").select("id, status").eq("member_id", user.id).eq("status", "checked_out"),
+  ]);
+  if (reservationError) throw reservationError;
+  if (privateOutingError) throw privateOutingError;
+  return [
+    ...(reservations ?? []).map((outing) => ({ id: outing.id, kind: "reservation" as const, status: outing.status })),
+    ...(privateOutings ?? []).map((outing) => ({ id: outing.id, kind: "private_boat" as const, status: outing.status })),
+  ];
 }
 
 export async function getBoats() {

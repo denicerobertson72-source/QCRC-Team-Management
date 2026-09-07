@@ -17,12 +17,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profileError) {
-    return NextResponse.json({ error: profileError.message }, { status: 500 });
-  }
-
   const { onWater } = await getSafetyDashboardForSupabase(supabase);
-  const state = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
+  const state = await getSafetyLiveMapState(supabase as never, user.id, onWater);
   return NextResponse.json(state);
 }

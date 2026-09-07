@@ -17,10 +17,9 @@ export default async function SafetyPage() {
   ]);
   const canManageSafety = profile?.role === "admin" || profile?.role === "coach" || profile?.role === "equipment_manager";
   const overdue = onWater.filter((entry) => entry.is_overdue);
-  const visibleOnWater = onWater;
   const visibleOverdue = canManageSafety ? overdue : overdue.filter((entry) => entry.created_by === user.id);
   const visibleRecentLog = recentLog;
-  const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, profile?.role, onWater);
+  const liveMapState = await getSafetyLiveMapState(supabase as never, user.id, onWater);
   const mapboxAccessToken =
     process.env.ROWING_MAP_KEY ??
     process.env.MAPBOX_MAIN_KEY ??
@@ -114,40 +113,13 @@ export default async function SafetyPage() {
             </div>
             <SafetyLiveMap
               initialState={liveMapState}
-              currentUserId={user.id}
+              showTrackingOverview={canManageSafety}
+              canManageSafety={canManageSafety}
               mapboxAccessToken={mapboxAccessToken}
               mapboxStyleUrl={mapboxStyleUrl}
               weatherRadarSources={weatherRadarSources}
               weatherRadarAttribution={weatherRadarAttribution}
             />
-          </Card>
-
-          <Card className="stack">
-            <h3>Currently On The Water</h3>
-            {visibleOnWater.length === 0 ? <p className="muted">No active launches right now.</p> : null}
-            {visibleOnWater.map((entry) => (
-              <Card key={entry.id} subtle>
-                <div className="page-title">
-                  <h4>{entry.boat_name}</h4>
-                  <StatusChip label={entry.is_overdue ? "overdue" : "on water"} kind={entry.is_overdue ? "reserved" : "checked_out"} />
-                </div>
-                <p className="muted">{entry.rower_name}</p>
-                {entry.crew_names.length > 0 ? <p>Boat roster: {[entry.rower_name, ...entry.crew_names].join(", ")}</p> : null}
-                <p>
-                  Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET
-                </p>
-                {canManageSafety ? (
-                  <p>
-                    {entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}
-                  </p>
-                ) : entry.river_direction ? (
-                  <p>Route: {entry.river_direction}</p>
-                ) : null}
-                {entry.launch_comment || entry.notes ? <p>Launch comments: {entry.launch_comment ?? entry.notes}</p> : null}
-                {entry.return_comment ? <p>Return comments: {entry.return_comment}</p> : null}
-                <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
-              </Card>
-            ))}
           </Card>
 
           <Card className="stack">

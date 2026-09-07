@@ -1204,6 +1204,8 @@ export async function checkinAction(formData: FormData) {
   revalidatePath("/reserve");
   destination.searchParams.set("reservation_status", "success");
   destination.searchParams.set("reservation_message", "Return recorded. Update gate status when leaving the marina.");
+  destination.searchParams.set("returned_reservation_id", reservationId);
+  destination.searchParams.set("returned_boat_id", checkedInReservation?.boat_id ?? "");
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
@@ -3237,7 +3239,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
 
     if (scopedTypes.includes("saturday_coached_row") && dayOfWeek === 6) {
       const startsAt = easternLocalInputToIso(
-        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T08:00`,
+        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T07:30`,
       ) as string;
       const key = `saturday_coached_row|${new Date(startsAt).toISOString()}`;
       if (!existingKeys.has(key)) {
@@ -3246,7 +3248,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
           session_type: "saturday_coached_row",
           starts_at: startsAt,
           ends_at: easternLocalInputToIso(
-            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T09:30`,
+            `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T09:00`,
           ) as string,
           created_by: user.id,
           is_cancelled: false,
@@ -3310,7 +3312,7 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
 
 function defaultSessionTimesByType(sessionType: string) {
   if (sessionType === "saturday_coached_row") {
-    return { start: "08:00", end: "09:30" };
+    return { start: "07:30", end: "09:00" };
   }
   if (sessionType === "coached_training_beginner_intermediate") {
     return { start: "17:30", end: "18:30" };

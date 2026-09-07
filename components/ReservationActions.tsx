@@ -6,12 +6,11 @@ import { useFormStatus } from "react-dom";
 import { cancelReservationAction, checkinAction, checkoutAction, updateReservationAction } from "@/lib/actions";
 import type { Reservation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
-import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { formatEasternLocalInput, toEasternDateTimeLocalValue } from "@/lib/time";
 
-// A launch needs a usable position, not a brand-new high-accuracy GPS lock. iOS can take longer
-// than a few seconds to obtain the latter even when location permission is correctly allowed.
+// Request a precise launch point as part of the Launch gesture so the active
+// outing starts with both permission and a high-accuracy safety location.
 const GPS_LAUNCH_TIMEOUT_MS = 20000;
 const GPS_LAUNCH_MAX_AGE_MS = 60000;
 
@@ -81,7 +80,6 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     event.preventDefault();
 
     if (!navigator.geolocation) {
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
       window.alert("Live location tracking is required before launching, but this browser does not support location services. Please launch from a browser/device with location enabled.");
       return;
     }
@@ -91,7 +89,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
@@ -100,7 +98,6 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
       form.querySelector<HTMLInputElement>('input[name="gps_longitude"]')!.value = String(position.coords.longitude);
       form.querySelector<HTMLInputElement>('input[name="gps_accuracy_meters"]')!.value = String(position.coords.accuracy ?? "");
       form.querySelector<HTMLInputElement>('input[name="gps_recorded_at"]')!.value = new Date(position.timestamp).toISOString();
-      window.localStorage.setItem(INTENT_STORAGE_KEY, makeOutingKey("reservation", reservation.id));
       resumeSubmitRef.current = true;
       form.requestSubmit();
     } catch (error) {
@@ -108,19 +105,12 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
         typeof error === "object" && error && "code" in error
           ? geolocationErrorMessage(error as GeolocationPositionError)
           : `Location access was blocked or unavailable. Debug: ${describeUnknownLocationError(error)}`;
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
       window.alert(`${detail}\n\nLaunch was not recorded. Please enable location access and try again.`);
     }
   }
 
   function handleCheckinSubmit() {
-    const outingKey = makeOutingKey("reservation", reservation.id);
-    if (window.localStorage.getItem(TRACKING_STORAGE_KEY) === outingKey) {
-      window.localStorage.removeItem(TRACKING_STORAGE_KEY);
-    }
-    if (window.localStorage.getItem(INTENT_STORAGE_KEY) === outingKey) {
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
-    }
+    window.dispatchEvent(new Event("qcrc:outing-returned"));
   }
 
   if (canCheckout) {
@@ -142,7 +132,7 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
               <option value="Downriver">Downriver</option>
             </select>
             <input name="launch_comment" placeholder="Comments for other rowers (optional)" defaultValue={reservation.notes ?? ""} maxLength={500} />
-            <PendingSubmitButton label="Launching" pendingLabel="Launching..." />
+            <PendingSubmitButton label="Launch Boat" pendingLabel="Launching..." />
           </form>
 
           <Button type="button" variant="secondary" onClick={() => setShowEdit((current) => !current)}>
@@ -207,18 +197,14 @@ export function ReservationActions({ reservation }: { reservation: Reservation }
   }
 
   return (
-    <details className="card-subtle">
-      <summary>Show return options</summary>
-      <div className="row" style={{ marginTop: "0.8rem" }}>
-
-        {canCheckin ? (
-          <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
-            <input type="hidden" name="reservation_id" value={reservation.id} />
-            <input name="return_comment" placeholder="Return comments for safety (optional)" maxLength={500} />
-            <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
-          </form>
-        ) : null}
-      </div>
-    </details>
+    <div className="card-subtle">
+      {canCheckin ? (
+        <form action={checkinAction} className="inline-form" onSubmit={handleCheckinSubmit}>
+          <input type="hidden" name="reservation_id" value={reservation.id} />
+          <input name="return_comment" placeholder="Return comments for safety (optional)" maxLength={500} />
+          <PendingSubmitButton label="Return Boat" pendingLabel="Saving Return..." />
+        </form>
+      ) : null}
+    </div>
   );
 }

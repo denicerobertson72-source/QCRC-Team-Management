@@ -54,7 +54,7 @@ export function ReservationForm({ boat, start, returnTo }: { boat: Boat; start: 
       <Field label="Notes">
         <input name="notes" />
       </Field>
-      <Button type="submit">Book</Button>
+      <Button type="submit">Reserve Boat</Button>
     </form>
   );
 }

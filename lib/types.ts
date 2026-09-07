@@ -130,8 +130,8 @@ export type SafetyTrackedOuting = {
 };
 
 export type SafetyLiveMapState = {
-  can_manage_all_boats: boolean;
   my_active_outing_id: string | null;
+  on_water: SafetyEntry[];
   outings: SafetyTrackedOuting[];
 };
 

@@ -1,17 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { RowingLocationPoint, SafetyLiveMapState } from "@/lib/types";
-
-type WakeLockSentinelLike = {
-  release: () => Promise<void>;
-  addEventListener: (type: "release", listener: () => void) => void;
-};
-
-type WakeLockNavigator = Navigator & {
-  wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
-};
+import type { SafetyLiveMapState } from "@/lib/types";
+import { formatLocationAge, getLocationFreshness, SAFETY_LOCATION_REFRESH_INTERVAL_MS } from "@/lib/location-tracking";
+import { StatusChip } from "@/components/ui/StatusChip";
+import { formatEasternDateTime } from "@/lib/time";
 
 declare global {
   interface Window {
@@ -22,7 +15,6 @@ declare global {
 
 const MAPBOX_GL_VERSION = "v3.23.1";
 const DEFAULT_CENTER: [number, number] = [-84.512, 39.1031];
-const LOCATION_UPLOAD_INTERVAL_MS = 5 * 60 * 1000;
 
 function shortRowerName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -45,6 +37,28 @@ function formatAccuracy(value: number | null) {
   if (value === null || Number.isNaN(value)) return "unknown";
   if (value < 1000) return `${Math.round(value)} m`;
   return `${(value / 1000).toFixed(1)} km`;
+}
+
+function locationUpdateLabel(recordedAt: string | null | undefined) {
+  const freshness = getLocationFreshness(recordedAt);
+  if (!recordedAt || freshness === "unavailable") return { text: "Location unavailable", className: "error" };
+  if (freshness === "stale") return { text: `Location stale — last update ${formatLocationAge(recordedAt)}`, className: "error" };
+  if (freshness === "delayed") return { text: `Location update delayed — last update ${formatLocationAge(recordedAt)}`, className: "error" };
+  return { text: `Updated ${formatLocationAge(recordedAt)}`, className: "success" };
+}
+
+function trackingOverview(outings: SafetyLiveMapState["outings"]) {
+  return outings.reduce(
+    (summary, outing) => {
+      const freshness = getLocationFreshness(outing.latest_point?.recorded_at);
+      if (freshness === "current") summary.tracking += 1;
+      else if (freshness === "delayed") summary.delayed += 1;
+      else if (freshness === "stale") summary.stale += 1;
+      else summary.unavailable += 1;
+      return summary;
+    },
+    { tracking: 0, delayed: 0, stale: 0, unavailable: 0 },
+  );
 }
 
 function loadMapboxGl() {
@@ -137,55 +151,30 @@ function buildPointGeoJson(state: SafetyLiveMapState) {
   };
 }
 
-function withMyLatestPoint(state: SafetyLiveMapState, outingId: string, memberId: string, point: RowingLocationPoint) {
-  return {
-    ...state,
-    outings: state.outings.map((outing) => {
-      if (outing.outing_id !== outingId) return outing;
-      const existingWithoutLatest = outing.track_points.filter((entry) => entry.id !== point.id);
-      return {
-        ...outing,
-        member_id: memberId,
-        latest_point: point,
-        track_points: [...existingWithoutLatest, point].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at)),
-      };
-    }),
-  };
-}
-
 export function SafetyLiveMap({
   initialState,
-  currentUserId,
+  showTrackingOverview = false,
+  canManageSafety = false,
   mapboxAccessToken,
   mapboxStyleUrl,
   weatherRadarSources,
   weatherRadarAttribution,
 }: {
   initialState: SafetyLiveMapState;
-  currentUserId: string;
+  showTrackingOverview?: boolean;
+  canManageSafety?: boolean;
   mapboxAccessToken: string | null;
   mapboxStyleUrl: string | null;
   weatherRadarSources: Array<{ id: string; label: string; tileUrl: string | null }>;
   weatherRadarAttribution: string | null;
 }) {
   const [state, setState] = useState(initialState);
-  const [sharingEnabled, setSharingEnabled] = useState(false);
   const [sharingMessage, setSharingMessage] = useState<string | null>(null);
   const [sharingMessageKind, setSharingMessageKind] = useState<"success" | "error">("success");
-  const [wakeLockActive, setWakeLockActive] = useState(false);
   const [radarVisible, setRadarVisible] = useState(false);
   const [selectedRadarId, setSelectedRadarId] = useState(weatherRadarSources[0]?.id ?? "");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
-  const geolocateRef = useRef<any>(null);
-  const watchIdRef = useRef<number | null>(null);
-  const lastUploadAtRef = useRef<number>(0);
-  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
-  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
-
-  if (!supabaseRef.current) {
-    supabaseRef.current = createClient();
-  }
 
   const selectedRadarSource = weatherRadarSources.find((source) => source.id === selectedRadarId) ?? weatherRadarSources[0] ?? null;
   const weatherRadarTileUrl = selectedRadarSource?.tileUrl ?? null;
@@ -227,7 +216,6 @@ export function SafetyLiveMap({
           trackUserLocation: true,
           showUserHeading: true,
         });
-        geolocateRef.current = geolocate;
         map.addControl(geolocate, "top-right");
 
         map.on("load", () => {
@@ -380,76 +368,17 @@ export function SafetyLiveMap({
       const response = await fetch("/api/safety/live-map", { cache: "no-store" });
       if (!response.ok) return;
       const nextState = (await response.json()) as SafetyLiveMapState;
-      setState((current) => {
-        if (!sharingEnabled || !current.my_active_outing_id) {
-          return nextState;
-        }
-        const myOuting = current.outings.find((outing) => outing.outing_id === current.my_active_outing_id);
-        if (!myOuting?.latest_point) {
-          return nextState;
-        }
-        return withMyLatestPoint(nextState, current.my_active_outing_id, currentUserId, myOuting.latest_point);
-      });
-    }, LOCATION_UPLOAD_INTERVAL_MS);
+      setState(nextState);
+    }, SAFETY_LOCATION_REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [currentUserId, sharingEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
   }, []);
 
   const myActiveOutingId = state.my_active_outing_id;
   const myOuting = myActiveOutingId
     ? state.outings.find((outing) => outing.outing_id === myActiveOutingId) ?? null
     : null;
-
-  useEffect(() => {
-    if (!sharingEnabled) {
-      void wakeLockRef.current?.release();
-      wakeLockRef.current = null;
-      setWakeLockActive(false);
-      return;
-    }
-
-    let cancelled = false;
-    const requestWakeLock = async () => {
-      const wakeLock = (navigator as WakeLockNavigator).wakeLock;
-      if (!wakeLock || document.visibilityState !== "visible" || wakeLockRef.current) return;
-      try {
-        const sentinel = await wakeLock.request("screen");
-        if (cancelled) {
-          await sentinel.release();
-          return;
-        }
-        wakeLockRef.current = sentinel;
-        setWakeLockActive(true);
-        sentinel.addEventListener("release", () => {
-          wakeLockRef.current = null;
-          setWakeLockActive(false);
-        });
-      } catch {
-        setWakeLockActive(false);
-      }
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void requestWakeLock();
-    };
-
-    void requestWakeLock();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      const sentinel = wakeLockRef.current;
-      wakeLockRef.current = null;
-      if (sentinel) void sentinel.release();
-    };
-  }, [sharingEnabled]);
+  const overview = trackingOverview(state.outings);
 
   function fitMapToOutings() {
     const map = mapRef.current;
@@ -463,82 +392,6 @@ export function SafetyLiveMap({
       new window.mapboxgl.LngLatBounds(coordinates[0], coordinates[0]),
     );
     map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 700 });
-  }
-
-  async function startSharing() {
-    if (!myOuting || !myActiveOutingId || !navigator.geolocation) {
-      setSharingMessageKind("error");
-      setSharingMessage("Location sharing is unavailable on this device.");
-      return;
-    }
-
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-    }
-
-    setSharingEnabled(true);
-    setSharingMessageKind("success");
-    setSharingMessage("Location sharing active.");
-    geolocateRef.current?.trigger?.();
-
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      async (position) => {
-        const point: RowingLocationPoint = {
-          id: `local-${position.timestamp}`,
-          reservation_id: myOuting.outing_kind === "reservation" ? myActiveOutingId : null,
-          private_outing_id: myOuting.outing_kind === "private_boat" ? myActiveOutingId : null,
-          member_id: currentUserId,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy_meters: position.coords.accuracy ?? null,
-          recorded_at: new Date(position.timestamp).toISOString(),
-        };
-
-        setState((current) => withMyLatestPoint(current, myActiveOutingId, currentUserId, point));
-
-        const now = Date.now();
-        if (now - lastUploadAtRef.current < LOCATION_UPLOAD_INTERVAL_MS) return;
-        lastUploadAtRef.current = now;
-
-        const { error } = await supabaseRef.current!.from("rowing_location_points").insert({
-          reservation_id: myOuting.outing_kind === "reservation" ? myActiveOutingId : null,
-          private_outing_id: myOuting.outing_kind === "private_boat" ? myActiveOutingId : null,
-          member_id: currentUserId,
-          latitude: point.latitude,
-          longitude: point.longitude,
-          accuracy_meters: point.accuracy_meters,
-          recorded_at: point.recorded_at,
-        });
-
-        if (error) {
-          setSharingMessageKind("error");
-          setSharingMessage(`Location upload failed: ${error.message}`);
-        } else {
-          setSharingMessageKind("success");
-          setSharingMessage("Live location sharing is active for your current outing.");
-        }
-      },
-      (error) => {
-        setSharingEnabled(false);
-        setSharingMessageKind("error");
-        setSharingMessage(error.message || "Location sharing was denied.");
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 15000,
-        timeout: 20000,
-      },
-    );
-  }
-
-  function stopSharing() {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    setSharingEnabled(false);
-    setSharingMessageKind("success");
-    setSharingMessage("Location sharing paused.");
   }
 
   if (!mapboxAccessToken) {
@@ -574,13 +427,24 @@ export function SafetyLiveMap({
               {radarVisible ? "Hide Radar" : "Show Radar"}
             </button>
           ) : null}
-          {myOuting ? (
-            <button type="button" onClick={sharingEnabled ? stopSharing : startSharing}>
-              {sharingEnabled ? "Stop Sharing" : "Start Sharing"}
-            </button>
-          ) : null}
         </div>
       </div>
+
+      {showTrackingOverview ? (
+        <div className="card-subtle stack">
+          <div className="page-title">
+            <strong>Tracking Overview</strong>
+            <span className="muted">Active boats, based on the most recently stored location.</span>
+          </div>
+          <div className="row" aria-label={`${state.outings.length} boats on water, ${overview.tracking} tracking, ${overview.delayed} delayed, ${overview.stale} stale, ${overview.unavailable} unavailable`}>
+            <StatusChip label={`${state.outings.length} on water`} />
+            <StatusChip label={`${overview.tracking} tracking`} kind="checked_in" />
+            {overview.delayed > 0 ? <StatusChip label={`${overview.delayed} delayed`} kind="reserved" /> : null}
+            {overview.stale > 0 ? <StatusChip label={`${overview.stale} stale`} kind="reserved" /> : null}
+            {overview.unavailable > 0 ? <StatusChip label={`${overview.unavailable} unavailable`} kind="reserved" /> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div
         ref={containerRef}
@@ -600,7 +464,6 @@ export function SafetyLiveMap({
             {`${state.outings.length} active boat${state.outings.length === 1 ? "" : "s"} visible on the river map.`}
           </p>
           {sharingMessage ? <p className={sharingMessageKind}>{sharingMessage}</p> : null}
-          {wakeLockActive ? <p className="success">Screen stay-awake mode is active while you share location.</p> : null}
           {weatherRadarTileUrl ? (
             <p className="muted">
               Radar source: {selectedRadarSource?.label ?? "Configured radar"}
@@ -612,18 +475,43 @@ export function SafetyLiveMap({
 
         {myOuting ? (
           <div className="card-subtle stack">
-            <strong>{sharingEnabled ? "Live Sharing Active" : "Live Sharing Ready"}</strong>
+            <strong>{myOuting.latest_point && getLocationFreshness(myOuting.latest_point.recorded_at) === "current" ? "Location Sharing Active" : "Location Sharing Needs Attention"}</strong>
             <p className="muted">
               {myOuting.latest_point
-                ? `Last point recorded ${formatPointTimestamp(myOuting.latest_point.recorded_at)}. Accuracy ${formatAccuracy(myOuting.latest_point.accuracy_meters)}.`
-                : "No GPS point recorded yet for this outing."}
+                ? `Last known point: ${formatPointTimestamp(myOuting.latest_point.recorded_at)}. Accuracy ${formatAccuracy(myOuting.latest_point.accuracy_meters)}.`
+                : "Location unavailable — no GPS point recorded yet for this outing."}
             </p>
+            <p className={locationUpdateLabel(myOuting.latest_point?.recorded_at).className}>{locationUpdateLabel(myOuting.latest_point?.recorded_at).text}</p>
             <p className="muted">
               {myOuting.checkout_location ?? "Location not set"}
               {myOuting.river_direction ? ` | ${myOuting.river_direction}` : ""}
             </p>
           </div>
         ) : null}
+      </div>
+
+      <div className="card-subtle stack">
+        <h3>Currently On The Water</h3>
+        {state.on_water.length === 0 ? <p className="muted">No active launches right now.</p> : null}
+        {state.on_water.map((entry) => (
+          <div key={entry.id} className="card-subtle stack">
+            <div className="page-title">
+              <h4>{entry.boat_name}</h4>
+              <StatusChip label={entry.is_overdue ? "overdue" : "on water"} kind={entry.is_overdue ? "reserved" : "checked_out"} />
+            </div>
+            <p className="muted">{entry.rower_name}</p>
+            {entry.crew_names.length > 0 ? <p>Boat roster: {[entry.rower_name, ...entry.crew_names].join(", ")}</p> : null}
+            <p>Launched: {formatEasternDateTime(entry.checked_out_at ?? entry.start_time)} ET</p>
+            {canManageSafety ? (
+              <p>{entry.checkout_location ?? "Location not set"} | {entry.river_direction ?? "Direction not set"}</p>
+            ) : entry.river_direction ? (
+              <p>Route: {entry.river_direction}</p>
+            ) : null}
+            {entry.launch_comment || entry.notes ? <p>Launch comments: {entry.launch_comment ?? entry.notes}</p> : null}
+            {entry.return_comment ? <p>Return comments: {entry.return_comment}</p> : null}
+            <p>Gate: {entry.gate_status === "unlocked" ? "Left unlocked" : entry.gate_status === "locked" ? "Locked" : "Not recorded"}</p>
+          </div>
+        ))}
       </div>
 
       <div className="grid">
@@ -643,8 +531,8 @@ export function SafetyLiveMap({
                 : "No GPS point captured yet."}
             </p>
             {outing.latest_point ? (
-              <p className="muted">
-                Updated {formatPointTimestamp(outing.latest_point.recorded_at)} | Accuracy {formatAccuracy(outing.latest_point.accuracy_meters)}
+              <p className={locationUpdateLabel(outing.latest_point.recorded_at).className}>
+                {locationUpdateLabel(outing.latest_point.recorded_at).text} · Last known point at {formatPointTimestamp(outing.latest_point.recorded_at)} · Accuracy {formatAccuracy(outing.latest_point.accuracy_meters)}
               </p>
             ) : null}
             <p className="muted">

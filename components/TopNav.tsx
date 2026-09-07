@@ -3,9 +3,14 @@ import { signOutAction } from "@/lib/actions";
 import { Button } from "@/components/ui/Button";
 import { ensureProfile } from "@/lib/auth";
 import { NavStatusClient } from "@/components/NavStatusClient";
+import { ReservationTrackingManager } from "@/components/reservations/ReservationTrackingManager";
+import { getMyActiveTrackableOutings } from "@/lib/queries";
 
 export async function TopNav() {
-  const { profile } = await ensureProfile();
+  const [{ profile, user }, activeOutings] = await Promise.all([
+    ensureProfile(),
+    getMyActiveTrackableOutings(),
+  ]);
   const isAdmin = profile.role === "admin";
   const navLinks = [
     { href: "/", label: "Home", home: true },
@@ -25,6 +30,10 @@ export async function TopNav() {
   return (
     <>
       <NavStatusClient />
+      <ReservationTrackingManager
+        currentUserId={user.id}
+        outings={activeOutings}
+      />
       <header className="topnav">
         <div className="topnav-home">
           <img src="/QCRC.png" alt="QCRC" width={52} height={52} className="topnav-logo topnav-logo-plain" />

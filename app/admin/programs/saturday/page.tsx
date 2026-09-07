@@ -52,7 +52,7 @@ export default async function AdminProgramsSaturdayPage({ searchParams }: { sear
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Saturday Schedule" subtitle={`Manage ${month.label} (8:00 AM ET default).`} />
+        <PageTitle title="Admin: Saturday Schedule" subtitle={`Manage ${month.label} (7:30 AM ET default).`} />
 
         <div className="row">
           <Link href="/admin/programs">Back</Link>
@@ -69,19 +69,19 @@ export default async function AdminProgramsSaturdayPage({ searchParams }: { sear
         <form action={resetProgramMonthToDefaultTimesAction} className="card inline-form">
           <input type="hidden" name="month" value={month.current} />
           <input type="hidden" name="session_type" value="saturday_coached_row" />
-          <Button type="submit" variant="secondary">Reset Month To 8:00-9:30 ET</Button>
+          <Button type="submit" variant="secondary">Reset Month To 7:30-9:00 ET</Button>
         </form>
 
         <form action={updateProgramMonthTimesAdminAction} className="card form-grid">
           <input type="hidden" name="month" value={month.current} />
           <input type="hidden" name="session_type" value="saturday_coached_row" />
           <Field label="Month row start (ET)">
-            <input name="start_time" type="time" defaultValue="08:00" required />
+            <input name="start_time" type="time" defaultValue="07:30" required />
           </Field>
           <Field label="Month row end (ET)">
-            <input name="end_time" type="time" defaultValue="09:30" required />
+            <input name="end_time" type="time" defaultValue="09:00" required />
           </Field>
-          <p className="muted">Applies this time to all Saturday coached rows in {month.label}. Arrival displays 20 minutes before row time.</p>
+          <p className="muted">Applies this time to all Saturday coached rows in {month.label}. Arrival displays 5 minutes before row time.</p>
           <Button type="submit" variant="secondary">Apply Times To Month</Button>
         </form>
 

@@ -6,7 +6,6 @@ import { useFormStatus } from "react-dom";
 import { privateBoatLaunchAction, privateBoatReturnAction } from "@/lib/actions";
 import type { PrivateBoatOuting } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
-import { INTENT_STORAGE_KEY, TRACKING_STORAGE_KEY, makeOutingKey } from "@/lib/live-tracking";
 
 const GPS_LAUNCH_TIMEOUT_MS = 20000;
 const GPS_LAUNCH_MAX_AGE_MS = 60000;
@@ -67,18 +66,15 @@ export function PrivateBoatOutingPanel({
     event.preventDefault();
 
     if (!navigator.geolocation) {
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
       window.alert("Live location tracking is required before launching, but this browser does not support location services. Please launch from a browser/device with location enabled.");
       return;
     }
 
     const form = event.currentTarget;
-    const outingKey = makeOutingKey("private_boat", launchOutingId);
-
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
           timeout: GPS_LAUNCH_TIMEOUT_MS,
           maximumAge: GPS_LAUNCH_MAX_AGE_MS,
         });
@@ -87,7 +83,6 @@ export function PrivateBoatOutingPanel({
       form.querySelector<HTMLInputElement>('input[name="gps_longitude"]')!.value = String(position.coords.longitude);
       form.querySelector<HTMLInputElement>('input[name="gps_accuracy_meters"]')!.value = String(position.coords.accuracy ?? "");
       form.querySelector<HTMLInputElement>('input[name="gps_recorded_at"]')!.value = new Date(position.timestamp).toISOString();
-      window.localStorage.setItem(INTENT_STORAGE_KEY, outingKey);
       resumeSubmitRef.current = true;
       form.requestSubmit();
     } catch (error) {
@@ -95,20 +90,13 @@ export function PrivateBoatOutingPanel({
         typeof error === "object" && error && "code" in error
           ? geolocationErrorMessage(error as GeolocationPositionError)
           : `Location access was blocked or unavailable. Debug: ${describeUnknownLocationError(error)}`;
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
       window.alert(`${detail}\n\nLaunch was not recorded. Please enable location access and try again.`);
     }
   }
 
   function handleReturnSubmit() {
     if (!activeOuting) return;
-    const outingKey = makeOutingKey("private_boat", activeOuting.id);
-    if (window.localStorage.getItem(TRACKING_STORAGE_KEY) === outingKey) {
-      window.localStorage.removeItem(TRACKING_STORAGE_KEY);
-    }
-    if (window.localStorage.getItem(INTENT_STORAGE_KEY) === outingKey) {
-      window.localStorage.removeItem(INTENT_STORAGE_KEY);
-    }
+    window.dispatchEvent(new Event("qcrc:outing-returned"));
   }
 
   if (!canLaunch && !activeOuting) return null;
@@ -143,7 +131,7 @@ export function PrivateBoatOutingPanel({
           <form action={privateBoatReturnAction} className="inline-form" onSubmit={handleReturnSubmit}>
             <input type="hidden" name="private_outing_id" value={activeOuting.id} />
             <input name="return_comment" placeholder="Return comments for safety (optional)" defaultValue={activeOuting.return_comment ?? ""} maxLength={500} />
-            <PendingSubmitButton label="Mark Returned" pendingLabel="Saving Return..." />
+            <PendingSubmitButton label="Return Private Boat" pendingLabel="Saving Return..." />
           </form>
         ) : null}
       </div>

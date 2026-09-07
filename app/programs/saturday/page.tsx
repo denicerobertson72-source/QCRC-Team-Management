@@ -44,7 +44,7 @@ export default async function SaturdayProgramPage({ searchParams }: { searchPara
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Saturday Coached Row" subtitle={`Signups for ${month.label}. Current default: row at 8:00 AM ET, arrival 7:40 AM.`} />
+        <PageTitle title="Saturday Coached Row" subtitle={`Signups for ${month.label}. Current default: row at 7:30 AM ET, arrival 7:25 AM.`} />
 
         <div className="row">
           <Link href={`/programs/saturday?month=${month.prev}`}>Previous Month</Link>
@@ -57,7 +57,7 @@ export default async function SaturdayProgramPage({ searchParams }: { searchPara
           {sessions.map((session) => (
             <Card key={session.id} className="stack">
               <h3>{prettyDateTime(session.starts_at)}</h3>
-              <p className="muted">Arrival {formatEasternTimeOffset(session.starts_at, -20)} ET | Signups: {session.signup_count}</p>
+              <p className="muted">Arrival {formatEasternTimeOffset(session.starts_at, -5)} ET | Signups: {session.signup_count}</p>
               <SignupRoster names={session.attendee_names} />
 
               {session.is_cancelled ? (

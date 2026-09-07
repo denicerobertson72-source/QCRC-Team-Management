@@ -6,13 +6,13 @@ import { Card } from "@/components/ui/Card";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { formatEasternDateTime, getEasternDateKey } from "@/lib/time";
-import { ensureProfile } from "@/lib/auth";
-import { ReservationTrackingManager } from "@/components/reservations/ReservationTrackingManager";
 import { PrivateBoatOutingPanel } from "@/components/PrivateBoatOutingPanel";
 
 type SearchParams = Promise<{
   reservation_status?: string;
   reservation_message?: string;
+  returned_reservation_id?: string;
+  returned_boat_id?: string;
 }>;
 
 function formatDateTime(value: string) {
@@ -21,12 +21,11 @@ function formatDateTime(value: string) {
 
 export default async function ReservationsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const [reservations, privateOutings, profile, otherReservations, { user }] = await Promise.all([
+  const [reservations, privateOutings, profile, otherReservations] = await Promise.all([
     getMyReservations(),
     getMyPrivateBoatOutings(),
     getMyProfileSummary(),
     getUpcomingOtherReservations(),
-    ensureProfile(),
   ]);
   const activeCount =
     reservations.filter((reservation) => reservation.status === "reserved" || reservation.status === "checked_out").length +
@@ -58,14 +57,14 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
         </section>
 
         {reservationStatus && reservationMessage ? <FlashNotice status={reservationStatus} message={reservationMessage} /> : null}
-        <ReservationTrackingManager
-          currentUserId={user.id}
-          outings={[
-            ...reservations.map((reservation) => ({ id: reservation.id, kind: "reservation" as const, status: reservation.status })),
-            ...privateOutings.map((outing) => ({ id: outing.id, kind: "private_boat" as const, status: outing.status })),
-          ]}
-        />
-
+        {reservationStatus === "success" && params.returned_reservation_id && params.returned_boat_id ? (
+          <Link
+            href={`/damage/new?reservation_id=${encodeURIComponent(params.returned_reservation_id)}&boat_id=${encodeURIComponent(params.returned_boat_id)}`}
+            className="cta-link"
+          >
+            Report Damage for This Boat
+          </Link>
+        ) : null}
         <div className="stack">
           {profile.owns_private_boat ? (
             <Card className="stack">
