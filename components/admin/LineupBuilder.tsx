@@ -19,9 +19,22 @@ type Boat = {
   id: string;
   boat_name: string;
   boat_class_id: string;
+  fleet_boat_id?: string | null;
   seats: Seat[];
 };
-type FleetBoat = { id: string; name: string; boat_class_id: string; status: string };
+type ParticipantReservation = { id: string; boat_id: string; member_ids: string[] };
+type FleetBoat = {
+  id: string;
+  name: string;
+  boat_class_id: string;
+  status: "available" | "reserved_by_participant" | "reserved_by_nonparticipant" | "unavailable" | string;
+  reservation?: {
+    id: string;
+    member_name: string;
+    start_time: string;
+    end_time: string;
+  } | null;
+};
 
 function seatLabel(boatClassId: string, seatNumber: number) {
   if (boatClassId === "1x") return "Sculler";
@@ -59,6 +72,8 @@ export function LineupBuilder({
   allowMultiSeat = false,
   returnTo,
   fleetBoats = [],
+  participantReservations = [],
+  isCoachedTraining = false,
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -72,9 +87,14 @@ export function LineupBuilder({
   allowMultiSeat?: boolean;
   returnTo?: string;
   fleetBoats?: FleetBoat[];
+  participantReservations?: ParticipantReservation[];
+  isCoachedTraining?: boolean;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
+  const [selectedFleetBoatIds, setSelectedFleetBoatIds] = useState<Set<string>>(new Set());
+  const [confirmedOverrideReservationIds, setConfirmedOverrideReservationIds] = useState<Set<string>>(new Set());
+  const [pendingOverrideBoat, setPendingOverrideBoat] = useState<FleetBoat | null>(null);
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -152,6 +172,48 @@ export function LineupBuilder({
   const boatsWithOpenSeats = localBoats
     .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
     .filter((item) => item.openSeats > 0);
+  const publishReconciliations = useMemo(() => {
+    if (!isCoachedTraining) return [] as Array<{ memberId: string; memberName: string; assignedBoat: string; reservedBoat: string | null; reservationId: string | null }>;
+    const assignments = localBoats.flatMap((boat) => boat.seats.filter((seat) => seat.member_id && boat.fleet_boat_id).map((seat) => ({ memberId: seat.member_id!, boat })));
+    return assignments.flatMap(({ memberId, boat }) => {
+      const matching = participantReservations.some((reservation) => reservation.boat_id === boat.fleet_boat_id && reservation.member_ids.includes(memberId));
+      if (matching) return [];
+      const previous = participantReservations.find((reservation) => reservation.member_ids.includes(memberId)) ?? null;
+      return [{ memberId, memberName: memberNameById.get(memberId) ?? "Participant", assignedBoat: boat.boat_name, reservedBoat: previous ? fleetBoats.find((fleetBoat) => fleetBoat.id === previous.boat_id)?.name ?? "another club boat" : null, reservationId: previous?.id ?? null }];
+    });
+  }, [fleetBoats, isCoachedTraining, localBoats, memberNameById, participantReservations]);
+  const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ member_id: item.memberId, action: "update" })));
+
+  const selectableFleetBoats = fleetBoats.filter(
+    (boat) => boat.boat_class_id === newBoatClass && boat.status !== "unavailable",
+  );
+
+  function setBoatSelected(boat: FleetBoat, checked: boolean) {
+    if (checked && boat.status === "reserved_by_nonparticipant") {
+      setPendingOverrideBoat(boat);
+      return;
+    }
+    setSelectedFleetBoatIds((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(boat.id);
+      else next.delete(boat.id);
+      return next;
+    });
+    if (!checked && boat.reservation?.id) {
+      setConfirmedOverrideReservationIds((previous) => {
+        const next = new Set(previous);
+        next.delete(boat.reservation!.id);
+        return next;
+      });
+    }
+  }
+
+  function confirmOverride() {
+    if (!pendingOverrideBoat?.reservation) return;
+    setSelectedFleetBoatIds((previous) => new Set(previous).add(pendingOverrideBoat.id));
+    setConfirmedOverrideReservationIds((previous) => new Set(previous).add(pendingOverrideBoat.reservation!.id));
+    setPendingOverrideBoat(null);
+  }
 
   return (
     <div className="stack">
@@ -166,6 +228,7 @@ export function LineupBuilder({
             <form action={saveAndPublishAction} className="inline-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
               <input type="hidden" name="assignments_json" value={assignmentsJson} />
+              <input type="hidden" name="reconciliation_json" value={reconciliationJson} />
               {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
               <Button type="submit" variant="secondary">Save + Publish</Button>
             </form>
@@ -198,17 +261,60 @@ export function LineupBuilder({
             </div>
           </div>
           <details className="card-subtle lineup-fleet-picker">
-            <summary>Choose available {newBoatClass} boats</summary>
+            <summary>Choose {newBoatClass} boats</summary>
             <div className="stack lineup-fleet-picker-options">
-              {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").map((boat) => (
-                <label key={boat.id}><input type="checkbox" name="boat_ids" value={boat.id} /> {boat.name}</label>
+              {[...selectedFleetBoatIds].map((boatId) => <input key={boatId} type="hidden" name="boat_ids" value={boatId} />)}
+              {[...confirmedOverrideReservationIds].map((reservationId) => <input key={reservationId} type="hidden" name="confirmed_override_reservation_ids" value={reservationId} />)}
+              {selectableFleetBoats.map((boat) => (
+                <label key={boat.id} className="lineup-fleet-boat-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedFleetBoatIds.has(boat.id)}
+                    onChange={(event) => setBoatSelected(boat, event.target.checked)}
+                  />
+                  <span>
+                    {boat.name}
+                    {boat.status === "reserved_by_participant" ? <small>Reserved by {boat.reservation?.member_name ?? "a training participant"} · Training participant</small> : null}
+                    {boat.status === "reserved_by_nonparticipant" ? <small>Reserved by {boat.reservation?.member_name ?? "another member"} · Not in coached training</small> : null}
+                    {boat.status === "available" ? <small>Available</small> : null}
+                  </span>
+                </label>
               ))}
-              {fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "available").length === 0 ? <p className="muted">No available fleet boats of this size.</p> : null}
+              {selectableFleetBoats.length === 0 ? <p className="muted">No fleet boats of this size can be assigned.</p> : null}
               {newBoatClass === "1x" ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
             </div>
           </details>
           <Button type="submit">Add Selected Boats</Button>
         </form>
+      ) : null}
+
+      {publishReconciliations.length > 0 ? (
+        <div className="card stack">
+          <h3>Reservation reconciliation required before publishing</h3>
+          <p className="muted">The recommended update is prepared, but nothing changes while you edit. Publishing will update these club-boat reservations to match the finalized lineup.</p>
+          {publishReconciliations.map((item) => (
+            <div key={item.memberId} className="card-subtle stack">
+              <strong>{item.memberName}</strong>
+              <span>Reserved: {item.reservedBoat ?? "No club-boat reservation"}</span>
+              <span>Assigned: {item.assignedBoat}</span>
+              <span className="muted">A reservation for the assigned club boat is required before this lineup can be published. Keeping the current reservation alone would not meet that rule.</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {pendingOverrideBoat?.reservation ? (
+        <div className="card stack" role="dialog" aria-modal="true" aria-labelledby="boat-override-title">
+          <h3 id="boat-override-title">Use boat for coached training?</h3>
+          <p>
+            <strong>{pendingOverrideBoat.name}</strong> is currently reserved by {pendingOverrideBoat.reservation.member_name} from {new Date(pendingOverrideBoat.reservation.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}–{new Date(pendingOverrideBoat.reservation.end_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.
+          </p>
+          <p className="muted">Coached training has priority for this boat. Continuing will cancel the reservation and notify the member to select another available boat.</p>
+          <div className="row">
+            <Button type="button" variant="secondary" onClick={() => setPendingOverrideBoat(null)}>Keep Existing Reservation</Button>
+            <Button type="button" onClick={confirmOverride}>Use Boat for Coached Training</Button>
+          </div>
+        </div>
       ) : null}
 
       {!allowMultiSeat ? (

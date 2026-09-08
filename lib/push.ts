@@ -17,6 +17,18 @@ function getPushContent(notificationType: string, payload: NotificationPayload):
         body: "Your reserved boat is no longer available. Please reserve another boat.",
         url: "/reserve",
       };
+    case "reservation_overridden_for_coached_training":
+      return {
+        title: "Boat reservation changed",
+        body: `${String(payload.boat_name ?? "Your boat")} is needed for coached training, so your reservation has been cancelled. Please select another available boat.`,
+        url: "/reserve",
+      };
+    case "coached_training_reservation_updated":
+      return {
+        title: "Your coached-training boat has been updated",
+        body: `Your reservation was changed from ${String(payload.old_boat_name ?? "your previous boat")} to ${String(payload.new_boat_name ?? "your lineup boat")} to match the final coached-training lineup.`,
+        url: "/lineups",
+      };
     case "lineup_published":
       return { title: `Lineup published: ${String(payload.title ?? "Lineup")}`, body: "Your lineup is ready to review.", url: "/lineups" };
     case "session_cancelled":

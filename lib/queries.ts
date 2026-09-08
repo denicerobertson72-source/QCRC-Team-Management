@@ -439,7 +439,7 @@ export async function getLineupBoardDetail(lineupBoardId: string) {
 
   const { data: boats, error: boatError } = await supabase
     .from("lineup_boats")
-    .select("id, lineup_board_id, boat_name, boat_class_id, race_time, sort_order")
+    .select("id, lineup_board_id, boat_name, boat_class_id, fleet_boat_id, race_time, sort_order")
     .eq("lineup_board_id", lineupBoardId)
     .order("sort_order", { ascending: true });
   if (boatError) throw boatError;

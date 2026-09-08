@@ -12,6 +12,8 @@ function notificationTitle(notification: { notification_type: string; payload: R
   if (notification.notification_type === "boat_out_of_service") {
     return `${String(notification.payload.boat_name ?? "Boat")} is out of service`;
   }
+  if (notification.notification_type === "reservation_overridden_for_coached_training") return "Boat reservation changed";
+  if (notification.notification_type === "coached_training_reservation_updated") return "Your coached-training boat has been updated";
   if (notification.notification_type === "lineup_published") {
     return `Lineup published: ${String(notification.payload.title ?? "Lineup")}`;
   }
@@ -46,6 +48,12 @@ function notificationBody(notification: { notification_type: string; payload: Re
   if (notification.notification_type === "boat_out_of_service") {
     return `Your reserved boat is no longer available. Please reserve another boat for ${String(notification.payload.reservation_start ?? "")}.`;
   }
+  if (notification.notification_type === "reservation_overridden_for_coached_training") {
+    return `${String(notification.payload.boat_name ?? "Your boat")} is needed for coached training during your reservation time, so your reservation has been cancelled. Please select another available boat.`;
+  }
+  if (notification.notification_type === "coached_training_reservation_updated") {
+    return `Your reservation was changed from ${String(notification.payload.old_boat_name ?? "your previous boat")} to ${String(notification.payload.new_boat_name ?? "your lineup boat")} to match the final coached-training lineup.`;
+  }
   if (notification.notification_type === "lineup_published") {
     return "Your lineup is now available to review.";
   }
@@ -76,6 +84,8 @@ function notificationBody(notification: { notification_type: string; payload: Re
 function notificationHref(notification: { notification_type: string; payload: Record<string, unknown> }) {
   if (notification.notification_type === "lineup_published") return "/lineups";
   if (notification.notification_type === "boat_out_of_service") return "/reserve";
+  if (notification.notification_type === "reservation_overridden_for_coached_training") return "/reserve";
+  if (notification.notification_type === "coached_training_reservation_updated") return "/lineups";
   if (notification.notification_type === "rowing_meetup_signup") return "/programs/meetup";
   if (notification.notification_type === "rowing_call_created") return "/programs/meetup";
   if (notification.notification_type === "overdue_boat_alert") return "/reservations";

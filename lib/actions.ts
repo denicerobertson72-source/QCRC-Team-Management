@@ -2806,10 +2806,55 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "4x");
   const boatIds = formData.getAll("boat_ids").map(String).filter(Boolean);
+  const confirmedOverrideReservationIds = formData.getAll("confirmed_override_reservation_ids").map(String).filter(Boolean);
   const includePrivateBoat = String(formData.get("private_boat") ?? "false") === "true";
   const returnTo = String(formData.get("return_to") ?? "");
   if (boatIds.length === 0 && !(boatClassId === "1x" && includePrivateBoat)) throw new Error("Select at least one boat.");
 
+  const { data: board, error: boardError } = await supabase
+    .from("lineup_boards")
+    .select("session_id, sessions(session_type)")
+    .eq("id", lineupBoardId)
+    .maybeSingle();
+  if (boardError || !board) throw boardError ?? new Error("Lineup board not found.");
+
+  const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
+  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || session?.session_type === "coached_training_advanced";
+
+  if (isCoachedTraining && boatIds.length) {
+    const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
+      p_lineup_board_id: lineupBoardId,
+      p_boat_ids: boatIds,
+      p_confirmed_reservation_ids: confirmedOverrideReservationIds,
+    });
+    if (coachedAddError) throw coachedAddError;
+
+    for (const reservation of overriddenReservations ?? []) {
+      await sendPushNotifications([reservation.member_id], "reservation_overridden_for_coached_training", {
+        boat_name: reservation.boat_name,
+        reservation_start: reservation.start_time,
+        reservation_end: reservation.end_time,
+      });
+    }
+
+    if (includePrivateBoat) {
+      const { data: existingBoats, error: existingError } = await supabase
+        .from("lineup_boats")
+        .select("sort_order")
+        .eq("lineup_board_id", lineupBoardId)
+        .order("sort_order", { ascending: true })
+        .limit(1);
+      if (existingError) throw existingError;
+      const { data: privateBoat, error: privateBoatError } = await supabase
+        .from("lineup_boats")
+        .insert({ lineup_board_id: lineupBoardId, boat_name: "Private boat", boat_class_id: "1x", fleet_boat_id: null, sort_order: (existingBoats?.[0]?.sort_order ?? 0) - 1 })
+        .select("id")
+        .single();
+      if (privateBoatError) throw privateBoatError;
+      const { error: privateSeatError } = await supabase.from("lineup_seats").insert({ lineup_boat_id: privateBoat.id, seat_number: 1, member_id: null });
+      if (privateSeatError) throw privateSeatError;
+    }
+  } else {
   const { data: fleetBoats, error: fleetError } = boatIds.length
     ? await supabase.from("boats").select("id, name, boat_class_id, status").in("id", boatIds)
     : { data: [], error: null };
@@ -2836,9 +2881,11 @@ export async function addLineupBoatAdminAction(formData: FormData) {
 
   const { error: seatError } = await supabase.from("lineup_seats").insert(seatRows);
   if (seatError) throw seatError;
+  }
 
   revalidatePath("/admin/lineups");
   revalidatePath("/admin/races");
+  if (returnTo) revalidatePath(returnTo);
   if (returnTo) redirect(returnTo);
 }
 
@@ -2969,6 +3016,40 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
   const assignmentJson = String(formData.get("assignments_json") ?? "[]");
   const returnTo = String(formData.get("return_to") ?? "");
   const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
+  const reconciliationJson = String(formData.get("reconciliation_json") ?? "[]");
+  const reconciliations = JSON.parse(reconciliationJson) as { member_id: string; action: "update" }[];
+
+  const { data: board, error: boardError } = await supabase
+    .from("lineup_boards")
+    .select("sessions(session_type)")
+    .eq("id", lineupBoardId)
+    .maybeSingle();
+  if (boardError || !board) throw boardError ?? new Error("Lineup board not found.");
+  const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
+  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || session?.session_type === "coached_training_advanced";
+
+  if (isCoachedTraining) {
+    const { data: reservationChanges, error: publishError } = await supabase.rpc("publish_coached_training_lineup", {
+      p_lineup_board_id: lineupBoardId,
+      p_assignments: assignments,
+      p_reconciliations: reconciliations,
+    });
+    if (publishError) throw publishError;
+    for (const change of reservationChanges ?? []) {
+      await sendPushNotifications([change.member_id], "coached_training_reservation_updated", {
+        old_boat_name: change.old_boat_name,
+        new_boat_name: change.new_boat_name,
+        session_title: change.session_title,
+      });
+    }
+    try {
+      await publishLineupBoardInternal(supabase, lineupBoardId, true);
+    } catch (error) {
+      // Publication and reservation reconciliation have already committed atomically.
+      // Do not report a false failure just because the follow-up delivery fan-out failed.
+      console.error("Could not send coached-training lineup publication notifications", error);
+    }
+  } else {
 
   for (const item of assignments) {
     const { error } = await supabase
@@ -2979,6 +3060,7 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
   }
 
   await publishLineupBoardInternal(supabase, lineupBoardId, true);
+  }
 
   revalidatePath("/admin/lineups");
   revalidatePath("/admin/races");
