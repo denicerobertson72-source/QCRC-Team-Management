@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { LineupBuilder } from "@/components/admin/LineupBuilder";
+import { TrainingHoldConflictPanel } from "@/components/admin/TrainingHoldConflictPanel";
 import { formatEasternDateTime } from "@/lib/time";
 import {
   createLineupBoardAdminAction,
@@ -23,6 +24,14 @@ function boardTypeForSession(sessionType: string) {
   return "saturday_coached_row";
 }
 
+type TrainingHoldConflictRow = {
+  boat_name: string;
+  member_id: string;
+  reservation_id: string;
+  reservation_start: string;
+  reservation_end: string;
+};
+
 export default async function SessionLineupPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   const { supabase } = await ensureAdminProfile();
@@ -30,7 +39,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, title, starts_at, ends_at, session_type")
+    .select("id, title, starts_at, ends_at, session_type, is_cancelled")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -43,6 +52,68 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
         </main>
       </>
     );
+  }
+
+  const showTrainingHoldPanel =
+    session.session_type === "coached_training_advanced" && !session.is_cancelled && new Date(session.ends_at) > new Date();
+  let heldBoats: Array<{ id: string; boatName: string }> = [];
+  let trainingHoldConflicts: Array<{
+    id: string;
+    boatName: string;
+    memberName: string;
+    reservationStart: string;
+    reservationEnd: string;
+    reservationStatus: string;
+  }> = [];
+  let trainingHoldLoadFailed = false;
+
+  if (showTrainingHoldPanel) {
+    const [{ data: holdRows, error: holdError }, { data: conflictRows, error: conflictError }] = await Promise.all([
+      supabase
+        .from("training_boat_holds")
+        .select("id, starts_at, ends_at, boats(name)")
+        .eq("session_id", session.id)
+        .eq("auto_generated", true)
+        .order("starts_at", { ascending: true }),
+      supabase.rpc("training_hold_reservation_conflicts", { p_session_id: session.id }),
+    ]);
+
+    if (holdError || conflictError) {
+      console.error("Could not load Advanced Training hold conflicts", { sessionId: session.id, holdError, conflictError });
+      trainingHoldLoadFailed = true;
+    } else {
+      const conflicts = (conflictRows ?? []) as TrainingHoldConflictRow[];
+      heldBoats = (holdRows ?? []).map((hold) => {
+        const boat = Array.isArray(hold.boats) ? hold.boats[0] : hold.boats;
+        return { id: hold.id, boatName: boat?.name ?? "Unknown boat" };
+      });
+
+      const memberIds = [...new Set(conflicts.map((conflict) => conflict.member_id))];
+      const reservationIds = [...new Set(conflicts.map((conflict) => conflict.reservation_id))];
+      const [{ data: profiles, error: profileError }, { data: reservations, error: reservationError }] = await Promise.all([
+        memberIds.length
+          ? supabase.from("profiles").select("id, full_name, email").in("id", memberIds)
+          : Promise.resolve({ data: [], error: null }),
+        reservationIds.length
+          ? supabase.from("reservations").select("id, status").in("id", reservationIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (profileError || reservationError) {
+        console.error("Could not load details for Advanced Training hold conflicts", { sessionId: session.id, profileError, reservationError });
+      }
+      const memberNames = new Map(
+        (profiles ?? []).map((profile) => [profile.id, profile.full_name?.trim() || profile.email?.split("@")[0] || "Unknown member"]),
+      );
+      const reservationStatuses = new Map((reservations ?? []).map((reservation) => [reservation.id, reservation.status]));
+      trainingHoldConflicts = conflicts.map((conflict) => ({
+        id: conflict.reservation_id,
+        boatName: conflict.boat_name,
+        memberName: memberNames.get(conflict.member_id) ?? "Member details unavailable",
+        reservationStart: conflict.reservation_start,
+        reservationEnd: conflict.reservation_end,
+        reservationStatus: reservationStatuses.get(conflict.reservation_id) ?? "active",
+      }));
+    }
   }
 
   const boardType = boardTypeForSession(session.session_type);
@@ -59,6 +130,15 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
         <TopNav />
         <main className="stack">
           <PageTitle title={`Session Lineup: ${session.title}`} subtitle={`${formatEasternDateTime(session.starts_at)} ET`} />
+          {showTrainingHoldPanel ? (
+            <TrainingHoldConflictPanel
+              sessionStartsAt={session.starts_at}
+              sessionEndsAt={session.ends_at}
+              heldBoats={heldBoats}
+              conflicts={trainingHoldConflicts}
+              loadFailed={trainingHoldLoadFailed}
+            />
+          ) : null}
           <form action={createLineupBoardAdminAction} className="card form-grid">
             <input type="hidden" name="board_type" value={boardType} />
             <input type="hidden" name="session_id" value={session.id} />
@@ -95,6 +175,16 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
         <div className="row">
           <Link href="/admin/lineups">Back to Lineups</Link>
         </div>
+
+        {showTrainingHoldPanel ? (
+          <TrainingHoldConflictPanel
+            sessionStartsAt={session.starts_at}
+            sessionEndsAt={session.ends_at}
+            heldBoats={heldBoats}
+            conflicts={trainingHoldConflicts}
+            loadFailed={trainingHoldLoadFailed}
+          />
+        ) : null}
 
         <Card className="stack">
           <div className="page-title">
