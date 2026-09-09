@@ -137,6 +137,7 @@ export default async function ReservePage({
 
           {visibleBoats.map((boat) => {
             const reservable = boat.status === "available" && availableIds.has(boat.id);
+            const unavailableWindow = unavailableByBoatId.get(boat.id);
             return (
               <details key={boat.id} className="card boat-collapsible">
                 <summary className="boat-summary">
@@ -165,7 +166,13 @@ export default async function ReservePage({
                       </p>
                       <p>
                         This boat cannot be reserved right now.
-                        {boat.status !== "available" ? " Marked out of service by admin." : unavailableByBoatId.get(boat.id)?.reservation_status === "availability_block" ? ` ${unavailableByBoatId.get(boat.id)?.availability_title ?? "An availability block"} is scheduled for this time.` : " It is unavailable for this time window."}
+                        {boat.status !== "available"
+                          ? " Marked out of service by admin."
+                          : unavailableWindow?.reservation_status === "training_hold"
+                            ? ` Held for Advanced Training${unavailableWindow.expected_return_at ? ` until ${formatEasternDateTime(unavailableWindow.expected_return_at)} ET` : ""}.`
+                            : unavailableWindow?.reservation_status === "availability_block"
+                              ? ` ${unavailableWindow.availability_title ?? "An availability block"} is scheduled for this time.`
+                              : " It is unavailable for this time window."}
                       </p>
                     </Card>
                   )}
@@ -191,9 +198,9 @@ export default async function ReservePage({
                       <h3>{boat.name}</h3>
                       <p className="muted">{boat.boat_class_id}</p>
                     </div>
-                    <StatusChip label={window.reservation_status === "availability_block" ? "scheduled block" : window.reservation_status === "checked_out" ? "signed out" : "reserved"} kind="reserved" />
+                    <StatusChip label={window.reservation_status === "training_hold" ? "held for Advanced Training" : window.reservation_status === "availability_block" ? "scheduled block" : window.reservation_status === "checked_out" ? "signed out" : "reserved"} kind="reserved" />
                   </div>
-                  <p className="muted">{window.reservation_status === "availability_block" ? `${window.availability_title ?? "Availability block"} is scheduled for this time.` : `${window.reservation_status === "checked_out" ? "Expected return" : "Reserved until"}: ${window.expected_return_at ? formatEasternDateTime(window.expected_return_at) : "not available"} ET`}</p>
+                  <p className="muted">{window.reservation_status === "training_hold" ? `Held for Advanced Training${window.availability_title ? `: ${window.availability_title}` : ""}${window.expected_return_at ? ` until ${formatEasternDateTime(window.expected_return_at)} ET` : ""}.` : window.reservation_status === "availability_block" ? `${window.availability_title ?? "Availability block"} is scheduled for this time.` : `${window.reservation_status === "checked_out" ? "Expected return" : "Reserved until"}: ${window.expected_return_at ? formatEasternDateTime(window.expected_return_at) : "not available"} ET`}</p>
                 </Card>
               ))}
             </div>

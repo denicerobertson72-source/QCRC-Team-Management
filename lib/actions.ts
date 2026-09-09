@@ -530,11 +530,16 @@ export async function reserveBoatAction(formData: FormData) {
 
   if (result.error) {
     const rawMessage = result.error.message || "Reservation failed.";
-    const message = rawMessage.includes("another active or reserved outing within 90 minutes")
+    const message = rawMessage.includes("held for Advanced Training")
+      ? "Boat unavailable. This boat is held for Advanced Training during the selected time."
+      : rawMessage.includes("another active or reserved outing within 90 minutes")
       ? "You already have a reservation or active outing in this time block."
       : rawMessage.includes("Reservation blocked")
         ? "Reservation blocked. Check dues status, waiver, skill tier, weight class, or boat availability."
         : rawMessage;
+    if (!rawMessage.includes("held for Advanced Training") && !rawMessage.includes("another active or reserved outing within 90 minutes") && !rawMessage.includes("Reservation blocked")) {
+      console.error("Could not reserve boat", result.error);
+    }
     destination.searchParams.set("reservation_status", "error");
     destination.searchParams.set("reservation_message", message);
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
@@ -569,7 +574,7 @@ export async function updateReservationAction(formData: FormData) {
 
   const { data: reservation, error: loadError } = await admin
     .from("reservations")
-    .select("id, boat_id, created_by, status, checked_out_at, checked_in_at")
+    .select("id, boat_id, created_by, start_time, end_time, status, checked_out_at, checked_in_at")
     .eq("id", reservationId)
     .maybeSingle();
 
@@ -586,17 +591,23 @@ export async function updateReservationAction(formData: FormData) {
     redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
   }
 
-  const { data: canReserve, error: eligibilityError } = await admin.rpc("can_user_reserve_boat", {
-    p_user_id: user.id,
-    p_boat_id: reservation.boat_id,
-    p_start_time: startTimeIso,
-    p_end_time: endTimeIso,
-  });
+  const timeChanged =
+    new Date(reservation.start_time).getTime() !== new Date(startTimeIso).getTime() ||
+    new Date(reservation.end_time).getTime() !== new Date(endTimeIso).getTime();
+  if (timeChanged) {
+    const { data: canReserve, error: eligibilityError } = await admin.rpc("can_user_reserve_boat", {
+      p_user_id: user.id,
+      p_boat_id: reservation.boat_id,
+      p_start_time: startTimeIso,
+      p_end_time: endTimeIso,
+    });
 
-  if (eligibilityError || !canReserve) {
-    destination.searchParams.set("reservation_status", "error");
-    destination.searchParams.set("reservation_message", eligibilityError?.message || "Reservation blocked. Check dues status, skill tier, weight class, or boat availability.");
-    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    if (eligibilityError || !canReserve) {
+      if (eligibilityError) console.error("Could not validate edited reservation", eligibilityError);
+      destination.searchParams.set("reservation_status", "error");
+      destination.searchParams.set("reservation_message", "Boat unavailable for the selected time. Check eligibility and availability, including Advanced Training holds.");
+      redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+    }
   }
 
   const { data: ownReservations, error: ownReservationError } = await admin
@@ -2904,9 +2915,17 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   if (boardError || !board) throw boardError ?? new Error("Lineup board not found.");
 
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
-  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || session?.session_type === "coached_training_advanced";
+  const isAdvancedTraining = session?.session_type === "coached_training_advanced";
+  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
+  if (isAdvancedTraining && includePrivateBoat) throw new Error("Private boats are not part of the Advanced Training held-fleet workflow.");
 
-  if (isCoachedTraining && boatIds.length) {
+  if (isAdvancedTraining && boatIds.length) {
+    const { error: advancedAddError } = await supabase.rpc("add_advanced_training_held_lineup_boats", {
+      p_lineup_board_id: lineupBoardId,
+      p_boat_ids: boatIds,
+    });
+    if (advancedAddError) throw advancedAddError;
+  } else if (isCoachedTraining && boatIds.length) {
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
       p_lineup_board_id: lineupBoardId,
       p_boat_ids: boatIds,
@@ -3111,9 +3130,30 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
     .maybeSingle();
   if (boardError || !board) throw boardError ?? new Error("Lineup board not found.");
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
-  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || session?.session_type === "coached_training_advanced";
+  const isAdvancedTraining = session?.session_type === "coached_training_advanced";
+  const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
 
-  if (isCoachedTraining) {
+  if (isAdvancedTraining) {
+    const { data: reservationChanges, error: publishError } = await supabase.rpc("publish_advanced_training_held_lineup", {
+      p_lineup_board_id: lineupBoardId,
+      p_assignments: assignments,
+    });
+    if (publishError) {
+      return { ok: false, code: "advanced_training_publish_blocked", message: publishError.message || "The Advanced Training lineup could not be published." };
+    }
+    for (const change of reservationChanges ?? []) {
+      await sendPushNotifications([change.member_id], "coached_training_reservation_updated", {
+        old_boat_name: change.old_boat_name,
+        new_boat_name: change.new_boat_name,
+        session_title: change.session_title,
+      });
+    }
+    try {
+      await publishLineupBoardInternal(supabase, lineupBoardId, true);
+    } catch (error) {
+      console.error("Could not send Advanced Training lineup publication notifications", error);
+    }
+  } else if (isCoachedTraining) {
     const { data: reservationChanges, error: publishError } = await supabase.rpc("publish_coached_training_lineup", {
       p_lineup_board_id: lineupBoardId,
       p_assignments: assignments,

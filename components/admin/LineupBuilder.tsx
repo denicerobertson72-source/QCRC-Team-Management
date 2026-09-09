@@ -74,6 +74,7 @@ export function LineupBuilder({
   fleetBoats = [],
   participantReservations = [],
   isCoachedTraining = false,
+  isAdvancedTraining = false,
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -89,6 +90,7 @@ export function LineupBuilder({
   fleetBoats?: FleetBoat[];
   participantReservations?: ParticipantReservation[];
   isCoachedTraining?: boolean;
+  isAdvancedTraining?: boolean;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
@@ -188,9 +190,12 @@ export function LineupBuilder({
   }, [fleetBoats, isCoachedTraining, localBoats, memberNameById, participantReservations]);
   const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ reconciliation_member_id: item.memberId, action: "update" })));
 
-  const selectableFleetBoats = fleetBoats.filter(
-    (boat) => boat.boat_class_id === newBoatClass && boat.status !== "unavailable",
+  const selectableFleetBoats = fleetBoats.filter((boat) =>
+    boat.boat_class_id === newBoatClass && (isAdvancedTraining ? boat.status === "held_for_advanced_training" : boat.status !== "unavailable"),
   );
+  const advancedTrainingConflicts = isAdvancedTraining
+    ? fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "held_conflict")
+    : [];
 
   function setBoatSelected(boat: FleetBoat, checked: boolean) {
     if (checked && boat.status === "reserved_by_nonparticipant") {
@@ -303,12 +308,18 @@ export function LineupBuilder({
                     {boat.name}
                     {boat.status === "reserved_by_participant" ? <small>Reserved by {boat.reservation?.member_name ?? "a training participant"} · Training participant</small> : null}
                     {boat.status === "reserved_by_nonparticipant" ? <small>Reserved by {boat.reservation?.member_name ?? "another member"} · Not in coached training</small> : null}
+                    {boat.status === "held_for_advanced_training" ? <small>Held for Advanced Training</small> : null}
                     {boat.status === "available" ? <small>Available</small> : null}
                   </span>
                 </label>
               ))}
               {selectableFleetBoats.length === 0 ? <p className="muted">No fleet boats of this size can be assigned.</p> : null}
-              {newBoatClass === "1x" ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
+              {advancedTrainingConflicts.map((boat) => (
+                <p key={boat.id} className="error">
+                  {boat.name} has an existing reservation conflict. Resolve it before adding this held boat.
+                </p>
+              ))}
+              {newBoatClass === "1x" && !isAdvancedTraining ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
             </div>
           </details>
           <Button type="submit">Add Selected Boats</Button>
@@ -319,7 +330,7 @@ export function LineupBuilder({
 
       {publishReconciliations.length > 0 ? (
         <div className="card stack">
-          <h3>Reservation reconciliation required before publishing</h3>
+          <h3>{isAdvancedTraining ? "Reservation changes on publish" : "Reservation reconciliation required before publishing"}</h3>
           <p className="muted">The recommended update is prepared, but nothing changes while you edit. Publishing will update these club-boat reservations to match the finalized lineup.</p>
           {publishReconciliations.map((item) => (
             <div key={item.memberId} className="card-subtle stack">
@@ -348,7 +359,7 @@ export function LineupBuilder({
 
       {publishConfirmationOpen ? (
         <div className="card stack" role="dialog" aria-modal="true" aria-labelledby="reconciliation-confirmation-title">
-          <h3 id="reconciliation-confirmation-title">Confirm reservation reconciliation</h3>
+          <h3 id="reconciliation-confirmation-title">Confirm reservation changes</h3>
           <p>Publishing will update the following reservations to match the final coached-training lineup.</p>
           {publishReconciliations.map((item) => <p key={item.memberId}><strong>{item.memberName}</strong>: {item.reservedBoat ?? "No reservation"} → {item.assignedBoat}</p>)}
           <div className="row">

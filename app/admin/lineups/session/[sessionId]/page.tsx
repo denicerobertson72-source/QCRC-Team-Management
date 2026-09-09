@@ -153,9 +153,10 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
 
   const detail = await getLineupBoardDetail(board.id);
   const roster = await getRosterForBoard(boardType, undefined, session.id);
+  const isAdvancedTraining = session.session_type === "coached_training_advanced";
   const isCoachedTraining = session.session_type === "coached_training_beginner_intermediate" || session.session_type === "coached_training_advanced";
   const rosterMemberIds = new Set(roster.map((member) => member.id));
-  const [{ data: fleetBoats }, { data: conflictingReservations }] = await Promise.all([
+  const [{ data: fleetBoats }, { data: conflictingReservations }, { data: sessionHolds }] = await Promise.all([
     supabase.from("boats").select("id, name, boat_class_id, status").order("boat_class_id").order("name"),
     supabase
       .from("reservations")
@@ -163,8 +164,12 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
       .in("status", ["reserved", "checked_out"])
       .lt("start_time", session.ends_at)
       .gt("end_time", session.starts_at),
+    isAdvancedTraining
+      ? supabase.from("training_boat_holds").select("boat_id").eq("session_id", session.id).eq("auto_generated", true)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const reservationByBoatId = new Map((conflictingReservations ?? []).map((reservation) => [reservation.boat_id, reservation]));
+  const heldBoatIds = new Set((sessionHolds ?? []).map((hold) => hold.boat_id));
 
   return (
     <>
@@ -207,12 +212,21 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
               const reservation = reservationByBoatId.get(boat.id);
               const profile = Array.isArray(reservation?.profiles) ? reservation?.profiles[0] : reservation?.profiles;
               const memberName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "another member";
-              const participantReservation = Boolean(reservation && rosterMemberIds.has(reservation.created_by));
-              const reservationState = !reservation
-                ? boat.status
-                : isCoachedTraining && reservation.status === "reserved"
-                  ? participantReservation ? "reserved_by_participant" : "reserved_by_nonparticipant"
-                  : "unavailable";
+              const reservationMemberIds = reservation
+                ? [...new Set([reservation.created_by, ...((reservation.reservation_crew ?? []).map((crew) => crew.member_id))])]
+                : [];
+              const hasNonParticipantReservation = reservationMemberIds.some((memberId) => !rosterMemberIds.has(memberId));
+              const reservationState = isAdvancedTraining
+                ? boat.status !== "available" || !heldBoatIds.has(boat.id) || reservation?.status === "checked_out"
+                  ? "unavailable"
+                  : hasNonParticipantReservation
+                    ? "held_conflict"
+                    : "held_for_advanced_training"
+                : !reservation
+                  ? boat.status
+                  : isCoachedTraining && reservation.status === "reserved"
+                    ? rosterMemberIds.has(reservation.created_by) ? "reserved_by_participant" : "reserved_by_nonparticipant"
+                    : "unavailable";
               return {
                 ...boat,
                 status: reservationState,
@@ -220,6 +234,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
               };
             })}
             isCoachedTraining={isCoachedTraining}
+            isAdvancedTraining={isAdvancedTraining}
             participantReservations={(conflictingReservations ?? []).map((reservation) => ({
               id: reservation.id,
               boat_id: reservation.boat_id,
