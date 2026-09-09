@@ -65,6 +65,30 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
+type AdminSupabase = Awaited<ReturnType<typeof assertAdmin>>["supabase"];
+
+async function syncAdvancedTrainingSessionHolds(supabase: AdminSupabase, sessionId: string) {
+  const { error } = await supabase.rpc("sync_advanced_training_holds", { p_session_id: sessionId });
+  if (error) {
+    console.error("Could not synchronize Advanced Training holds", { sessionId, error });
+    throw new Error("Unable to synchronize Advanced Training priority holds. Please try again.");
+  }
+}
+
+async function removeFutureAdvancedTrainingSessionHolds(supabase: AdminSupabase, sessionId: string, endsAt: string) {
+  if (new Date(endsAt) <= new Date()) return;
+
+  const { error } = await supabase
+    .from("training_boat_holds")
+    .delete()
+    .eq("session_id", sessionId)
+    .eq("auto_generated", true);
+  if (error) {
+    console.error("Could not remove cancelled Advanced Training holds", { sessionId, error });
+    throw new Error("Session was cancelled, but its priority holds could not be removed. Please try again.");
+  }
+}
+
 type PriorityFleetActionResult = { ok: boolean; message: string };
 
 export async function addAdvancedTrainingPriorityBoatAdminAction(boatId: string): Promise<PriorityFleetActionResult> {
@@ -3261,7 +3285,7 @@ export async function cancelSessionAdminAction(formData: FormData) {
 
   const { data: sessionRow, error: sessionLoadError } = await supabase
     .from("sessions")
-    .select("title, starts_at, session_type")
+    .select("title, starts_at, ends_at, session_type")
     .eq("id", sessionId)
     .single();
   if (sessionLoadError) throw sessionLoadError;
@@ -3274,6 +3298,14 @@ export async function cancelSessionAdminAction(formData: FormData) {
     })
     .eq("id", sessionId);
   if (error) throw error;
+
+  if (sessionRow.session_type === "coached_training_advanced") {
+    if (isCancelled) {
+      await removeFutureAdvancedTrainingSessionHolds(supabase, sessionId, sessionRow.ends_at);
+    } else {
+      await syncAdvancedTrainingSessionHolds(supabase, sessionId);
+    }
+  }
 
   if (isCancelled) {
     const { data: signups, error: signupsError } = await supabase
@@ -3450,8 +3482,28 @@ export async function generateProgramSessionsMonthAction(formData: FormData) {
   }
 
   if (rows.length > 0) {
-    const { error } = await supabase.from("sessions").insert(rows);
+    const { data: createdSessions, error } = await supabase.from("sessions").insert(rows).select("id, session_type");
     if (error) throw error;
+
+    try {
+      for (const session of createdSessions ?? []) {
+        if (session.session_type === "coached_training_advanced") {
+          await syncAdvancedTrainingSessionHolds(supabase, session.id);
+        }
+      }
+    } catch (syncError) {
+      const { error: cleanupError } = await supabase
+        .from("sessions")
+        .delete()
+        .in(
+          "id",
+          (createdSessions ?? []).map((session) => session.id),
+        );
+      if (cleanupError) {
+        console.error("Could not roll back generated sessions after hold synchronization failed", { cleanupError });
+      }
+      throw syncError;
+    }
   }
 
   revalidatePath("/programs/saturday");
@@ -3474,7 +3526,7 @@ function defaultSessionTimesByType(sessionType: string) {
   return { start: "06:30", end: "07:30" };
 }
 
-async function updateSessionMonthTimes(supabase: Awaited<ReturnType<typeof assertAdmin>>["supabase"], monthInput: string, sessionType: string, startTime: string, endTime: string) {
+async function updateSessionMonthTimes(supabase: AdminSupabase, monthInput: string, sessionType: string, startTime: string, endTime: string) {
   const { start, end } = monthWindowFromInput(monthInput);
 
   const { data: sessions, error } = await supabase
@@ -3503,6 +3555,9 @@ async function updateSessionMonthTimes(supabase: Awaited<ReturnType<typeof asser
       .update({ starts_at: startsAtIso, ends_at: endsAtIso })
       .eq("id", session.id);
     if (updateError) throw updateError;
+    if (sessionType === "coached_training_advanced") {
+      await syncAdvancedTrainingSessionHolds(supabase, session.id);
+    }
   }
 }
 
@@ -3556,14 +3611,20 @@ export async function updateSessionTimesAdminAction(formData: FormData) {
   const startsAtIso = easternLocalInputToIso(startsAt);
   const endsAtIso = easternLocalInputToIso(endsAt);
 
-  const { error } = await supabase
+  const { data: session, error } = await supabase
     .from("sessions")
     .update({
       starts_at: startsAtIso,
       ends_at: endsAtIso,
     })
-    .eq("id", sessionId);
+    .eq("id", sessionId)
+    .select("id, session_type")
+    .maybeSingle();
   if (error) throw error;
+  if (!session) throw new Error("Session not found.");
+  if (session.session_type === "coached_training_advanced") {
+    await syncAdvancedTrainingSessionHolds(supabase, session.id);
+  }
 
   revalidatePath("/programs/saturday");
   revalidatePath("/programs/training");
