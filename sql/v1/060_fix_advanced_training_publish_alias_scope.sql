@@ -1,26 +1,4 @@
--- V1.59: held Advanced Training boats are planned without member pre-reservations.
-create or replace function public.add_advanced_training_held_lineup_boats(p_lineup_board_id uuid, p_boat_ids uuid[])
-returns void language plpgsql security definer set search_path = public as $$
-declare v_session record; v_boat record; v_sort_order integer; v_lineup_boat_id uuid; v_reservation record;
-begin
-  if not public.can_manage_club_data() then raise exception 'Only a coach or manager can assign Advanced Training boats'; end if;
-  select s.id, s.starts_at, s.ends_at, s.session_type, s.is_cancelled into v_session from public.lineup_boards lb join public.sessions s on s.id = lb.session_id where lb.id = p_lineup_board_id for update of lb, s;
-  if v_session.id is null or v_session.session_type <> 'coached_training_advanced' or v_session.is_cancelled then raise exception 'This lineup is not an active Advanced Training session'; end if;
-  select coalesce(min(sort_order), 0) - cardinality(p_boat_ids) into v_sort_order from public.lineup_boats where lineup_board_id = p_lineup_board_id;
-  for v_boat in select b.id, b.name, b.boat_class_id from public.boats b where b.id = any(p_boat_ids) and b.status = 'available' for update loop
-    if exists (select 1 from public.lineup_boats lb where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id = v_boat.id) then raise exception '% is already in this lineup', v_boat.name; end if;
-    if not exists (select 1 from public.training_boat_holds h where h.session_id = v_session.id and h.boat_id = v_boat.id and tstzrange(h.starts_at,h.ends_at,'[)') @> tstzrange(v_session.starts_at,v_session.ends_at,'[)')) then raise exception '% is not held for this Advanced Training session', v_boat.name; end if;
-    select r.id, r.status into v_reservation from public.reservations r where r.boat_id = v_boat.id and r.status in ('reserved','checked_out') and tstzrange(r.start_time,r.end_time,'[)') && tstzrange(v_session.starts_at,v_session.ends_at,'[)') for update;
-    if found and v_reservation.status = 'checked_out' then raise exception '% is already checked out and cannot be used for Advanced Training', v_boat.name; end if;
-    if found and exists (select 1 from public.reservations r left join public.reservation_crew rc on rc.reservation_id = r.id where r.id = v_reservation.id and not exists (select 1 from public.session_signups ss where ss.session_id = v_session.id and ss.member_id = coalesce(rc.member_id, r.created_by))) then raise exception '% has an existing member reservation that conflicts with this Advanced Training session. Resolve the reservation conflict before publishing.', v_boat.name; end if;
-    insert into public.lineup_boats (lineup_board_id, boat_name, boat_class_id, fleet_boat_id, sort_order) values (p_lineup_board_id, v_boat.name, v_boat.boat_class_id, v_boat.id, v_sort_order) returning id into v_lineup_boat_id;
-    insert into public.lineup_seats (lineup_boat_id, seat_number, member_id) select v_lineup_boat_id, seat_number, null from generate_series(1, case v_boat.boat_class_id when '8x' then 8 when '4x' then 4 when '2x' then 2 else 1 end) as seat_number;
-    v_sort_order := v_sort_order + 1;
-  end loop;
-  if (select count(*) from public.boats b where b.id = any(p_boat_ids) and b.status = 'available') <> cardinality(p_boat_ids) then raise exception 'One or more selected fleet boats are no longer operational'; end if;
-end;
-$$;
-
+-- V1.60: repair the UPDATE target alias scope in Advanced Training publication.
 create or replace function public.publish_advanced_training_held_lineup(p_lineup_board_id uuid, p_assignments jsonb)
 returns table(member_id uuid, old_boat_name text, new_boat_name text, session_title text)
 language plpgsql security definer set search_path = public as $$
@@ -52,8 +30,3 @@ begin
   update public.reservation_crew rc set seat = 'seat' || ls.seat_number::text from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id join public.reservations r on r.boat_id = lb.fleet_boat_id and r.status = 'reserved' and tstzrange(r.start_time,r.end_time,'[)') && tstzrange(v_session.starts_at,v_session.ends_at,'[)') where lb.lineup_board_id = p_lineup_board_id and rc.reservation_id = r.id and rc.member_id = ls.member_id;
 end;
 $$;
-
-revoke all on function public.add_advanced_training_held_lineup_boats(uuid, uuid[]) from public;
-grant execute on function public.add_advanced_training_held_lineup_boats(uuid, uuid[]) to authenticated;
-revoke all on function public.publish_advanced_training_held_lineup(uuid, jsonb) from public;
-grant execute on function public.publish_advanced_training_held_lineup(uuid, jsonb) to authenticated;

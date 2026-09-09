@@ -17,6 +17,7 @@ import {
   saveAndPublishLineupAssignmentsAdminAction,
 } from "@/lib/actions";
 import { getLineupBoardDetail, getRosterForBoard } from "@/lib/queries";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function boardTypeForSession(sessionType: string) {
   if (sessionType === "coached_training_beginner_intermediate") return "coached_training_beginner_intermediate";
@@ -25,12 +26,22 @@ function boardTypeForSession(sessionType: string) {
 }
 
 type TrainingHoldConflictRow = {
+  boat_id: string;
   boat_name: string;
   member_id: string;
   reservation_id: string;
   reservation_start: string;
   reservation_end: string;
 };
+
+function logTrainingHoldPanelError(source: string, error: { code?: string; message?: string; details?: string; hint?: string } | null) {
+  console.error(`[training-hold-panel] ${source} failed`, {
+    code: error?.code,
+    message: error?.message,
+    details: error?.details,
+    hint: error?.hint,
+  });
+}
 
 export default async function SessionLineupPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -65,7 +76,9 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
     reservationEnd: string;
     reservationStatus: string;
   }> = [];
-  let trainingHoldLoadFailed = false;
+  let trainingHoldsLoadFailed = false;
+  let trainingHoldClassificationLoadFailed = false;
+  let participantReservationMessages: string[] = [];
 
   if (showTrainingHoldPanel) {
     const [{ data: holdRows, error: holdError }, { data: conflictRows, error: conflictError }] = await Promise.all([
@@ -78,41 +91,107 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
       supabase.rpc("training_hold_reservation_conflicts", { p_session_id: session.id }),
     ]);
 
-    if (holdError || conflictError) {
-      console.error("Could not load Advanced Training hold conflicts", { sessionId: session.id, holdError, conflictError });
-      trainingHoldLoadFailed = true;
+    if (holdError) {
+      logTrainingHoldPanelError("training_boat_holds", holdError);
+      trainingHoldsLoadFailed = true;
     } else {
-      const conflicts = (conflictRows ?? []) as TrainingHoldConflictRow[];
       heldBoats = (holdRows ?? []).map((hold) => {
         const boat = Array.isArray(hold.boats) ? hold.boats[0] : hold.boats;
         return { id: hold.id, boatName: boat?.name ?? "Unknown boat" };
       });
+    }
 
-      const memberIds = [...new Set(conflicts.map((conflict) => conflict.member_id))];
+    if (conflictError) {
+      logTrainingHoldPanelError("training_hold_reservation_conflicts", conflictError);
+      trainingHoldClassificationLoadFailed = true;
+    } else {
+      const conflicts = (conflictRows ?? []) as TrainingHoldConflictRow[];
       const reservationIds = [...new Set(conflicts.map((conflict) => conflict.reservation_id))];
-      const [{ data: profiles, error: profileError }, { data: reservations, error: reservationError }] = await Promise.all([
-        memberIds.length
-          ? supabase.from("profiles").select("id, full_name, email").in("id", memberIds)
-          : Promise.resolve({ data: [], error: null }),
+      const admin = createAdminClient();
+      const [{ data: signups, error: signupError }, { data: crewRows, error: crewError }, { data: conflictBoard, error: conflictBoardError }] = await Promise.all([
+        admin.from("session_signups").select("member_id").eq("session_id", session.id),
         reservationIds.length
-          ? supabase.from("reservations").select("id, status").in("id", reservationIds)
+          ? admin.from("reservation_crew").select("reservation_id, member_id").in("reservation_id", reservationIds)
           : Promise.resolve({ data: [], error: null }),
+        admin.from("lineup_boards").select("id").eq("session_id", session.id).limit(1).maybeSingle(),
       ]);
-      if (profileError || reservationError) {
-        console.error("Could not load details for Advanced Training hold conflicts", { sessionId: session.id, profileError, reservationError });
+      if (signupError || crewError || conflictBoardError) {
+        logTrainingHoldPanelError("session_signups", signupError);
+        logTrainingHoldPanelError("reservation_crew", crewError);
+        logTrainingHoldPanelError("lineup_boards", conflictBoardError);
+        trainingHoldClassificationLoadFailed = true;
+      } else {
+        const { data: lineupBoats, error: lineupBoatsError } = conflictBoard?.id
+          ? await admin.from("lineup_boats").select("id, fleet_boat_id").eq("lineup_board_id", conflictBoard.id)
+          : { data: [], error: null };
+        const lineupBoatIds = (lineupBoats ?? []).map((boat) => boat.id);
+        const { data: assignedSeats, error: assignedSeatsError } = lineupBoatIds.length
+          ? await admin.from("lineup_seats").select("member_id, lineup_boat_id").in("lineup_boat_id", lineupBoatIds).not("member_id", "is", null)
+          : { data: [], error: null };
+
+        if (lineupBoatsError || assignedSeatsError) {
+          logTrainingHoldPanelError("lineup_boats", lineupBoatsError);
+          logTrainingHoldPanelError("lineup_seats", assignedSeatsError);
+          trainingHoldClassificationLoadFailed = true;
+        } else {
+          const participantIds = new Set((signups ?? []).map((signup) => signup.member_id));
+          const crewByReservation = new Map<string, string[]>();
+          for (const crew of crewRows ?? []) {
+            const members = crewByReservation.get(crew.reservation_id) ?? [];
+            members.push(crew.member_id);
+            crewByReservation.set(crew.reservation_id, members);
+          }
+          const fleetBoatByLineupBoat = new Map((lineupBoats ?? []).flatMap((boat) => boat.fleet_boat_id ? [[boat.id, boat.fleet_boat_id] as const] : []));
+          const savedBoatMembers = new Map<string, Set<string>>();
+          for (const seat of assignedSeats ?? []) {
+            const fleetBoatId = fleetBoatByLineupBoat.get(seat.lineup_boat_id);
+            if (!seat.member_id || !fleetBoatId) continue;
+            const members = savedBoatMembers.get(fleetBoatId) ?? new Set<string>();
+            members.add(seat.member_id);
+            savedBoatMembers.set(fleetBoatId, members);
+          }
+
+          const trueConflicts: TrainingHoldConflictRow[] = [];
+          for (const conflict of conflicts) {
+            const reservationMembers = [...new Set([conflict.member_id, ...(crewByReservation.get(conflict.reservation_id) ?? [])])];
+            const savedMembers = savedBoatMembers.get(conflict.boat_id) ?? new Set<string>();
+            const allParticipants = reservationMembers.length > 0 && reservationMembers.every((memberId) => participantIds.has(memberId));
+            const matchesLineup = allParticipants && reservationMembers.every((memberId) => savedMembers.has(memberId));
+
+            if (!allParticipants || (reservationMembers.length > 1 && !matchesLineup)) {
+              trueConflicts.push(conflict);
+            } else if (matchesLineup) {
+              participantReservationMessages.push(`${conflict.boat_name}: Existing participant reservation matches lineup.`);
+            } else {
+              participantReservationMessages.push(`${conflict.boat_name}: Participant reservation will be reconciled when the lineup is published.`);
+            }
+          }
+          const memberIds = [...new Set(trueConflicts.map((conflict) => conflict.member_id))];
+          const [{ data: profiles, error: profileError }, { data: reservations, error: reservationError }] = await Promise.all([
+            memberIds.length
+              ? admin.from("profiles").select("id, full_name, email").in("id", memberIds)
+              : Promise.resolve({ data: [], error: null }),
+            reservationIds.length
+              ? admin.from("reservations").select("id, status").in("id", reservationIds)
+              : Promise.resolve({ data: [], error: null }),
+          ]);
+          if (profileError || reservationError) {
+            console.error("Could not load details for Advanced Training hold conflicts", { sessionId: session.id, profileError, reservationError });
+          }
+          const memberNames = new Map(
+            (profiles ?? []).map((profile) => [profile.id, profile.full_name?.trim() || profile.email?.split("@")[0] || "Unknown member"]),
+          );
+          const reservationStatuses = new Map((reservations ?? []).map((reservation) => [reservation.id, reservation.status]));
+          trainingHoldConflicts = trueConflicts.map((conflict) => ({
+            id: conflict.reservation_id,
+            boatName: conflict.boat_name,
+            memberName: memberNames.get(conflict.member_id) ?? "Member details unavailable",
+            reservationStart: conflict.reservation_start,
+            reservationEnd: conflict.reservation_end,
+            reservationStatus: reservationStatuses.get(conflict.reservation_id) ?? "active",
+          }));
+        }
       }
-      const memberNames = new Map(
-        (profiles ?? []).map((profile) => [profile.id, profile.full_name?.trim() || profile.email?.split("@")[0] || "Unknown member"]),
-      );
-      const reservationStatuses = new Map((reservations ?? []).map((reservation) => [reservation.id, reservation.status]));
-      trainingHoldConflicts = conflicts.map((conflict) => ({
-        id: conflict.reservation_id,
-        boatName: conflict.boat_name,
-        memberName: memberNames.get(conflict.member_id) ?? "Member details unavailable",
-        reservationStart: conflict.reservation_start,
-        reservationEnd: conflict.reservation_end,
-        reservationStatus: reservationStatuses.get(conflict.reservation_id) ?? "active",
-      }));
     }
   }
 
@@ -136,7 +215,9 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
               sessionEndsAt={session.ends_at}
               heldBoats={heldBoats}
               conflicts={trainingHoldConflicts}
-              loadFailed={trainingHoldLoadFailed}
+              participantReservationMessages={participantReservationMessages}
+              holdsLoadFailed={trainingHoldsLoadFailed}
+              classificationLoadFailed={trainingHoldClassificationLoadFailed}
             />
           ) : null}
           <form action={createLineupBoardAdminAction} className="card form-grid">
@@ -187,7 +268,9 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             sessionEndsAt={session.ends_at}
             heldBoats={heldBoats}
             conflicts={trainingHoldConflicts}
-            loadFailed={trainingHoldLoadFailed}
+            participantReservationMessages={participantReservationMessages}
+            holdsLoadFailed={trainingHoldsLoadFailed}
+            classificationLoadFailed={trainingHoldClassificationLoadFailed}
           />
         ) : null}
 

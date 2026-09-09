@@ -20,29 +20,40 @@ export function TrainingHoldConflictPanel({
   sessionEndsAt,
   heldBoats,
   conflicts,
-  loadFailed = false,
+  participantReservationMessages = [],
+  holdsLoadFailed = false,
+  classificationLoadFailed = false,
 }: {
   sessionStartsAt: string;
   sessionEndsAt: string;
   heldBoats: HeldBoat[];
   conflicts: TrainingHoldConflict[];
-  loadFailed?: boolean;
+  participantReservationMessages?: string[];
+  holdsLoadFailed?: boolean;
+  classificationLoadFailed?: boolean;
 }) {
   return (
     <Card className="stack">
       <div className="page-title">
         <h3>Training Holds</h3>
-        <span className="muted">{heldBoats.length} priority boat{heldBoats.length === 1 ? "" : "s"} held</span>
+        <span className="muted">
+          {holdsLoadFailed ? "Hold count unavailable" : `${heldBoats.length} priority boat${heldBoats.length === 1 ? "" : "s"} held`}
+        </span>
       </div>
 
-      {loadFailed ? <p className="error" role="alert">Training hold conflicts could not be checked.</p> : null}
-      {!loadFailed ? (
+      {holdsLoadFailed ? <p className="error" role="alert">Training holds could not be loaded.</p> : null}
+      {classificationLoadFailed ? <p className="muted" role="status">Reservation overlaps could not be fully classified.</p> : null}
+      {!classificationLoadFailed ? (
         conflicts.length === 0 ? (
           <p className="muted">No reservation conflicts.</p>
         ) : (
           <p className="error">{conflicts.length} reservation conflict{conflicts.length === 1 ? "" : "s"} need staff review.</p>
         )
       ) : null}
+
+      {participantReservationMessages.map((message) => (
+        <p key={message} className="muted">{message}</p>
+      ))}
 
       {heldBoats.length > 0 ? (
         <details>
@@ -55,7 +66,7 @@ export function TrainingHoldConflictPanel({
         </details>
       ) : null}
 
-      {!loadFailed
+      {!classificationLoadFailed
         ? conflicts.map((conflict) => (
             <Card key={conflict.id} subtle className="stack">
               <div>

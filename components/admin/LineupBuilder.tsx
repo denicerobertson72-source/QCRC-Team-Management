@@ -189,6 +189,14 @@ export function LineupBuilder({
     });
   }, [fleetBoats, isCoachedTraining, localBoats, memberNameById, participantReservations]);
   const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ reconciliation_member_id: item.memberId, action: "update" })));
+  const finalAdvancedReservations = useMemo(() => {
+    if (!isAdvancedTraining || !isPublished) return [] as Array<{ id: string; boatName: string; memberNames: string[] }>;
+    return participantReservations.map((reservation) => ({
+      id: reservation.id,
+      boatName: fleetBoats.find((boat) => boat.id === reservation.boat_id)?.name ?? "Club boat",
+      memberNames: reservation.member_ids.map((memberId) => memberNameById.get(memberId) ?? "Participant"),
+    }));
+  }, [fleetBoats, isAdvancedTraining, isPublished, memberNameById, participantReservations]);
 
   const selectableFleetBoats = fleetBoats.filter((boat) =>
     boat.boat_class_id === newBoatClass && (isAdvancedTraining ? boat.status === "held_for_advanced_training" : boat.status !== "unavailable"),
@@ -328,7 +336,7 @@ export function LineupBuilder({
 
       {publishError ? <p className="error" role="alert">{publishError}</p> : null}
 
-      {publishReconciliations.length > 0 ? (
+      {!isPublished && publishReconciliations.length > 0 ? (
         <div className="card stack">
           <h3>{isAdvancedTraining ? "Reservation changes on publish" : "Reservation reconciliation required before publishing"}</h3>
           <p className="muted">The recommended update is prepared, but nothing changes while you edit. Publishing will update these club-boat reservations to match the finalized lineup.</p>
@@ -340,6 +348,18 @@ export function LineupBuilder({
               <span className="muted">A reservation for the assigned club boat is required before this lineup can be published. Keeping the current reservation alone would not meet that rule.</span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {isPublished && isAdvancedTraining ? (
+        <div className="card stack">
+          <h3>Final boat reservations</h3>
+          {finalAdvancedReservations.length > 0 ? finalAdvancedReservations.map((reservation) => (
+            <div key={reservation.id} className="card-subtle stack">
+              <strong>{reservation.boatName}</strong>
+              <span>{reservation.memberNames.join(", ")}</span>
+            </div>
+          )) : <p className="muted">No current club-boat reservations were found for this lineup.</p>}
         </div>
       ) : null}
 
