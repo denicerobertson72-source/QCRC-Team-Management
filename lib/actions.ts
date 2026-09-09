@@ -65,6 +65,67 @@ async function assertSiteAdmin() {
   return { supabase, user };
 }
 
+type PriorityFleetActionResult = { ok: boolean; message: string };
+
+export async function addAdvancedTrainingPriorityBoatAdminAction(boatId: string): Promise<PriorityFleetActionResult> {
+  try {
+    const { supabase, user } = await assertAdmin();
+    if (!boatId) return { ok: false, message: "Choose a fleet boat first." };
+
+    const { data: boat, error: boatError } = await supabase
+      .from("boats")
+      .select("id, status")
+      .eq("id", boatId)
+      .maybeSingle();
+    if (boatError) throw boatError;
+    if (!boat || boat.status === "locked") {
+      return { ok: false, message: "That boat is not eligible for the Advanced Training priority fleet." };
+    }
+
+    const { error: priorityError } = await supabase.from("program_priority_boats").upsert(
+      {
+        session_type: "coached_training_advanced",
+        boat_id: boat.id,
+        created_by: user.id,
+      },
+      { onConflict: "session_type,boat_id", ignoreDuplicates: true },
+    );
+    if (priorityError) throw priorityError;
+
+    const { error: syncError } = await supabase.rpc("sync_future_advanced_training_holds");
+    if (syncError) throw syncError;
+
+    revalidatePath("/admin/programs/training-advanced");
+    return { ok: true, message: "Boat added to the Advanced Training priority fleet." };
+  } catch (error) {
+    console.error("Could not add Advanced Training priority boat", error);
+    return { ok: false, message: "Unable to update the priority fleet. Please try again." };
+  }
+}
+
+export async function removeAdvancedTrainingPriorityBoatAdminAction(boatId: string): Promise<PriorityFleetActionResult> {
+  try {
+    const { supabase } = await assertAdmin();
+    if (!boatId) return { ok: false, message: "Choose a fleet boat first." };
+
+    const { error: priorityError } = await supabase
+      .from("program_priority_boats")
+      .delete()
+      .eq("session_type", "coached_training_advanced")
+      .eq("boat_id", boatId);
+    if (priorityError) throw priorityError;
+
+    const { error: syncError } = await supabase.rpc("sync_future_advanced_training_holds");
+    if (syncError) throw syncError;
+
+    revalidatePath("/admin/programs/training-advanced");
+    return { ok: true, message: "Boat removed from the Advanced Training priority fleet." };
+  } catch (error) {
+    console.error("Could not remove Advanced Training priority boat", error);
+    return { ok: false, message: "Unable to update the priority fleet. Please try again." };
+  }
+}
+
 async function notifyLaunchSubscribers(
   sourceId: string,
   launchingMemberId: string,

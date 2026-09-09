@@ -5,9 +5,12 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { AdvancedTrainingPriorityFleet } from "@/components/admin/AdvancedTrainingPriorityFleet";
 import {
+  addAdvancedTrainingPriorityBoatAdminAction,
   cancelSessionAdminAction,
   generateProgramSessionsMonthAction,
+  removeAdvancedTrainingPriorityBoatAdminAction,
   resetProgramMonthToDefaultTimesAction,
   updateSessionTimesAdminAction,
 } from "@/lib/actions";
@@ -39,13 +42,29 @@ export default async function AdminProgramsAdvancedPage({ searchParams }: { sear
   const month = monthBounds(params.month);
   const { supabase } = await ensureAdminProfile();
 
-  const { data: sessions } = await supabase
-    .from("sessions")
-    .select("id, title, starts_at, ends_at, is_cancelled, cancelled_reason")
-    .eq("session_type", "coached_training_advanced")
-    .gte("starts_at", month.queryStart.toISOString())
-    .lt("starts_at", month.end.toISOString())
-    .order("starts_at", { ascending: true });
+  const [{ data: sessions }, { data: priorityRows }, { data: fleetBoats }] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select("id, title, starts_at, ends_at, is_cancelled, cancelled_reason")
+      .eq("session_type", "coached_training_advanced")
+      .gte("starts_at", month.queryStart.toISOString())
+      .lt("starts_at", month.end.toISOString())
+      .order("starts_at", { ascending: true }),
+    supabase
+      .from("program_priority_boats")
+      .select("boat_id, boats ( id, name, boat_class_id, status, required_skill_level )")
+      .eq("session_type", "coached_training_advanced"),
+    supabase
+      .from("boats")
+      .select("id, name, boat_class_id, status, required_skill_level")
+      .neq("status", "locked")
+      .order("boat_class_id", { ascending: true })
+      .order("name", { ascending: true }),
+  ]);
+
+  const priorityBoats = (priorityRows ?? []).flatMap((row) => row.boats ?? []);
+  const priorityBoatIds = new Set(priorityBoats.map((boat) => boat.id));
+  const availableBoats = (fleetBoats ?? []).filter((boat) => !priorityBoatIds.has(boat.id));
 
   return (
     <>
@@ -58,6 +77,13 @@ export default async function AdminProgramsAdvancedPage({ searchParams }: { sear
           <Link href={`/admin/programs/training-advanced?month=${month.prev}`}>Previous Month</Link>
           <Link href={`/admin/programs/training-advanced?month=${month.next}`}>Next Month</Link>
         </div>
+
+        <AdvancedTrainingPriorityFleet
+          priorityBoats={priorityBoats}
+          availableBoats={availableBoats}
+          addBoatAction={addAdvancedTrainingPriorityBoatAdminAction}
+          removeBoatAction={removeAdvancedTrainingPriorityBoatAdminAction}
+        />
 
         <form action={generateProgramSessionsMonthAction} className="card inline-form">
           <input type="hidden" name="month" value={month.current} />
