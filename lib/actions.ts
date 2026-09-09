@@ -3017,7 +3017,7 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
   const returnTo = String(formData.get("return_to") ?? "");
   const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
   const reconciliationJson = String(formData.get("reconciliation_json") ?? "[]");
-  const reconciliations = JSON.parse(reconciliationJson) as { member_id: string; action: "update" }[];
+  const reconciliations = JSON.parse(reconciliationJson) as { reconciliation_member_id: string; action: "update" }[];
 
   const { data: board, error: boardError } = await supabase
     .from("lineup_boards")
@@ -3034,7 +3034,11 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
       p_assignments: assignments,
       p_reconciliations: reconciliations,
     });
-    if (publishError) throw publishError;
+    if (publishError) {
+      const message = publishError.message || "The lineup could not be published.";
+      const code = message.includes("Reservation reconciliation is required") ? "reservation_reconciliation_required" : "reservation_state_changed";
+      return { ok: false, code, message };
+    }
     for (const change of reservationChanges ?? []) {
       await sendPushNotifications([change.member_id], "coached_training_reservation_updated", {
         old_boat_name: change.old_boat_name,
@@ -3066,7 +3070,7 @@ export async function saveAndPublishLineupAssignmentsAdminAction(formData: FormD
   revalidatePath("/admin/races");
   revalidatePath("/lineups");
   revalidatePath("/notifications");
-  if (returnTo) redirect(returnTo);
+  return { ok: true };
 }
 
 export async function updateLineupBoatRaceTimeAdminAction(formData: FormData) {

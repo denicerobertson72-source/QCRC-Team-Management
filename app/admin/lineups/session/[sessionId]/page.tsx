@@ -102,6 +102,7 @@ export default async function SessionLineupPage({ params }: { params: Promise<{ 
             <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
           <LineupBuilder
+            key={`${board.id}:${detail.boats.map((boat) => `${boat.id}:${boat.seats.map((seat) => seat.id).join(",")}`).join("|")}`}
             boats={detail.boats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}

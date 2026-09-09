@@ -37,10 +37,12 @@ begin
   where lb.lineup_board_id = p_lineup_board_id for update;
 
   update public.lineup_seats ls
-  set member_id = input.member_id
+  set member_id = input."memberId"
   from jsonb_to_recordset(p_assignments) as input("seatId" uuid, "memberId" uuid)
-  join public.lineup_boats lb on lb.id = ls.lineup_boat_id
-  where ls.id = input."seatId" and lb.lineup_board_id = p_lineup_board_id;
+  join public.lineup_boats lb on true
+  where ls.id = input."seatId"
+    and lb.id = ls.lineup_boat_id
+    and lb.lineup_board_id = p_lineup_board_id;
 
   -- Every club lineup boat is reconciled as a crew reservation. Private boats have no fleet_boat_id.
   for v_boat in
@@ -82,7 +84,7 @@ begin
       if exists (select 1 from public.reservation_crew rc where rc.reservation_id = v_target_reservation_id and rc.member_id = v_member_id) then
         continue;
       end if;
-      if not exists (select 1 from jsonb_to_recordset(p_reconciliations) as choice(member_id uuid, action text) where choice.member_id = v_member_id and choice.action = 'update') then
+      if not exists (select 1 from jsonb_to_recordset(p_reconciliations) as choice(reconciliation_member_id uuid, action text) where choice.reconciliation_member_id = v_member_id and choice.action = 'update') then
         raise exception 'Reservation reconciliation is required before publishing this lineup';
       end if;
 

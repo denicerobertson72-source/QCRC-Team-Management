@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 
 type RosterMember = {
@@ -79,7 +79,7 @@ export function LineupBuilder({
   roster: RosterMember[];
   action: (formData: FormData) => void;
   addBoatAction: (formData: FormData) => void;
-  saveAndPublishAction?: (formData: FormData) => void;
+  saveAndPublishAction?: (formData: FormData) => Promise<{ ok: boolean; code?: string; message?: string }>;
   publishAction?: (formData: FormData) => void;
   removeBoatAction: (formData: FormData) => void;
   lineupBoardId?: string;
@@ -95,6 +95,10 @@ export function LineupBuilder({
   const [selectedFleetBoatIds, setSelectedFleetBoatIds] = useState<Set<string>>(new Set());
   const [confirmedOverrideReservationIds, setConfirmedOverrideReservationIds] = useState<Set<string>>(new Set());
   const [pendingOverrideBoat, setPendingOverrideBoat] = useState<FleetBoat | null>(null);
+  const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [isPublishing, startPublishing] = useTransition();
+  const publishFormRef = useRef<HTMLFormElement>(null);
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -182,7 +186,7 @@ export function LineupBuilder({
       return [{ memberId, memberName: memberNameById.get(memberId) ?? "Participant", assignedBoat: boat.boat_name, reservedBoat: previous ? fleetBoats.find((fleetBoat) => fleetBoat.id === previous.boat_id)?.name ?? "another club boat" : null, reservationId: previous?.id ?? null }];
     });
   }, [fleetBoats, isCoachedTraining, localBoats, memberNameById, participantReservations]);
-  const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ member_id: item.memberId, action: "update" })));
+  const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ reconciliation_member_id: item.memberId, action: "update" })));
 
   const selectableFleetBoats = fleetBoats.filter(
     (boat) => boat.boat_class_id === newBoatClass && boat.status !== "unavailable",
@@ -215,6 +219,29 @@ export function LineupBuilder({
     setPendingOverrideBoat(null);
   }
 
+  function requestPublish(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPublishError(null);
+    if (publishReconciliations.length > 0) {
+      setPublishConfirmationOpen(true);
+      return;
+    }
+    submitPublish();
+  }
+
+  function submitPublish() {
+    if (!saveAndPublishAction || !publishFormRef.current) return;
+    setPublishConfirmationOpen(false);
+    startPublishing(async () => {
+      const result = await saveAndPublishAction(new FormData(publishFormRef.current!));
+      if (!result.ok) {
+        setPublishError(result.message ?? "The lineup could not be published. Review the reservation reconciliation and try again.");
+        return;
+      }
+      window.location.assign(returnTo ?? "/admin/lineups");
+    });
+  }
+
   return (
     <div className="stack">
       <div className="card lineup-top-actions">
@@ -225,12 +252,12 @@ export function LineupBuilder({
             <Button type="submit">Save Assignments</Button>
           </form>
           {!isPublished && saveAndPublishAction && lineupBoardId ? (
-            <form action={saveAndPublishAction} className="inline-form">
+            <form ref={publishFormRef} onSubmit={requestPublish} className="inline-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
               <input type="hidden" name="assignments_json" value={assignmentsJson} />
               <input type="hidden" name="reconciliation_json" value={reconciliationJson} />
               {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-              <Button type="submit" variant="secondary">Save + Publish</Button>
+              <Button type="submit" variant="secondary">{isPublishing ? "Publishing…" : "Save + Publish"}</Button>
             </form>
           ) : null}
           {isPublished && publishAction && lineupBoardId ? (
@@ -288,6 +315,8 @@ export function LineupBuilder({
         </form>
       ) : null}
 
+      {publishError ? <p className="error" role="alert">{publishError}</p> : null}
+
       {publishReconciliations.length > 0 ? (
         <div className="card stack">
           <h3>Reservation reconciliation required before publishing</h3>
@@ -313,6 +342,18 @@ export function LineupBuilder({
           <div className="row">
             <Button type="button" variant="secondary" onClick={() => setPendingOverrideBoat(null)}>Keep Existing Reservation</Button>
             <Button type="button" onClick={confirmOverride}>Use Boat for Coached Training</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {publishConfirmationOpen ? (
+        <div className="card stack" role="dialog" aria-modal="true" aria-labelledby="reconciliation-confirmation-title">
+          <h3 id="reconciliation-confirmation-title">Confirm reservation reconciliation</h3>
+          <p>Publishing will update the following reservations to match the final coached-training lineup.</p>
+          {publishReconciliations.map((item) => <p key={item.memberId}><strong>{item.memberName}</strong>: {item.reservedBoat ?? "No reservation"} → {item.assignedBoat}</p>)}
+          <div className="row">
+            <Button type="button" variant="secondary" onClick={() => setPublishConfirmationOpen(false)}>Continue Editing</Button>
+            <Button type="button" onClick={submitPublish}>Update Reservations + Publish</Button>
           </div>
         </div>
       ) : null}
