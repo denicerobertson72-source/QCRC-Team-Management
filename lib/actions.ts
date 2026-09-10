@@ -2904,6 +2904,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const boatIds = formData.getAll("boat_ids").map(String).filter(Boolean);
   const confirmedOverrideReservationIds = formData.getAll("confirmed_override_reservation_ids").map(String).filter(Boolean);
   const includePrivateBoat = String(formData.get("private_boat") ?? "false") === "true";
+  const privateBoatQuantity = Number(formData.get("private_boat_quantity") ?? "1");
   const returnTo = String(formData.get("return_to") ?? "");
 
   const { data: board, error: boardError } = await supabase
@@ -2919,6 +2920,9 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const canAddPrivateBoat = isAdvancedTraining || boatClassId === "1x";
   if (boatIds.length === 0 && !includePrivateBoat) throw new Error("Select at least one boat.");
   if (includePrivateBoat && !canAddPrivateBoat) throw new Error("Private boats are only available as 1x entries outside Advanced Training.");
+  if (includePrivateBoat && (!Number.isInteger(privateBoatQuantity) || privateBoatQuantity < 1 || privateBoatQuantity > 12)) {
+    throw new Error("Private boat quantity must be a whole number from 1 to 12.");
+  }
 
   if (isAdvancedTraining) {
     if (boatIds.length) {
@@ -2929,23 +2933,12 @@ export async function addLineupBoatAdminAction(formData: FormData) {
       if (advancedAddError) throw advancedAddError;
     }
     if (includePrivateBoat) {
-      const { data: existingBoats, error: existingError } = await supabase
-        .from("lineup_boats")
-        .select("sort_order")
-        .eq("lineup_board_id", lineupBoardId)
-        .order("sort_order", { ascending: true })
-        .limit(1);
-      if (existingError) throw existingError;
-      const { data: privateBoat, error: privateBoatError } = await supabase
-        .from("lineup_boats")
-        .insert({ lineup_board_id: lineupBoardId, boat_name: "Private Boat", boat_class_id: boatClassId, fleet_boat_id: null, sort_order: (existingBoats?.[0]?.sort_order ?? 0) - 1 })
-        .select("id")
-        .single();
+      const { error: privateBoatError } = await supabase.rpc("add_advanced_training_private_lineup_boats", {
+        p_lineup_board_id: lineupBoardId,
+        p_boat_class_id: boatClassId,
+        p_quantity: privateBoatQuantity,
+      });
       if (privateBoatError) throw privateBoatError;
-      const { error: privateSeatError } = await supabase
-        .from("lineup_seats")
-        .insert(Array.from({ length: seatCountFromClass(boatClassId) }, (_, idx) => ({ lineup_boat_id: privateBoat.id, seat_number: idx + 1, member_id: null })));
-      if (privateSeatError) throw privateSeatError;
     }
   } else if (isCoachedTraining && boatIds.length) {
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {

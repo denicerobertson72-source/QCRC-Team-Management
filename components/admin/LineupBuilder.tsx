@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
 
 type RosterMember = {
   id: string;
@@ -94,6 +95,7 @@ export function LineupBuilder({
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
+  const [privateBoatQuantity, setPrivateBoatQuantity] = useState(1);
   const [selectedFleetBoatIds, setSelectedFleetBoatIds] = useState<Set<string>>(new Set());
   const [confirmedOverrideReservationIds, setConfirmedOverrideReservationIds] = useState<Set<string>>(new Set());
   const [pendingOverrideBoat, setPendingOverrideBoat] = useState<FleetBoat | null>(null);
@@ -204,6 +206,11 @@ export function LineupBuilder({
   const advancedTrainingConflicts = isAdvancedTraining
     ? fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "held_conflict")
     : [];
+  const canAddAdvancedPrivateBoat = isAdvancedTraining && ["1x", "2x", "4x"].includes(newBoatClass);
+
+  function setClampedPrivateBoatQuantity(value: number) {
+    setPrivateBoatQuantity(Number.isFinite(value) ? Math.min(12, Math.max(1, Math.trunc(value))) : 1);
+  }
 
   function setBoatSelected(boat: FleetBoat, checked: boolean) {
     if (checked && boat.status === "reserved_by_nonparticipant") {
@@ -285,7 +292,8 @@ export function LineupBuilder({
       </div>
 
       {lineupBoardId ? (
-        <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
+        <>
+          <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
           <h3>Add Boats</h3>
@@ -334,17 +342,36 @@ export function LineupBuilder({
               ) : null}
             </div>
           </details>
-          {isAdvancedTraining ? (
-            <div className="card-subtle stack">
-              <strong>Private</strong>
-              <label>
-                <input type="checkbox" name="private_boat" value="true" /> Add Private Boat ({newBoatClass})
-              </label>
+            <Button type="submit">Add Selected Boats</Button>
+          </form>
+
+          {canAddAdvancedPrivateBoat ? (
+            <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
+              <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
+              <input type="hidden" name="boat_class_id" value={newBoatClass} />
+              <input type="hidden" name="private_boat" value="true" />
+              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+              <h3>Private</h3>
+              <Field label="Quantity">
+                <div className="row">
+                  <Button type="button" variant="secondary" onClick={() => setClampedPrivateBoatQuantity(privateBoatQuantity - 1)} aria-label="Decrease private boat quantity">−</Button>
+                  <input
+                    name="private_boat_quantity"
+                    type="number"
+                    min={1}
+                    max={12}
+                    step={1}
+                    value={privateBoatQuantity}
+                    onChange={(event) => setClampedPrivateBoatQuantity(event.currentTarget.valueAsNumber)}
+                  />
+                  <Button type="button" variant="secondary" onClick={() => setClampedPrivateBoatQuantity(privateBoatQuantity + 1)} aria-label="Increase private boat quantity">+</Button>
+                </div>
+              </Field>
+              <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"} ({newBoatClass})</Button>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
-            </div>
+            </form>
           ) : null}
-          <Button type="submit">Add Selected Boats</Button>
-        </form>
+        </>
       ) : null}
 
       {publishError ? <p className="error" role="alert">{publishError}</p> : null}
