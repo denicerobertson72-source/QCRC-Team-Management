@@ -327,13 +327,22 @@ export function LineupBuilder({
                   {boat.name} has an existing reservation conflict. Resolve it before adding this held boat.
                 </p>
               ))}
-              {(isAdvancedTraining || newBoatClass === "1x") ? (
+              {!isAdvancedTraining && newBoatClass === "1x" ? (
                 <label>
                   <input type="checkbox" name="private_boat" value="true" /> Add Private Boat ({newBoatClass})
                 </label>
               ) : null}
             </div>
           </details>
+          {isAdvancedTraining ? (
+            <div className="card-subtle stack">
+              <strong>Private</strong>
+              <label>
+                <input type="checkbox" name="private_boat" value="true" /> Add Private Boat ({newBoatClass})
+              </label>
+              <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
+            </div>
+          ) : null}
           <Button type="submit">Add Selected Boats</Button>
         </form>
       ) : null}

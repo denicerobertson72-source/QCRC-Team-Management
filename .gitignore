@@ -5,3 +5,4 @@ node_modules/
 QCRC-App-scaffold/
 .vercel
 .env*
+tsconfig.tsbuildinfo
