@@ -1,0 +1,35 @@
+-- V1.62: allow lineup-only private boats in Advanced Training while keeping club-boat reconciliation unchanged.
+create or replace function public.publish_advanced_training_held_lineup(p_lineup_board_id uuid, p_assignments jsonb)
+returns table(member_id uuid, old_boat_name text, new_boat_name text, session_title text)
+language plpgsql security definer set search_path = public as $$
+declare v_session record; v_boat record; v_reservation record; v_member record; v_reconciliations jsonb;
+begin
+  if not public.can_manage_club_data() then raise exception 'Only a coach or manager can publish Advanced Training lineups'; end if;
+  select s.id, s.title, s.starts_at, s.ends_at, s.session_type, s.is_cancelled into v_session from public.lineup_boards lb join public.sessions s on s.id = lb.session_id where lb.id = p_lineup_board_id for update of lb, s;
+  if v_session.id is null or v_session.session_type <> 'coached_training_advanced' or v_session.is_cancelled then raise exception 'This lineup is not an active Advanced Training session'; end if;
+  perform 1 from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id where lb.lineup_board_id = p_lineup_board_id for update;
+  update public.lineup_seats ls set member_id = input."memberId" from jsonb_to_recordset(p_assignments) as input("seatId" uuid, "memberId" uuid), public.lineup_boats lb where ls.id = input."seatId" and lb.id = ls.lineup_boat_id and lb.lineup_board_id = p_lineup_board_id;
+  if exists (
+    select 1 from public.lineup_seats ls
+    join public.lineup_boats lb on lb.id = ls.lineup_boat_id
+    where lb.lineup_board_id = p_lineup_board_id and ls.member_id is not null
+      and not exists (select 1 from public.session_signups ss where ss.session_id = v_session.id and ss.member_id = ls.member_id)
+  ) then raise exception 'A lineup rower is not signed up for this Advanced Training session'; end if;
+  for v_boat in select lb.fleet_boat_id, lb.boat_name from public.lineup_boats lb where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id is not null loop
+    if not exists (select 1 from public.boats b where b.id = v_boat.fleet_boat_id and b.status = 'available') then raise exception '% is no longer operational', v_boat.boat_name; end if;
+    if not exists (select 1 from public.training_boat_holds h where h.session_id = v_session.id and h.boat_id = v_boat.fleet_boat_id and tstzrange(h.starts_at,h.ends_at,'[)') @> tstzrange(v_session.starts_at,v_session.ends_at,'[)')) then raise exception '% is not held for this Advanced Training session', v_boat.boat_name; end if;
+    if not exists (select 1 from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id = v_boat.fleet_boat_id and ls.member_id is not null) then raise exception '% needs at least one assigned rower before publishing', v_boat.boat_name; end if;
+    select r.id, r.status, r.created_by into v_reservation from public.reservations r where r.boat_id = v_boat.fleet_boat_id and r.status in ('reserved','checked_out') and tstzrange(r.start_time,r.end_time,'[)') && tstzrange(v_session.starts_at,v_session.ends_at,'[)') for update;
+    if found and v_reservation.status = 'checked_out' then raise exception '% is already checked out and cannot be used for Advanced Training', v_boat.boat_name; end if;
+    if found and (not exists (select 1 from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id = v_boat.fleet_boat_id and ls.member_id = v_reservation.created_by) or exists (select 1 from public.reservation_crew rc where rc.reservation_id = v_reservation.id and not exists (select 1 from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id = v_boat.fleet_boat_id and ls.member_id = rc.member_id))) then raise exception '% has an existing member reservation that conflicts with this Advanced Training session. Resolve the reservation conflict before publishing.', v_boat.boat_name; end if;
+  end loop;
+  for v_member in select distinct ls.member_id, lb.boat_name, lb.fleet_boat_id, b.required_clearance, b.required_skill_level, b.weight_class, p.status, p.skill_level, p.weight_class as member_weight_class from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id join public.boats b on b.id = lb.fleet_boat_id join public.profiles p on p.id = ls.member_id where lb.lineup_board_id = p_lineup_board_id and ls.member_id is not null and lb.fleet_boat_id is not null loop
+    if v_member.status <> 'active' then raise exception 'A final lineup member is not active for %', v_member.boat_name; end if;
+    if public.skill_level_to_clearance(v_member.skill_level) < v_member.required_clearance then raise exception 'A final lineup member does not meet the required clearance for %', v_member.boat_name; end if;
+    if public.skill_level_rank(v_member.skill_level) < public.skill_level_rank(v_member.required_skill_level) then raise exception 'A final lineup member does not meet the required skill level for %', v_member.boat_name; end if;
+    if v_member.weight_class is not null and public.weight_class_rank(v_member.weight_class) < public.weight_class_rank(v_member.member_weight_class) then raise exception 'A final lineup member does not meet the weight requirement for %', v_member.boat_name; end if;
+  end loop;
+  select coalesce(jsonb_agg(jsonb_build_object('reconciliation_member_id', members.member_id, 'action', 'update')), '[]'::jsonb) into v_reconciliations from (select distinct ls.member_id from public.lineup_seats ls join public.lineup_boats lb on lb.id = ls.lineup_boat_id where lb.lineup_board_id = p_lineup_board_id and lb.fleet_boat_id is not null and ls.member_id is not null) members;
+  return query select * from public.publish_coached_training_lineup(p_lineup_board_id, '[]'::jsonb, v_reconciliations);
+end;
+$$;

@@ -288,7 +288,7 @@ export function LineupBuilder({
         <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-          <h3>Add Fleet Boats</h3>
+          <h3>Add Boats</h3>
           <div className="lineup-add-boat-fields">
             <div>
               <label className="field-label">Boat size</label>
@@ -327,7 +327,11 @@ export function LineupBuilder({
                   {boat.name} has an existing reservation conflict. Resolve it before adding this held boat.
                 </p>
               ))}
-              {newBoatClass === "1x" && !isAdvancedTraining ? <label><input type="checkbox" name="private_boat" value="true" /> Private boat</label> : null}
+              {(isAdvancedTraining || newBoatClass === "1x") ? (
+                <label>
+                  <input type="checkbox" name="private_boat" value="true" /> Add Private Boat ({newBoatClass})
+                </label>
+              ) : null}
             </div>
           </details>
           <Button type="submit">Add Selected Boats</Button>

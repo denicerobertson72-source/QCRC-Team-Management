@@ -2905,7 +2905,6 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const confirmedOverrideReservationIds = formData.getAll("confirmed_override_reservation_ids").map(String).filter(Boolean);
   const includePrivateBoat = String(formData.get("private_boat") ?? "false") === "true";
   const returnTo = String(formData.get("return_to") ?? "");
-  if (boatIds.length === 0 && !(boatClassId === "1x" && includePrivateBoat)) throw new Error("Select at least one boat.");
 
   const { data: board, error: boardError } = await supabase
     .from("lineup_boards")
@@ -2917,14 +2916,37 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
   const isAdvancedTraining = session?.session_type === "coached_training_advanced";
   const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
-  if (isAdvancedTraining && includePrivateBoat) throw new Error("Private boats are not part of the Advanced Training held-fleet workflow.");
+  const canAddPrivateBoat = isAdvancedTraining || boatClassId === "1x";
+  if (boatIds.length === 0 && !includePrivateBoat) throw new Error("Select at least one boat.");
+  if (includePrivateBoat && !canAddPrivateBoat) throw new Error("Private boats are only available as 1x entries outside Advanced Training.");
 
-  if (isAdvancedTraining && boatIds.length) {
-    const { error: advancedAddError } = await supabase.rpc("add_advanced_training_held_lineup_boats", {
-      p_lineup_board_id: lineupBoardId,
-      p_boat_ids: boatIds,
-    });
-    if (advancedAddError) throw advancedAddError;
+  if (isAdvancedTraining) {
+    if (boatIds.length) {
+      const { error: advancedAddError } = await supabase.rpc("add_advanced_training_held_lineup_boats", {
+        p_lineup_board_id: lineupBoardId,
+        p_boat_ids: boatIds,
+      });
+      if (advancedAddError) throw advancedAddError;
+    }
+    if (includePrivateBoat) {
+      const { data: existingBoats, error: existingError } = await supabase
+        .from("lineup_boats")
+        .select("sort_order")
+        .eq("lineup_board_id", lineupBoardId)
+        .order("sort_order", { ascending: true })
+        .limit(1);
+      if (existingError) throw existingError;
+      const { data: privateBoat, error: privateBoatError } = await supabase
+        .from("lineup_boats")
+        .insert({ lineup_board_id: lineupBoardId, boat_name: "Private Boat", boat_class_id: boatClassId, fleet_boat_id: null, sort_order: (existingBoats?.[0]?.sort_order ?? 0) - 1 })
+        .select("id")
+        .single();
+      if (privateBoatError) throw privateBoatError;
+      const { error: privateSeatError } = await supabase
+        .from("lineup_seats")
+        .insert(Array.from({ length: seatCountFromClass(boatClassId) }, (_, idx) => ({ lineup_boat_id: privateBoat.id, seat_number: idx + 1, member_id: null })));
+      if (privateSeatError) throw privateSeatError;
+    }
   } else if (isCoachedTraining && boatIds.length) {
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
       p_lineup_board_id: lineupBoardId,
