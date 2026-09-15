@@ -1334,6 +1334,33 @@ export async function updateReservationGateStatusAction(formData: FormData) {
   redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
 }
 
+export async function recordMarinaGateStatusAction(formData: FormData) {
+  const { supabase, user } = await ensureProfile();
+  const gateStatus = String(formData.get("gate_status") ?? "");
+  const destination = new URL("/", "http://local");
+
+  if (gateStatus !== "locked" && gateStatus !== "unlocked") {
+    destination.searchParams.set("gate_status", "error");
+    destination.searchParams.set("gate_message", "Choose whether the marina gate is locked or unlocked.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  const { error } = await supabase.from("marina_gate_status_reports").insert({
+    member_id: user.id,
+    gate_status: gateStatus,
+  });
+  if (error) {
+    destination.searchParams.set("gate_status", "error");
+    destination.searchParams.set("gate_message", error.message || "Unable to save gate status.");
+    redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+  }
+
+  revalidatePath("/");
+  destination.searchParams.set("gate_status", "success");
+  destination.searchParams.set("gate_message", "Gate status saved.");
+  redirect(`${destination.pathname}?${destination.searchParams.toString()}`);
+}
+
 export async function privateBoatLaunchAction(formData: FormData) {
   const { supabase, user, profile } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");

@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { FlashNotice } from "@/components/ui/FlashNotice";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { ensureProfile } from "@/lib/auth";
-import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, submitSafetyConcernAction, updatePrivateBoatGateStatusAction, updateReservationGateStatusAction } from "@/lib/actions";
+import { addTeamAnnouncementAction, deleteTeamAnnouncementAction, recordMarinaGateStatusAction, submitSafetyConcernAction, updatePrivateBoatGateStatusAction, updateReservationGateStatusAction } from "@/lib/actions";
 import { getActiveTeamAnnouncements, getMyPrivateBoatOutings, getMyReservations, getRecentSafetyConcerns } from "@/lib/queries";
 import { formatEasternDateTime, nowEasternDateTimeLocalValue } from "@/lib/time";
-import { MobileFeatureSetup } from "@/components/MobileFeatureSetup";
 import { PasswordSetupPrompt } from "@/components/PasswordSetupPrompt";
 
 type SearchParams = Promise<{
@@ -17,6 +16,8 @@ type SearchParams = Promise<{
   announcement_message?: string;
   safety_status?: string;
   safety_message?: string;
+  gate_status?: string;
+  gate_message?: string;
 }>;
 
 const QUICK_LINKS = [
@@ -74,13 +75,28 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             message={params.safety_message}
           />
         ) : null}
+        {params.gate_status && params.gate_message ? (
+          <FlashNotice
+            status={params.gate_status === "success" ? "success" : "error"}
+            message={params.gate_message}
+          />
+        ) : null}
 
-        {pendingReservations.length + pendingPrivateOutings.length > 0 ? (
-          <Card className="stack">
-            <div className="page-title">
-              <h3>Gate Check</h3>
-              <span className="muted">Please record the gate status after returning from the marina.</span>
-            </div>
+        <Card className="stack">
+          <div className="page-title">
+            <h3>Marina Gate</h3>
+            <span className="muted">Record the gate status whenever you leave the marina.</span>
+          </div>
+          <form action={recordMarinaGateStatusAction} className="inline-form">
+            <select name="gate_status" defaultValue="locked" aria-label="Marina gate status">
+              <option value="locked">Gate locked</option>
+              <option value="unlocked">Gate left unlocked</option>
+            </select>
+            <Button type="submit" variant="secondary">Save Gate Status</Button>
+          </form>
+          {pendingReservations.length + pendingPrivateOutings.length > 0 ? (
+            <div className="stack">
+              <span className="muted">Also attach the status to your returned outing:</span>
             {pendingReservations.map((reservation) => (
               <form key={reservation.id} action={updateReservationGateStatusAction} className="inline-form">
                 <input type="hidden" name="reservation_id" value={reservation.id} />
@@ -103,10 +119,9 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
                 <Button type="submit" variant="secondary">Save Gate Status</Button>
               </form>
             ))}
-          </Card>
-        ) : null}
-
-        <MobileFeatureSetup />
+            </div>
+          ) : null}
+        </Card>
 
         <PasswordSetupPrompt needsPassword={needsPassword} email={profile?.email} />
 
