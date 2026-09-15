@@ -18,7 +18,29 @@ export function MobileFeatureSetup() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setShow(isIos());
+    let active = true;
+    if (!isIos()) return;
+
+    async function checkPermissions() {
+      const notificationGranted = typeof Notification !== "undefined" && Notification.permission === "granted";
+      let locationGranted = false;
+      try {
+        if (navigator.permissions?.query) {
+          const permission = await navigator.permissions.query({ name: "geolocation" });
+          locationGranted = permission.state === "granted";
+        } else {
+          locationGranted = window.localStorage.getItem("qcrc-ios-location-granted") === "true";
+        }
+      } catch {
+        // Some iPhone browsers do not expose geolocation permission state until it is requested.
+      }
+      if (active) setShow(!locationGranted || !notificationGranted);
+    }
+
+    void checkPermissions();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (!show) return null;
@@ -33,8 +55,10 @@ export function MobileFeatureSetup() {
     setMessage("");
     navigator.geolocation.getCurrentPosition(
       () => {
+        window.localStorage.setItem("qcrc-ios-location-granted", "true");
         setLocationState("granted");
         setMessage("Location access is enabled for QCRC. You can now launch with live tracking.");
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") setShow(false);
       },
       (error) => {
         setLocationState("error");

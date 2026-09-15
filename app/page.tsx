@@ -47,6 +47,8 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   const displayName = profile?.full_name?.trim() && !profile.full_name.includes("@") ? profile.full_name.trim() : "";
   const links = isAdmin ? [...QUICK_LINKS, { href: "/admin", label: "Admin", description: "Manage members, boats, safety, and programs." }] : QUICK_LINKS;
   const needsPassword = !profile?.password_set_at;
+  const pendingReservations = reservations.filter((reservation) => reservation.status === "checked_in" && !reservation.gate_status);
+  const pendingPrivateOutings = privateOutings.filter((outing) => outing.status === "checked_in" && !outing.gate_status);
 
   return (
     <>
@@ -71,6 +73,37 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             status={params.safety_status === "success" ? "success" : "error"}
             message={params.safety_message}
           />
+        ) : null}
+
+        {pendingReservations.length + pendingPrivateOutings.length > 0 ? (
+          <Card className="stack">
+            <div className="page-title">
+              <h3>Gate Check</h3>
+              <span className="muted">Please record the gate status after returning from the marina.</span>
+            </div>
+            {pendingReservations.map((reservation) => (
+              <form key={reservation.id} action={updateReservationGateStatusAction} className="inline-form">
+                <input type="hidden" name="reservation_id" value={reservation.id} />
+                <strong>{reservation.boats?.name ?? "Boat"}</strong>
+                <select name="gate_status" defaultValue="locked" aria-label={`Gate status for ${reservation.boats?.name ?? "boat"}`}>
+                  <option value="locked">Gate locked</option>
+                  <option value="unlocked">Gate left unlocked</option>
+                </select>
+                <Button type="submit" variant="secondary">Save Gate Status</Button>
+              </form>
+            ))}
+            {pendingPrivateOutings.map((outing) => (
+              <form key={outing.id} action={updatePrivateBoatGateStatusAction} className="inline-form">
+                <input type="hidden" name="private_outing_id" value={outing.id} />
+                <strong>Private Boat</strong>
+                <select name="gate_status" defaultValue="locked" aria-label="Gate status for private boat outing">
+                  <option value="locked">Gate locked</option>
+                  <option value="unlocked">Gate left unlocked</option>
+                </select>
+                <Button type="submit" variant="secondary">Save Gate Status</Button>
+              </form>
+            ))}
+          </Card>
         ) : null}
 
         <MobileFeatureSetup />
@@ -144,42 +177,6 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             ))}
           </div>
         </Card>
-
-        {(() => {
-          const pendingReservations = reservations.filter((reservation) => reservation.status === "checked_in" && !reservation.gate_status);
-          const pendingPrivateOutings = privateOutings.filter((outing) => outing.status === "checked_in" && !outing.gate_status);
-          if (pendingReservations.length + pendingPrivateOutings.length === 0) return null;
-          return (
-            <Card className="stack">
-              <div className="page-title">
-                <h3>Gate Check</h3>
-                <span className="muted">Please record the gate status after returning from the marina.</span>
-              </div>
-              {pendingReservations.map((reservation) => (
-                <form key={reservation.id} action={updateReservationGateStatusAction} className="inline-form">
-                  <input type="hidden" name="reservation_id" value={reservation.id} />
-                  <strong>{reservation.boats?.name ?? "Boat"}</strong>
-                  <select name="gate_status" defaultValue="locked" aria-label={`Gate status for ${reservation.boats?.name ?? "boat"}`}>
-                    <option value="locked">Gate locked</option>
-                    <option value="unlocked">Gate left unlocked</option>
-                  </select>
-                  <Button type="submit" variant="secondary">Save Gate Status</Button>
-                </form>
-              ))}
-              {pendingPrivateOutings.map((outing) => (
-                <form key={outing.id} action={updatePrivateBoatGateStatusAction} className="inline-form">
-                  <input type="hidden" name="private_outing_id" value={outing.id} />
-                  <strong>Private Boat</strong>
-                  <select name="gate_status" defaultValue="locked" aria-label="Gate status for private boat outing">
-                    <option value="locked">Gate locked</option>
-                    <option value="unlocked">Gate left unlocked</option>
-                  </select>
-                  <Button type="submit" variant="secondary">Save Gate Status</Button>
-                </form>
-              ))}
-            </Card>
-          );
-        })()}
 
         {isAdmin ? (
           <form action={addTeamAnnouncementAction} className="card form-grid">
