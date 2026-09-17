@@ -2964,7 +2964,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
     if (includePrivateBoat) {
       const { error: privateBoatError } = await supabase.rpc("add_advanced_training_private_lineup_boats", {
         p_lineup_board_id: lineupBoardId,
-        p_boat_class_id: boatClassId,
+        p_boat_class_id: "1x",
         p_quantity: privateBoatQuantity,
       });
       if (privateBoatError) throw privateBoatError;
@@ -3038,23 +3038,26 @@ export async function addLineupBoatAdminAction(formData: FormData) {
 }
 
 export async function saveLineupAssignmentsAdminAction(formData: FormData) {
-  const { supabase } = await assertAdmin();
-  const assignmentJson = String(formData.get("assignments_json") ?? "[]");
-  const returnTo = String(formData.get("return_to") ?? "");
-  const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
+  try {
+    const { supabase } = await assertAdmin();
+    const assignmentJson = String(formData.get("assignments_json") ?? "[]");
+    const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
 
-  for (const item of assignments) {
-    const { error } = await supabase
-      .from("lineup_seats")
-      .update({ member_id: item.memberId })
-      .eq("id", item.seatId);
-    if (error) throw error;
+    for (const item of assignments) {
+      const { error } = await supabase
+        .from("lineup_seats")
+        .update({ member_id: item.memberId })
+        .eq("id", item.seatId);
+      if (error) throw error;
+    }
+
+    revalidatePath("/admin/lineups");
+    revalidatePath("/admin/races");
+    revalidatePath("/lineups");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "The lineup assignments could not be saved." };
   }
-
-  revalidatePath("/admin/lineups");
-  revalidatePath("/admin/races");
-  revalidatePath("/lineups");
-  if (returnTo) redirect(returnTo);
 }
 
 async function publishLineupBoardInternal(

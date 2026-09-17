@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 
@@ -88,7 +88,7 @@ export function LineupBuilder({
 }: {
   boats: Boat[];
   roster: RosterMember[];
-  action: (formData: FormData) => void;
+  action: (formData: FormData) => Promise<{ ok: boolean; message?: string }>;
   addBoatAction: (formData: FormData) => void;
   saveAndPublishAction?: (formData: FormData) => Promise<{ ok: boolean; code?: string; message?: string }>;
   publishAction?: (formData: FormData) => void;
@@ -112,9 +112,13 @@ export function LineupBuilder({
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
   const [confirmedReconciliationSignature, setConfirmedReconciliationSignature] = useState<string | null>(null);
   const [reservationConfirmationErrorSignature, setReservationConfirmationErrorSignature] = useState<string | null>(null);
-  const [publishError, setPublishError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
+  const [isSaving, startSaving] = useTransition();
   const [isPublishing, startPublishing] = useTransition();
+  const saveFormRef = useRef<HTMLFormElement>(null);
   const publishFormRef = useRef<HTMLFormElement>(null);
+  const actionErrorDialogRef = useRef<HTMLDivElement>(null);
+  const actionErrorReturnFocusRef = useRef<HTMLElement | null>(null);
   const reservationConfirmationPanelRef = useRef<HTMLDivElement>(null);
   const reservationConfirmationCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -234,7 +238,27 @@ export function LineupBuilder({
   const advancedTrainingConflicts = isAdvancedTraining
     ? fleetBoats.filter((boat) => boat.boat_class_id === newBoatClass && boat.status === "held_conflict")
     : [];
-  const canAddAdvancedPrivateBoat = isAdvancedTraining && ["1x", "2x", "4x"].includes(newBoatClass);
+  const canAddAdvancedPrivateBoat = isAdvancedTraining;
+
+  useEffect(() => {
+    if (!actionError) return;
+    actionErrorDialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismissActionError();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [actionError]);
+
+  function showActionError(title: string, message: string) {
+    actionErrorReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setActionError({ title, message });
+  }
+
+  function dismissActionError() {
+    setActionError(null);
+    requestAnimationFrame(() => actionErrorReturnFocusRef.current?.focus());
+  }
 
   function setBoatSelected(boat: FleetBoat, checked: boolean) {
     if (checked && boat.status === "reserved_by_nonparticipant") {
@@ -272,7 +296,7 @@ export function LineupBuilder({
 
   function requestPublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPublishError(null);
+    setActionError(null);
     if (isAdvancedTraining && advancedReservationChanges.length > 0 && !reservationChangesConfirmed) {
       setReservationConfirmationErrorSignature(reconciliationSignature);
       requestAnimationFrame(() => {
@@ -288,16 +312,38 @@ export function LineupBuilder({
     submitPublish();
   }
 
+  function requestSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!saveFormRef.current) return;
+    setActionError(null);
+    startSaving(async () => {
+      try {
+        const result = await action(new FormData(saveFormRef.current!));
+        if (!result.ok) {
+          showActionError("Unable to save assignments", result.message ?? "The lineup assignments could not be saved. Please try again.");
+          return;
+        }
+        window.location.assign(returnTo ?? window.location.href);
+      } catch {
+        showActionError("Unable to save assignments", "The lineup assignments could not be saved. Please try again.");
+      }
+    });
+  }
+
   function submitPublish() {
     if (!saveAndPublishAction || !publishFormRef.current) return;
     setPublishConfirmationOpen(false);
     startPublishing(async () => {
-      const result = await saveAndPublishAction(new FormData(publishFormRef.current!));
-      if (!result.ok) {
-        setPublishError(result.message ?? "The lineup could not be published. Review the reservation reconciliation and try again.");
-        return;
+      try {
+        const result = await saveAndPublishAction(new FormData(publishFormRef.current!));
+        if (!result.ok) {
+          showActionError("Unable to publish lineup", result.message ?? "The lineup could not be published. Review the reservation reconciliation and try again.");
+          return;
+        }
+        window.location.assign(returnTo ?? "/admin/lineups");
+      } catch {
+        showActionError("Unable to publish lineup", "The lineup could not be published. Please try again.");
       }
-      window.location.assign(returnTo ?? "/admin/lineups");
     });
   }
 
@@ -335,10 +381,10 @@ export function LineupBuilder({
 
       <div className="card lineup-top-actions">
         <div className="row lineup-action-buttons">
-          <form action={action} className="inline-form">
+          <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
             <input type="hidden" name="assignments_json" value={assignmentsJson} />
             {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-            <Button type="submit">Save Assignments</Button>
+            <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
           </form>
           {!isPublished && saveAndPublishAction && lineupBoardId ? (
             <form ref={publishFormRef} onSubmit={requestPublish} className="inline-form">
@@ -418,10 +464,10 @@ export function LineupBuilder({
           {canAddAdvancedPrivateBoat ? (
             <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
-              <input type="hidden" name="boat_class_id" value={newBoatClass} />
+              <input type="hidden" name="boat_class_id" value="1x" />
               <input type="hidden" name="private_boat" value="true" />
               {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-              <h3>Private</h3>
+              <h3>Private Singles</h3>
               <div className="private-boat-quantity-row">
                 <Field label="Quantity">
                   <input
@@ -438,15 +484,13 @@ export function LineupBuilder({
                     }}
                   />
                 </Field>
-                <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"} ({newBoatClass})</Button>
+                <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"}</Button>
               </div>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
             </form>
           ) : null}
         </>
       ) : null}
-
-      {publishError ? <p className="error" role="alert">{publishError}</p> : null}
 
       {!isPublished && !isAdvancedTraining && publishReconciliations.length > 0 ? (
         <div className="card stack">
@@ -497,6 +541,18 @@ export function LineupBuilder({
           <div className="row">
             <Button type="button" variant="secondary" onClick={() => setPublishConfirmationOpen(false)}>Continue Editing</Button>
             <Button type="button" onClick={submitPublish}>Update Reservations + Publish</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div className="lineup-action-error-backdrop" role="presentation">
+          <div ref={actionErrorDialogRef} className="card stack lineup-action-error-dialog" role="dialog" aria-modal="true" aria-labelledby="lineup-action-error-title" aria-describedby="lineup-action-error-message" tabIndex={-1}>
+            <h3 id="lineup-action-error-title">{actionError.title}</h3>
+            <p id="lineup-action-error-message" className="error">{actionError.message}</p>
+            <div className="row">
+              <Button type="button" onClick={dismissActionError}>OK</Button>
+            </div>
           </div>
         </div>
       ) : null}
