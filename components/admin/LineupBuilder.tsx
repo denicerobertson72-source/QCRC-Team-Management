@@ -24,6 +24,15 @@ type Boat = {
   seats: Seat[];
 };
 type ParticipantReservation = { id: string; boat_id: string; member_ids: string[] };
+type PublishReconciliation = {
+  memberId: string;
+  memberName: string;
+  assignedBoat: string;
+  assignedBoatId: string;
+  reservedBoat: string | null;
+  reservedBoatId: string | null;
+  reservationId: string | null;
+};
 type FleetBoat = {
   id: string;
   name: string;
@@ -97,12 +106,17 @@ export function LineupBuilder({
   const [newBoatClass, setNewBoatClass] = useState("4x");
   const [privateBoatQuantity, setPrivateBoatQuantity] = useState(1);
   const [selectedFleetBoatIds, setSelectedFleetBoatIds] = useState<Set<string>>(new Set());
+  const [fleetSelectionError, setFleetSelectionError] = useState(false);
   const [confirmedOverrideReservationIds, setConfirmedOverrideReservationIds] = useState<Set<string>>(new Set());
   const [pendingOverrideBoat, setPendingOverrideBoat] = useState<FleetBoat | null>(null);
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
+  const [confirmedReconciliationSignature, setConfirmedReconciliationSignature] = useState<string | null>(null);
+  const [reservationConfirmationErrorSignature, setReservationConfirmationErrorSignature] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isPublishing, startPublishing] = useTransition();
   const publishFormRef = useRef<HTMLFormElement>(null);
+  const reservationConfirmationPanelRef = useRef<HTMLDivElement>(null);
+  const reservationConfirmationCheckboxRef = useRef<HTMLInputElement>(null);
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -181,16 +195,30 @@ export function LineupBuilder({
     .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
     .filter((item) => item.openSeats > 0);
   const publishReconciliations = useMemo(() => {
-    if (!isCoachedTraining) return [] as Array<{ memberId: string; memberName: string; assignedBoat: string; reservedBoat: string | null; reservationId: string | null }>;
+    if (!isCoachedTraining) return [] as PublishReconciliation[];
     const assignments = localBoats.flatMap((boat) => boat.seats.filter((seat) => seat.member_id && boat.fleet_boat_id).map((seat) => ({ memberId: seat.member_id!, boat })));
     return assignments.flatMap(({ memberId, boat }) => {
       const matching = participantReservations.some((reservation) => reservation.boat_id === boat.fleet_boat_id && reservation.member_ids.includes(memberId));
       if (matching) return [];
       const previous = participantReservations.find((reservation) => reservation.member_ids.includes(memberId)) ?? null;
-      return [{ memberId, memberName: memberNameById.get(memberId) ?? "Participant", assignedBoat: boat.boat_name, reservedBoat: previous ? fleetBoats.find((fleetBoat) => fleetBoat.id === previous.boat_id)?.name ?? "another club boat" : null, reservationId: previous?.id ?? null }];
+      return [{
+        memberId,
+        memberName: memberNameById.get(memberId) ?? "Participant",
+        assignedBoat: boat.boat_name,
+        assignedBoatId: boat.fleet_boat_id!,
+        reservedBoat: previous ? fleetBoats.find((fleetBoat) => fleetBoat.id === previous.boat_id)?.name ?? "another club boat" : null,
+        reservedBoatId: previous?.boat_id ?? null,
+        reservationId: previous?.id ?? null,
+      }];
     });
   }, [fleetBoats, isCoachedTraining, localBoats, memberNameById, participantReservations]);
   const reconciliationJson = JSON.stringify(publishReconciliations.map((item) => ({ reconciliation_member_id: item.memberId, action: "update" })));
+  const advancedReservationChanges = isAdvancedTraining
+    ? publishReconciliations.filter((item) => item.reservationId !== null && item.reservedBoatId !== item.assignedBoatId)
+    : [];
+  const reconciliationSignature = JSON.stringify(advancedReservationChanges.map((item) => ({ memberId: item.memberId, oldBoatId: item.reservedBoatId, newBoatId: item.assignedBoatId })));
+  const reservationChangesConfirmed = confirmedReconciliationSignature === reconciliationSignature;
+  const reservationConfirmationError = reservationConfirmationErrorSignature === reconciliationSignature;
   const finalAdvancedReservations = useMemo(() => {
     if (!isAdvancedTraining || !isPublished) return [] as Array<{ id: string; boatName: string; memberNames: string[] }>;
     return participantReservations.map((reservation) => ({
@@ -208,10 +236,6 @@ export function LineupBuilder({
     : [];
   const canAddAdvancedPrivateBoat = isAdvancedTraining && ["1x", "2x", "4x"].includes(newBoatClass);
 
-  function setClampedPrivateBoatQuantity(value: number) {
-    setPrivateBoatQuantity(Number.isFinite(value) ? Math.min(12, Math.max(1, Math.trunc(value))) : 1);
-  }
-
   function setBoatSelected(boat: FleetBoat, checked: boolean) {
     if (checked && boat.status === "reserved_by_nonparticipant") {
       setPendingOverrideBoat(boat);
@@ -223,6 +247,7 @@ export function LineupBuilder({
       else next.delete(boat.id);
       return next;
     });
+    if (checked) setFleetSelectionError(false);
     if (!checked && boat.reservation?.id) {
       setConfirmedOverrideReservationIds((previous) => {
         const next = new Set(previous);
@@ -239,10 +264,24 @@ export function LineupBuilder({
     setPendingOverrideBoat(null);
   }
 
+  function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
+    if (selectedFleetBoatIds.size > 0) return;
+    event.preventDefault();
+    setFleetSelectionError(true);
+  }
+
   function requestPublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPublishError(null);
-    if (publishReconciliations.length > 0) {
+    if (isAdvancedTraining && advancedReservationChanges.length > 0 && !reservationChangesConfirmed) {
+      setReservationConfirmationErrorSignature(reconciliationSignature);
+      requestAnimationFrame(() => {
+        reservationConfirmationPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        reservationConfirmationCheckboxRef.current?.focus();
+      });
+      return;
+    }
+    if (!isAdvancedTraining && publishReconciliations.length > 0) {
       setPublishConfirmationOpen(true);
       return;
     }
@@ -264,6 +303,36 @@ export function LineupBuilder({
 
   return (
     <div className="stack">
+      {!isPublished && isAdvancedTraining && advancedReservationChanges.length > 0 ? (
+        <div ref={reservationConfirmationPanelRef} className="card stack" tabIndex={-1} aria-labelledby="advanced-reservation-confirmation-title">
+          <h3 id="advanced-reservation-confirmation-title">Reservation changes requiring confirmation</h3>
+          <p>These rowers already have a different club-boat reservation. Publishing this lineup will change those reservations to match the final lineup.</p>
+          {advancedReservationChanges.map((item) => (
+            <div key={item.memberId} className="card-subtle stack">
+              <strong>{item.memberName}</strong>
+              <span>{item.reservedBoat ?? "No club-boat reservation"} → {item.assignedBoat}</span>
+            </div>
+          ))}
+          <label>
+            <input
+              ref={reservationConfirmationCheckboxRef}
+              type="checkbox"
+              checked={reservationChangesConfirmed}
+              onChange={(event) => {
+                setConfirmedReconciliationSignature(event.target.checked ? reconciliationSignature : null);
+                setReservationConfirmationErrorSignature(null);
+              }}
+              aria-invalid={reservationConfirmationError}
+              aria-describedby={reservationConfirmationError ? "advanced-reservation-confirmation-error" : undefined}
+            />{" "}
+            I confirm these reservation changes
+          </label>
+          {reservationConfirmationError ? (
+            <p id="advanced-reservation-confirmation-error" className="error" role="alert">Please confirm the reservation changes before publishing.</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="card lineup-top-actions">
         <div className="row lineup-action-buttons">
           <form action={action} className="inline-form">
@@ -293,7 +362,7 @@ export function LineupBuilder({
 
       {lineupBoardId ? (
         <>
-          <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
+          <form action={addBoatAction} onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
           <h3>Add Boats</h3>
@@ -330,6 +399,7 @@ export function LineupBuilder({
                 </label>
               ))}
               {selectableFleetBoats.length === 0 ? <p className="muted">No fleet boats of this size can be assigned.</p> : null}
+              {fleetSelectionError ? <p className="error" role="alert">Choose at least one boat before adding.</p> : null}
               {advancedTrainingConflicts.map((boat) => (
                 <p key={boat.id} className="error">
                   {boat.name} has an existing reservation conflict. Resolve it before adding this held boat.
@@ -353,19 +423,19 @@ export function LineupBuilder({
               {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
               <h3>Private</h3>
               <Field label="Quantity">
-                <div className="row">
-                  <Button type="button" variant="secondary" onClick={() => setClampedPrivateBoatQuantity(privateBoatQuantity - 1)} aria-label="Decrease private boat quantity">−</Button>
-                  <input
-                    name="private_boat_quantity"
-                    type="number"
-                    min={1}
-                    max={12}
-                    step={1}
-                    value={privateBoatQuantity}
-                    onChange={(event) => setClampedPrivateBoatQuantity(event.currentTarget.valueAsNumber)}
-                  />
-                  <Button type="button" variant="secondary" onClick={() => setClampedPrivateBoatQuantity(privateBoatQuantity + 1)} aria-label="Increase private boat quantity">+</Button>
-                </div>
+                <input
+                  name="private_boat_quantity"
+                  type="number"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={privateBoatQuantity}
+                  onChange={(event) => {
+                    const value = event.currentTarget.valueAsNumber;
+                    setPrivateBoatQuantity(Number.isFinite(value) ? Math.min(12, Math.max(1, Math.trunc(value))) : 1);
+                  }}
+                  style={{ width: "5rem" }}
+                />
               </Field>
               <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"} ({newBoatClass})</Button>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
@@ -376,7 +446,7 @@ export function LineupBuilder({
 
       {publishError ? <p className="error" role="alert">{publishError}</p> : null}
 
-      {!isPublished && publishReconciliations.length > 0 ? (
+      {!isPublished && !isAdvancedTraining && publishReconciliations.length > 0 ? (
         <div className="card stack">
           <h3>{isAdvancedTraining ? "Reservation changes on publish" : "Reservation reconciliation required before publishing"}</h3>
           <p className="muted">The recommended update is prepared, but nothing changes while you edit. Publishing will update these club-boat reservations to match the finalized lineup.</p>

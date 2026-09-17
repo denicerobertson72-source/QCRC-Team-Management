@@ -2945,7 +2945,9 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const isAdvancedTraining = session?.session_type === "coached_training_advanced";
   const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
   const canAddPrivateBoat = isAdvancedTraining || boatClassId === "1x";
-  if (boatIds.length === 0 && !includePrivateBoat) throw new Error("Select at least one boat.");
+  if (boatIds.length === 0 && !includePrivateBoat) {
+    return { ok: false, message: "Choose at least one boat before adding." };
+  }
   if (includePrivateBoat && !canAddPrivateBoat) throw new Error("Private boats are only available as 1x entries outside Advanced Training.");
   if (includePrivateBoat && (!Number.isInteger(privateBoatQuantity) || privateBoatQuantity < 1 || privateBoatQuantity > 12)) {
     throw new Error("Private boat quantity must be a whole number from 1 to 12.");
