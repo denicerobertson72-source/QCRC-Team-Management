@@ -422,22 +422,24 @@ export function LineupBuilder({
               <input type="hidden" name="private_boat" value="true" />
               {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
               <h3>Private</h3>
-              <Field label="Quantity">
-                <input
-                  name="private_boat_quantity"
-                  type="number"
-                  min={1}
-                  max={12}
-                  step={1}
-                  value={privateBoatQuantity}
-                  onChange={(event) => {
-                    const value = event.currentTarget.valueAsNumber;
-                    setPrivateBoatQuantity(Number.isFinite(value) ? Math.min(12, Math.max(1, Math.trunc(value))) : 1);
-                  }}
-                  style={{ width: "5rem" }}
-                />
-              </Field>
-              <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"} ({newBoatClass})</Button>
+              <div className="private-boat-quantity-row">
+                <Field label="Quantity">
+                  <input
+                    className="private-boat-quantity-input"
+                    name="private_boat_quantity"
+                    type="number"
+                    min={1}
+                    max={12}
+                    step={1}
+                    value={privateBoatQuantity}
+                    onChange={(event) => {
+                      const value = event.currentTarget.valueAsNumber;
+                      setPrivateBoatQuantity(Number.isFinite(value) ? Math.min(12, Math.max(1, Math.trunc(value))) : 1);
+                    }}
+                  />
+                </Field>
+                <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"} ({newBoatClass})</Button>
+              </div>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
             </form>
           ) : null}
