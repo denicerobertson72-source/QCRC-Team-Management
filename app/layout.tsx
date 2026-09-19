@@ -2,6 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { PwaExperience } from "@/components/PwaExperience";
+import { AppFreshnessProvider } from "@/components/AppFreshnessProvider";
+import { buildVersion } from "@/lib/build-version";
 
 export const metadata: Metadata = {
   title: "QCRC Team Management",
@@ -26,8 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <PwaExperience />
-        {children}
+        <AppFreshnessProvider clientBuild={buildVersion}>
+          <PwaExperience />
+          {children}
+        </AppFreshnessProvider>
       </body>
     </html>
   );

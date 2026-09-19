@@ -1,7 +1,6 @@
-const CACHE_VERSION = "qcrc-pwa-v7";
+const CACHE_VERSION = "qcrc-pwa-v8";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
-const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = [
   OFFLINE_URL,
@@ -11,9 +10,6 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/QCRC.png",
 ];
-const SAFE_PAGE_CACHE_PATHS = new Set(["/boats", "/lineups", "/programs"]);
-const NEVER_CACHE_PREFIXES = ["/admin", "/reserve", "/reservations", "/safety", "/notifications", "/account", "/damage", "/api"];
-const NEVER_CACHE_PATHS = new Set(["/", "/login"]);
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
@@ -51,66 +47,13 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-function isSafePageRoute(url) {
-  return SAFE_PAGE_CACHE_PATHS.has(url.pathname);
-}
-
-function isNeverCacheRoute(url) {
-  if (NEVER_CACHE_PATHS.has(url.pathname)) {
-    return true;
-  }
-
-  return NEVER_CACHE_PREFIXES.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`));
-}
-
-async function networkFirstNavigation(request) {
-  const cache = await caches.open(PAGE_CACHE);
-
-  try {
-    const response = await fetch(request);
-
-    if (response.ok) {
-      void cache.put(request, response.clone());
-    }
-
-    return response;
-  } catch {
-    return (await cache.match(request)) ?? (await caches.match(OFFLINE_URL));
-  }
-}
-
-async function staleWhileRevalidatePage(request) {
-  const cache = await caches.open(PAGE_CACHE);
-  const cached = await cache.match(request);
-
-  const networkFetch = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        void cache.put(request, response.clone());
-      }
-
-      return response;
-    })
-    .catch(() => cached ?? caches.match(OFFLINE_URL));
-
-  return cached ?? networkFetch;
-}
-
-async function staleWhileRevalidateAsset(request) {
+async function cacheFirstStaticAsset(request) {
   const cache = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request);
-
-  const networkFetch = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        void cache.put(request, response.clone());
-      }
-
-      return response;
-    })
-    .catch(() => cached);
-
-  return cached ?? networkFetch;
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) void cache.put(request, response.clone());
+  return response;
 }
 
 self.addEventListener("install", (event) => {
@@ -123,7 +66,7 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((key) => ![STATIC_CACHE, ASSET_CACHE, PAGE_CACHE].includes(key)).map((key) => caches.delete(key)),
+          keys.filter((key) => ![STATIC_CACHE, ASSET_CACHE].includes(key)).map((key) => caches.delete(key)),
         ),
       )
       .then(() => self.clients.claim()),
@@ -138,22 +81,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.mode === "navigate") {
-    if (isSafePageRoute(url) && !url.search) {
-      event.respondWith(staleWhileRevalidatePage(request));
-      return;
-    }
-
-    if (isNeverCacheRoute(url) || url.search) {
-      event.respondWith(networkFirstNavigation(request));
-      return;
-    }
-
-    event.respondWith(networkFirstNavigation(request));
+  // Navigations, RSC payloads, APIs, and Server Actions must always reach the
+  // network. Caching them can reconnect an open operational page to old data.
+  if (request.mode === "navigate" || url.pathname.startsWith("/api/") || url.searchParams.has("_rsc") || request.headers.get("RSC")) {
     return;
   }
 
-  if (["style", "script", "image", "font"].includes(request.destination)) {
-    event.respondWith(staleWhileRevalidateAsset(request));
+  if (url.pathname.startsWith("/_next/static/") || PRECACHE_URLS.includes(url.pathname)) {
+    event.respondWith(cacheFirstStaticAsset(request));
   }
 });

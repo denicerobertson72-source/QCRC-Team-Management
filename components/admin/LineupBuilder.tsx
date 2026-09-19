@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { useAppFreshness } from "@/components/AppFreshnessProvider";
 
 type RosterMember = {
   id: string;
@@ -121,6 +122,7 @@ export function LineupBuilder({
   const actionErrorReturnFocusRef = useRef<HTMLElement | null>(null);
   const reservationConfirmationPanelRef = useRef<HTMLDivElement>(null);
   const reservationConfirmationCheckboxRef = useRef<HTMLInputElement>(null);
+  const { ensureFresh, reportActionError, refreshOperationalData, setLineupDirty, staleDataNotice } = useAppFreshness();
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -195,6 +197,16 @@ export function LineupBuilder({
   const assignmentsJson = JSON.stringify(
     localBoats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id }))),
   );
+  const initialAssignmentsJson = useMemo(
+    () => JSON.stringify(boats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id })))),
+    [boats],
+  );
+  const hasUnsavedAssignments = assignmentsJson !== initialAssignmentsJson;
+
+  useEffect(() => {
+    setLineupDirty(hasUnsavedAssignments);
+    return () => setLineupDirty(false);
+  }, [hasUnsavedAssignments, setLineupDirty]);
   const boatsWithOpenSeats = localBoats
     .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
     .filter((item) => item.openSeats > 0);
@@ -288,15 +300,34 @@ export function LineupBuilder({
     setPendingOverrideBoat(null);
   }
 
-  function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
-    if (selectedFleetBoatIds.size > 0) return;
+  async function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFleetSelectionError(true);
+    if (selectedFleetBoatIds.size === 0) {
+      setFleetSelectionError(true);
+      return;
+    }
+    if (!await ensureFresh()) return;
+    try {
+      await addBoatAction(new FormData(event.currentTarget));
+    } catch (error) {
+      if (!reportActionError(error)) showActionError("Unable to add boats", "The selected boats could not be added. Please try again.");
+    }
   }
 
-  function requestPublish(event: FormEvent<HTMLFormElement>) {
+  async function requestPrivateBoats(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!await ensureFresh()) return;
+    try {
+      await addBoatAction(new FormData(event.currentTarget));
+    } catch (error) {
+      if (!reportActionError(error)) showActionError("Unable to add private singles", "The private singles could not be added. Please try again.");
+    }
+  }
+
+  async function requestPublish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
+    if (!await ensureFresh()) return;
     if (isAdvancedTraining && advancedReservationChanges.length > 0 && !reservationChangesConfirmed) {
       setReservationConfirmationErrorSignature(reconciliationSignature);
       requestAnimationFrame(() => {
@@ -318,13 +349,15 @@ export function LineupBuilder({
     setActionError(null);
     startSaving(async () => {
       try {
+        if (!await ensureFresh()) return;
         const result = await action(new FormData(saveFormRef.current!));
         if (!result.ok) {
           showActionError("Unable to save assignments", result.message ?? "The lineup assignments could not be saved. Please try again.");
           return;
         }
         window.location.assign(returnTo ?? window.location.href);
-      } catch {
+      } catch (error) {
+        if (reportActionError(error)) return;
         showActionError("Unable to save assignments", "The lineup assignments could not be saved. Please try again.");
       }
     });
@@ -335,13 +368,15 @@ export function LineupBuilder({
     setPublishConfirmationOpen(false);
     startPublishing(async () => {
       try {
+        if (!await ensureFresh()) return;
         const result = await saveAndPublishAction(new FormData(publishFormRef.current!));
         if (!result.ok) {
           showActionError("Unable to publish lineup", result.message ?? "The lineup could not be published. Review the reservation reconciliation and try again.");
           return;
         }
         window.location.assign(returnTo ?? "/admin/lineups");
-      } catch {
+      } catch (error) {
+        if (reportActionError(error)) return;
         showActionError("Unable to publish lineup", "The lineup could not be published. Please try again.");
       }
     });
@@ -349,6 +384,12 @@ export function LineupBuilder({
 
   return (
     <div className="stack">
+      {staleDataNotice ? (
+        <div className="card-subtle row">
+          <span>Session information may have changed while this page was inactive.</span>
+          <Button type="button" variant="secondary" onClick={refreshOperationalData}>Refresh session data</Button>
+        </div>
+      ) : null}
       {!isPublished && isAdvancedTraining && advancedReservationChanges.length > 0 ? (
         <div ref={reservationConfirmationPanelRef} className="card stack" tabIndex={-1} aria-labelledby="advanced-reservation-confirmation-title">
           <h3 id="advanced-reservation-confirmation-title">Reservation changes requiring confirmation</h3>
@@ -462,7 +503,7 @@ export function LineupBuilder({
           </form>
 
           {canAddAdvancedPrivateBoat ? (
-            <form action={addBoatAction} className="card form-grid lineup-add-boat-form">
+            <form action={addBoatAction} onSubmit={requestPrivateBoats} className="card form-grid lineup-add-boat-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
               <input type="hidden" name="boat_class_id" value="1x" />
               <input type="hidden" name="private_boat" value="true" />
@@ -484,7 +525,7 @@ export function LineupBuilder({
                     }}
                   />
                 </Field>
-                <Button type="submit">Add {privateBoatQuantity} Private Boat{privateBoatQuantity === 1 ? "" : "s"}</Button>
+                <Button type="submit">Add {privateBoatQuantity} Private Single{privateBoatQuantity === 1 ? "" : "s"}</Button>
               </div>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
             </form>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useAppFreshness } from "@/components/AppFreshnessProvider";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -10,7 +11,6 @@ type BeforeInstallPromptEvent = Event & {
 
 const INSTALL_DISMISSED_KEY = "qcrc-pwa-install-dismissed";
 const IOS_DISMISSED_KEY = "qcrc-pwa-ios-dismissed";
-const UPDATE_DISMISSED_KEY = "qcrc-pwa-update-dismissed";
 
 function isStandaloneMode() {
   if (typeof window === "undefined") return false;
@@ -29,9 +29,7 @@ export function PwaExperience() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showIosHint, setShowIosHint] = useState(false);
-  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
-  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { notifyServiceWorkerUpdate } = useAppFreshness();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -64,12 +62,10 @@ export function PwaExperience() {
     }
 
     let cancelled = false;
-    let handleVisibilityChange: (() => void) | null = null;
-
     const handleControllerChange = () => {
       if (cancelled) return;
-      setIsRefreshing(true);
-      window.location.reload();
+      console.info("[qcrc-version] service worker controller changed");
+      notifyServiceWorkerUpdate();
     };
 
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
@@ -78,19 +74,11 @@ export function PwaExperience() {
       if (cancelled) return;
       void registration.update().catch(() => undefined);
 
-      const updateDismissed = window.sessionStorage.getItem(UPDATE_DISMISSED_KEY) === "true";
-      const maybePromptForUpdate = (worker: ServiceWorker | null) => {
-        if (!worker) {
-          return;
-        }
-        if (updateDismissed) {
-          return;
-        }
-        setWaitingWorker(worker);
-        setShowUpdatePrompt(true);
+      const reportWaitingWorker = (worker: ServiceWorker | null) => {
+        if (worker) notifyServiceWorkerUpdate();
       };
 
-      maybePromptForUpdate(registration.waiting);
+      reportWaitingWorker(registration.waiting);
 
       registration.addEventListener("updatefound", () => {
         const installing = registration.installing;
@@ -98,24 +86,15 @@ export function PwaExperience() {
 
         installing.addEventListener("statechange", () => {
           if (installing.state === "installed" && navigator.serviceWorker.controller) {
-            maybePromptForUpdate(registration.waiting);
+            reportWaitingWorker(registration.waiting);
           }
         });
       });
 
-      handleVisibilityChange = () => {
-        if (document.visibilityState === "visible") {
-          void registration.update().catch(() => undefined);
-        }
-      };
-      document.addEventListener("visibilitychange", handleVisibilityChange);
     });
 
     return () => {
       cancelled = true;
-      if (handleVisibilityChange) {
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
-      }
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
     };
   }, []);
@@ -146,49 +125,9 @@ export function PwaExperience() {
     setShowIosHint(false);
   }
 
-  function dismissUpdatePrompt() {
-    window.sessionStorage.setItem(UPDATE_DISMISSED_KEY, "true");
-    setShowUpdatePrompt(false);
-  }
-
-  function applyUpdate() {
-    if (!waitingWorker) return;
-    window.sessionStorage.removeItem(UPDATE_DISMISSED_KEY);
-    setShowUpdatePrompt(false);
-    waitingWorker.postMessage({ type: "SKIP_WAITING" });
-  }
-
-  if (isRefreshing) {
-    return (
-      <div className="pwa-banner pwa-banner-update" role="status" aria-live="polite">
-        <div className="pwa-banner-copy">
-          <strong>Updating QCRC Team Management</strong>
-          <span>Refreshing to load the newest app version.</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
-      {showUpdatePrompt ? (
-        <div className="pwa-banner pwa-banner-update" role="status" aria-live="polite">
-          <div className="pwa-banner-copy">
-            <strong>App update ready</strong>
-            <span>A newer version of QCRC Team Management is available.</span>
-          </div>
-          <div className="pwa-banner-actions">
-            <Button type="button" onClick={applyUpdate}>
-              Update app
-            </Button>
-            <Button type="button" variant="secondary" onClick={dismissUpdatePrompt}>
-              Later
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {!showUpdatePrompt && showInstallPrompt ? (
+      {showInstallPrompt ? (
         <div className="pwa-banner" role="status" aria-live="polite">
           <div className="pwa-banner-copy">
             <strong>Install this app</strong>
@@ -205,7 +144,7 @@ export function PwaExperience() {
         </div>
       ) : null}
 
-      {!showUpdatePrompt && !showInstallPrompt && showIosHint ? (
+      {!showInstallPrompt && showIosHint ? (
         <div className="pwa-banner" role="status" aria-live="polite">
           <div className="pwa-banner-copy">
             <strong>Install on iPhone</strong>
