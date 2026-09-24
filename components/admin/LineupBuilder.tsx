@@ -323,7 +323,7 @@ export function LineupBuilder({
     try {
       const result = await addBoatAction(new FormData(event.currentTarget));
       if (result && !result.ok) {
-        showActionError("Unable to add private singles", result.message ?? "The private singles could not be added. Please try again.");
+        showActionError("Unable to add boats", result.message ?? "The private singles could not be added. Please try again.");
       }
     } catch (error) {
       if (!reportActionError(error)) showActionError("Unable to add private singles", "The private singles could not be added. Please try again.");
