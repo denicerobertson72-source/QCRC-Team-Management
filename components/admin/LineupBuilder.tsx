@@ -90,7 +90,7 @@ export function LineupBuilder({
   boats: Boat[];
   roster: RosterMember[];
   action: (formData: FormData) => Promise<{ ok: boolean; message?: string }>;
-  addBoatAction: (formData: FormData) => void;
+  addBoatAction: (formData: FormData) => Promise<void | { ok: boolean; message?: string }>;
   saveAndPublishAction?: (formData: FormData) => Promise<{ ok: boolean; code?: string; message?: string }>;
   publishAction?: (formData: FormData) => void;
   removeBoatAction: (formData: FormData) => void;
@@ -318,7 +318,10 @@ export function LineupBuilder({
     event.preventDefault();
     if (!await ensureFresh()) return;
     try {
-      await addBoatAction(new FormData(event.currentTarget));
+      const result = await addBoatAction(new FormData(event.currentTarget));
+      if (result && !result.ok) {
+        showActionError("Unable to add private singles", result.message ?? "The private singles could not be added. Please try again.");
+      }
     } catch (error) {
       if (!reportActionError(error)) showActionError("Unable to add private singles", "The private singles could not be added. Please try again.");
     }
@@ -449,7 +452,7 @@ export function LineupBuilder({
 
       {lineupBoardId ? (
         <>
-          <form action={addBoatAction} onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
+            <form onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
           <h3>Add Boats</h3>
@@ -503,7 +506,7 @@ export function LineupBuilder({
           </form>
 
           {canAddAdvancedPrivateBoat ? (
-            <form action={addBoatAction} onSubmit={requestPrivateBoats} className="card form-grid lineup-add-boat-form">
+            <form onSubmit={requestPrivateBoats} className="card form-grid lineup-add-boat-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
               <input type="hidden" name="boat_class_id" value="1x" />
               <input type="hidden" name="private_boat" value="true" />

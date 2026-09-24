@@ -2967,7 +2967,15 @@ export async function addLineupBoatAdminAction(formData: FormData) {
         p_boat_class_id: "1x",
         p_quantity: privateBoatQuantity,
       });
-      if (privateBoatError) throw privateBoatError;
+      if (privateBoatError) {
+        console.error("Could not add Advanced Training private singles", {
+          code: privateBoatError.code,
+          message: privateBoatError.message,
+          details: privateBoatError.details,
+          hint: privateBoatError.hint,
+        });
+        return { ok: false, message: privateBoatError.message || "The private singles could not be added." };
+      }
     }
   } else if (isCoachedTraining && boatIds.length) {
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
