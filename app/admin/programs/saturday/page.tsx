@@ -12,39 +12,20 @@ import {
   updateProgramMonthTimesAdminAction,
   updateSessionTimesAdminAction,
 } from "@/lib/actions";
-import { formatEasternDateTime, formatEasternMonthLabel, toEasternDateTimeLocalValue } from "@/lib/time";
+import { formatEasternDateTime, programMonthFromInput, toEasternDateTimeLocalValue } from "@/lib/time";
 
 type SearchParams = Promise<{ month?: string }>;
 
-function monthBounds(monthInput?: string) {
-  const now = new Date();
-  const [yearRaw, monthRaw] = (monthInput ?? "").split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const safeYear = Number.isFinite(year) && year > 2000 ? year : now.getUTCFullYear();
-  const safeMonthIndex = Number.isFinite(month) && month >= 1 && month <= 12 ? month - 1 : now.getUTCMonth();
-
-  const start = new Date(Date.UTC(safeYear, safeMonthIndex, 1, 0, 0, 0));
-  const end = new Date(Date.UTC(safeYear, safeMonthIndex + 1, 1, 0, 0, 0));
-  const prev = new Date(Date.UTC(safeYear, safeMonthIndex - 1, 1, 0, 0, 0));
-  const next = new Date(Date.UTC(safeYear, safeMonthIndex + 1, 1, 0, 0, 0));
-
-  const label = formatEasternMonthLabel(start);
-  const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  const isCurrentMonth = safeYear === now.getUTCFullYear() && safeMonthIndex === now.getUTCMonth();
-  return { start, end, label, current: fmt(start), prev: fmt(prev), next: fmt(next), queryStart: isCurrentMonth ? now : start };
-}
-
 export default async function AdminProgramsSaturdayPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const month = monthBounds(params.month);
+  const month = programMonthFromInput(params.month);
   const { supabase } = await ensureAdminProfile();
 
   const { data: sessions } = await supabase
     .from("sessions")
     .select("id, title, starts_at, ends_at, is_cancelled, cancelled_reason")
     .eq("session_type", "saturday_coached_row")
-    .gte("starts_at", month.queryStart.toISOString())
+    .gte("starts_at", month.start.toISOString())
     .lt("starts_at", month.end.toISOString())
     .order("starts_at", { ascending: true });
 
@@ -56,7 +37,7 @@ export default async function AdminProgramsSaturdayPage({ searchParams }: { sear
 
         <div className="row">
           <Link href="/admin/programs">Back</Link>
-          <Link href={`/admin/programs/saturday?month=${month.prev}`}>Previous Month</Link>
+          <Link href={`/admin/programs/saturday?month=${month.previous}`}>Previous Month</Link>
           <Link href={`/admin/programs/saturday?month=${month.next}`}>Next Month</Link>
         </div>
 

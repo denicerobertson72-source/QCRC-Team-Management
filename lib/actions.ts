@@ -5,9 +5,8 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { ensureProfile, ensureSiteAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { easternLocalInputToIso } from "@/lib/time";
+import { easternLocalInputToIso, formatEasternDateTime, programMonthFromInput } from "@/lib/time";
 import { formatCurrencyStatusLine, sendTransactionalEmail } from "@/lib/email";
-import { formatEasternDateTime } from "@/lib/time";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { sendSms } from "@/lib/sms";
 import { appendCrewNamesToNotes, splitNotesAndCrew } from "@/lib/crew";
@@ -3513,23 +3512,11 @@ export async function cancelSessionAdminAction(formData: FormData) {
   revalidatePath("/notifications");
 }
 
-function monthWindowFromInput(monthInput: string) {
-  const fallback = new Date();
-  const [yearRaw, monthRaw] = monthInput.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const safeYear = Number.isFinite(year) && year > 2000 ? year : fallback.getFullYear();
-  const safeMonthIndex = Number.isFinite(month) && month >= 1 && month <= 12 ? month - 1 : fallback.getMonth();
-  const start = new Date(Date.UTC(safeYear, safeMonthIndex, 1, 0, 0, 0));
-  const end = new Date(Date.UTC(safeYear, safeMonthIndex + 1, 1, 0, 0, 0));
-  return { start, end };
-}
-
 export async function generateProgramSessionsMonthAction(formData: FormData) {
   const { supabase, user } = await assertAdmin();
   const monthInput = String(formData.get("month") ?? "");
   const programScope = String(formData.get("program_scope") ?? "all");
-  const { start, end } = monthWindowFromInput(monthInput);
+  const { start, end } = programMonthFromInput(monthInput);
 
   const scopedTypes =
     programScope === "saturday"
@@ -3670,7 +3657,7 @@ function defaultSessionTimesByType(sessionType: string) {
 }
 
 async function updateSessionMonthTimes(supabase: AdminSupabase, monthInput: string, sessionType: string, startTime: string, endTime: string) {
-  const { start, end } = monthWindowFromInput(monthInput);
+  const { start, end } = programMonthFromInput(monthInput);
 
   const { data: sessions, error } = await supabase
     .from("sessions")

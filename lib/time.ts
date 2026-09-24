@@ -1,5 +1,58 @@
 const ET_TIMEZONE = "America/New_York";
 
+export type ProgramMonth = {
+  /** Calendar month number, 1 (January) through 12 (December). */
+  month: number;
+  year: number;
+  current: string;
+  previous: string;
+  next: string;
+  label: string;
+  start: Date;
+  end: Date;
+};
+
+function easternYearMonth(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "");
+  return { year: get("year"), month: get("month") };
+}
+
+/**
+ * Parses an administrative calendar month as a 1-based year/month value and
+ * builds Eastern-time month boundaries for querying and session generation.
+ */
+export function programMonthFromInput(monthInput?: string): ProgramMonth {
+  const fallback = easternYearMonth(new Date());
+  const [yearRaw, monthRaw] = (monthInput ?? "").split("-");
+  const parsedYear = Number(yearRaw);
+  const parsedMonth = Number(monthRaw);
+  const year = Number.isFinite(parsedYear) && parsedYear > 2000 ? parsedYear : fallback.year;
+  const month = Number.isFinite(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12 ? parsedMonth : fallback.month;
+  const toKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  const monthAnchor = new Date(Date.UTC(year, month - 1, 15, 12, 0, 0));
+  const nextAnchor = new Date(Date.UTC(year, month, 15, 12, 0, 0));
+  const previousAnchor = new Date(Date.UTC(year, month - 2, 15, 12, 0, 0));
+  const current = toKey(monthAnchor);
+  const start = new Date(easternLocalInputToIso(`${current}-01T00:00`)!);
+  const end = new Date(easternLocalInputToIso(`${toKey(nextAnchor)}-01T00:00`)!);
+
+  return {
+    year,
+    month,
+    current,
+    previous: toKey(previousAnchor),
+    next: toKey(nextAnchor),
+    label: formatEasternMonthLabel(monthAnchor),
+    start,
+    end,
+  };
+}
+
 export function formatEasternDateTime(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value);
   return date.toLocaleString("en-US", {
