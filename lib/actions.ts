@@ -3083,10 +3083,6 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   revalidatePath("/admin/lineups");
   revalidatePath("/admin/races");
   if (returnTo) revalidatePath(returnTo);
-  if (returnTo) {
-    stage = "redirect";
-    redirect(returnTo);
-  }
   return { ok: true };
   } catch (error) {
     unstable_rethrow(error);

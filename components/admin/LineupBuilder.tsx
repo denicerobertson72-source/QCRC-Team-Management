@@ -95,7 +95,7 @@ export function LineupBuilder({
   boats: Boat[];
   roster: RosterMember[];
   action: (formData: FormData) => Promise<{ ok: boolean; message?: string }>;
-  addBoatAction: (formData: FormData) => Promise<void | { ok: boolean; message?: string }>;
+  addBoatAction: (formData: FormData) => Promise<{ ok: boolean; message?: string }>;
   saveAndPublishAction?: (formData: FormData) => Promise<{ ok: boolean; code?: string; message?: string }>;
   publishAction?: (formData: FormData) => void;
   removeBoatAction: (formData: FormData) => void;
@@ -315,10 +315,11 @@ export function LineupBuilder({
     if (!await ensureFresh()) return;
     try {
       const result = await addBoatAction(formData);
-      if (result && !result.ok) {
+      if (!result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
       }
+      refreshOperationalData();
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
@@ -331,10 +332,11 @@ export function LineupBuilder({
     if (!await ensureFresh()) return;
     try {
       const result = await addBoatAction(formData);
-      if (result && !result.ok) {
+      if (!result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
       }
+      refreshOperationalData();
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
