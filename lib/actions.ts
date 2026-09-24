@@ -2959,7 +2959,15 @@ export async function addLineupBoatAdminAction(formData: FormData) {
         p_lineup_board_id: lineupBoardId,
         p_boat_ids: boatIds,
       });
-      if (advancedAddError) throw advancedAddError;
+      if (advancedAddError) {
+        console.error("[advanced-add-boats] add_advanced_training_held_lineup_boats failed", {
+          code: advancedAddError.code,
+          message: advancedAddError.message,
+          details: advancedAddError.details,
+          hint: advancedAddError.hint,
+        });
+        return { ok: false, message: `${advancedAddError.code ?? "unknown"}: ${advancedAddError.message ?? "No error message returned."}` };
+      }
     }
     if (includePrivateBoat) {
       const { error: privateBoatError } = await supabase.rpc("add_advanced_training_private_lineup_boats", {
@@ -2967,7 +2975,15 @@ export async function addLineupBoatAdminAction(formData: FormData) {
         p_boat_class_id: "1x",
         p_quantity: privateBoatQuantity,
       });
-      if (privateBoatError) throw privateBoatError;
+      if (privateBoatError) {
+        console.error("[advanced-add-boats] add_advanced_training_private_lineup_boats failed", {
+          code: privateBoatError.code,
+          message: privateBoatError.message,
+          details: privateBoatError.details,
+          hint: privateBoatError.hint,
+        });
+        return { ok: false, message: `${privateBoatError.code ?? "unknown"}: ${privateBoatError.message ?? "No error message returned."}` };
+      }
     }
   } else if (isCoachedTraining && boatIds.length) {
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
