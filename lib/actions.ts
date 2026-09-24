@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { ensureProfile, ensureSiteAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -2924,9 +2924,31 @@ function seatCountFromClass(boatClassId: string) {
   return 1;
 }
 
+function addBoatsFailureDetails(error: unknown) {
+  const candidate = typeof error === "object" && error !== null
+    ? error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown }
+    : {};
+  const message = error instanceof Error
+    ? error.message
+    : typeof candidate.message === "string" && candidate.message
+      ? candidate.message
+      : "An unexpected server error occurred.";
+  return {
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    message,
+    supabaseCode: typeof candidate.code === "string" ? candidate.code : undefined,
+    details: typeof candidate.details === "string" ? candidate.details : undefined,
+    hint: typeof candidate.hint === "string" ? candidate.hint : undefined,
+  };
+}
+
 export async function addLineupBoatAdminAction(formData: FormData) {
+  let stage = "start";
+  try {
   console.info("[advanced-add-boats] entered action");
+  stage = "auth";
   const { supabase } = await assertAdmin();
+  stage = "parse-form";
   const lineupBoardId = String(formData.get("lineup_board_id") ?? "");
   const boatClassId = String(formData.get("boat_class_id") ?? "4x");
   const boatIds = formData.getAll("boat_ids").map(String).filter(Boolean);
@@ -2942,25 +2964,22 @@ export async function addLineupBoatAdminAction(formData: FormData) {
     boatClassId,
   });
 
+  stage = "load-board";
   const { data: board, error: boardError } = await supabase
     .from("lineup_boards")
     .select("session_id, sessions(session_type)")
     .eq("id", lineupBoardId)
     .maybeSingle();
   if (boardError || !board) {
-    console.error("[advanced-add-boats] lineup board lookup failed", {
-      code: boardError?.code,
-      message: boardError?.message ?? "Lineup board not found.",
-      details: boardError?.details,
-      hint: boardError?.hint,
-    });
-    return { ok: false, message: `Unable to add boats: ${boardError?.message ?? "Lineup board not found."}` };
+    throw boardError ?? new Error("Lineup board not found.");
   }
 
+  stage = "detect-session-type";
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
   const isAdvancedTraining = session?.session_type === "coached_training_advanced";
   const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
   console.info("[advanced-add-boats] board resolved", { isAdvancedTraining, isCoachedTraining });
+  stage = "validate";
   const canAddPrivateBoat = isAdvancedTraining || boatClassId === "1x";
   if (boatIds.length === 0 && !includePrivateBoat) {
     return { ok: false, message: "Choose at least one boat before adding." };
@@ -2972,6 +2991,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
 
   if (isAdvancedTraining) {
     if (boatIds.length) {
+      stage = "held-rpc";
       console.info("[advanced-add-boats] mode=held");
       console.info("[advanced-add-boats] calling add_advanced_training_held_lineup_boats");
       const { error: advancedAddError } = await supabase.rpc("add_advanced_training_held_lineup_boats", {
@@ -2979,16 +2999,11 @@ export async function addLineupBoatAdminAction(formData: FormData) {
         p_boat_ids: boatIds,
       });
       if (advancedAddError) {
-        console.error("[advanced-add-boats] add_advanced_training_held_lineup_boats failed", {
-          code: advancedAddError.code,
-          message: advancedAddError.message,
-          details: advancedAddError.details,
-          hint: advancedAddError.hint,
-        });
-        return { ok: false, message: `Unable to add boats: ${advancedAddError.message ?? "No error message returned."}` };
+        throw advancedAddError;
       }
     }
     if (includePrivateBoat) {
+      stage = "private-rpc";
       console.info("[advanced-add-boats] mode=private");
       console.info("[advanced-add-boats] calling add_advanced_training_private_lineup_boats");
       const { error: privateBoatError } = await supabase.rpc("add_advanced_training_private_lineup_boats", {
@@ -2997,16 +3012,11 @@ export async function addLineupBoatAdminAction(formData: FormData) {
         p_quantity: privateBoatQuantity,
       });
       if (privateBoatError) {
-        console.error("[advanced-add-boats] add_advanced_training_private_lineup_boats failed", {
-          code: privateBoatError.code,
-          message: privateBoatError.message,
-          details: privateBoatError.details,
-          hint: privateBoatError.hint,
-        });
-        return { ok: false, message: `Unable to add boats: ${privateBoatError.message ?? "No error message returned."}` };
+        throw privateBoatError;
       }
     }
   } else if (isCoachedTraining && boatIds.length) {
+    stage = "coached-rpc";
     const { data: overriddenReservations, error: coachedAddError } = await supabase.rpc("add_coached_training_lineup_boats", {
       p_lineup_board_id: lineupBoardId,
       p_boat_ids: boatIds,
@@ -3040,6 +3050,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
       if (privateSeatError) throw privateSeatError;
     }
   } else {
+  stage = "standard-add";
   const { data: fleetBoats, error: fleetError } = boatIds.length
     ? await supabase.from("boats").select("id, name, boat_class_id, status").in("id", boatIds)
     : { data: [], error: null };
@@ -3068,10 +3079,22 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   if (seatError) throw seatError;
   }
 
+  stage = "revalidate";
   revalidatePath("/admin/lineups");
   revalidatePath("/admin/races");
   if (returnTo) revalidatePath(returnTo);
-  if (returnTo) redirect(returnTo);
+  if (returnTo) {
+    stage = "redirect";
+    redirect(returnTo);
+  }
+  return { ok: true };
+  } catch (error) {
+    unstable_rethrow(error);
+    const failure = addBoatsFailureDetails(error);
+    console.error("[advanced-add-boats] failure", { stage, ...failure });
+    const diagnostic = failure.supabaseCode ? `${failure.supabaseCode}: ${failure.message}` : failure.message;
+    return { ok: false, message: `Add boats failed at ${stage}: ${diagnostic}` };
+  }
 }
 
 export async function saveLineupAssignmentsAdminAction(formData: FormData) {

@@ -70,6 +70,11 @@ function orderedSeats(boatClassId: string, seats: Seat[]) {
   return [...seats].sort((a, b) => (order.get(a.seat_number) ?? a.seat_number) - (order.get(b.seat_number) ?? b.seat_number));
 }
 
+function serverActionFailureMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim() && !("digest" in error)) return error.message;
+  return "Server Action failed before a normal response was returned. Check [advanced-add-boats] server logs.";
+}
+
 export function LineupBuilder({
   boats,
   roster,
@@ -310,10 +315,12 @@ export function LineupBuilder({
     try {
       const result = await addBoatAction(new FormData(event.currentTarget));
       if (result && !result.ok) {
-        showActionError("Unable to add boats", result.message ?? "The selected boats could not be added. Please try again.");
+        showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
+        return;
       }
     } catch (error) {
-      if (!reportActionError(error)) showActionError("Unable to add boats", "The selected boats could not be added. Please try again.");
+      if (reportActionError(error)) return;
+      showActionError("Unable to add boats", serverActionFailureMessage(error));
     }
   }
 
@@ -323,10 +330,12 @@ export function LineupBuilder({
     try {
       const result = await addBoatAction(new FormData(event.currentTarget));
       if (result && !result.ok) {
-        showActionError("Unable to add boats", result.message ?? "The private singles could not be added. Please try again.");
+        showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
+        return;
       }
     } catch (error) {
-      if (!reportActionError(error)) showActionError("Unable to add private singles", "The private singles could not be added. Please try again.");
+      if (reportActionError(error)) return;
+      showActionError("Unable to add boats", serverActionFailureMessage(error));
     }
   }
 
