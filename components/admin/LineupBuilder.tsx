@@ -307,13 +307,14 @@ export function LineupBuilder({
 
   async function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     if (selectedFleetBoatIds.size === 0) {
       setFleetSelectionError(true);
       return;
     }
     if (!await ensureFresh()) return;
     try {
-      const result = await addBoatAction(new FormData(event.currentTarget));
+      const result = await addBoatAction(formData);
       if (result && !result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
@@ -326,9 +327,10 @@ export function LineupBuilder({
 
   async function requestPrivateBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     if (!await ensureFresh()) return;
     try {
-      const result = await addBoatAction(new FormData(event.currentTarget));
+      const result = await addBoatAction(formData);
       if (result && !result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
