@@ -19,7 +19,7 @@ export default async function AdminRacesPage() {
     ? (
         await supabase
           .from("race_signups")
-          .select("id, race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(id, full_name)")
+          .select("id, race_event_id, member_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(id, full_name)")
           .in("race_event_id", raceIds)
       ).data ?? []
     : [];
@@ -61,7 +61,9 @@ export default async function AdminRacesPage() {
 
           {(races ?? []).map((race) => {
             const raceSignups = signups.filter((s) => s.race_event_id === race.id);
-            const signedUpMemberIds = new Set(raceSignups.map((signup) => (Array.isArray(signup.profiles) ? signup.profiles[0] : signup.profiles)?.id).filter(Boolean));
+            // Signup availability is deliberately based only on this race's
+            // signup rows. Never use lineup seats or cross-race conflict data here.
+            const currentRaceSignupIds = new Set(raceSignups.map((signup) => signup.member_id));
 
             return (
               <Card key={race.id} className="stack">
@@ -85,7 +87,7 @@ export default async function AdminRacesPage() {
                 </form>
                 <form action={addRaceSignupAdminFormAction} className="card-subtle inline-form">
                   <input type="hidden" name="race_event_id" value={race.id} />
-                  <Field label="Add rower"><select name="member_id" required defaultValue=""><option value="" disabled>Select a member</option>{(members ?? []).filter((member) => !signedUpMemberIds.has(member.id)).map((member) => <option key={member.id} value={member.id}>{member.full_name}</option>)}</select></Field>
+                  <Field label="Add rower"><select name="member_id" required defaultValue=""><option value="" disabled>Select a member</option>{(members ?? []).filter((member) => !currentRaceSignupIds.has(member.id)).map((member) => <option key={member.id} value={member.id}>{member.full_name}</option>)}</select></Field>
                   <Field label="Birthdate"><input name="birthdate" type="date" required /></Field>
                   <Button type="submit" variant="secondary">Add to Race</Button>
                 </form>
