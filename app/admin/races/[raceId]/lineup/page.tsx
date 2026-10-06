@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { LineupBuilder } from "@/components/admin/LineupBuilder";
-import { toEasternDateTimeLocalValue } from "@/lib/time";
 import {
   createLineupBoardAdminAction,
   addLineupBoatAdminAction,
@@ -14,6 +13,7 @@ import {
   saveLineupAssignmentsAdminAction,
   saveAndPublishLineupAssignmentsAdminAction,
   updateLineupBoatRaceTimeAdminAction,
+  updateRaceEntryTypeAdminAction,
 } from "@/lib/actions";
 import { getLineupBoardDetail, getRosterForBoard } from "@/lib/queries";
 import { findRaceConflicts, type RaceCommitment } from "@/lib/race-conflicts";
@@ -120,6 +120,17 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             <h3>{detail.board.title}</h3>
             <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
+          <form action={updateRaceEntryTypeAdminAction} className="card-subtle inline-form">
+            <input type="hidden" name="race_event_id" value={race.id} />
+            <input type="hidden" name="return_to" value={returnTo} />
+            <Field label="Lineup type">
+              <select name="entry_type" defaultValue={race.entry_type ?? "masters"}>
+                <option value="masters">Masters / QCRC lineup</option>
+                <option value="youth_boat_only">Youth boat-only use</option>
+              </select>
+            </Field>
+            <Button type="submit" variant="secondary">Update type</Button>
+          </form>
           <LineupBuilder
             boats={detail.boats}
             roster={roster}
@@ -135,6 +146,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             autoSaveAssignments
             boatOnly={race.entry_type === "youth_boat_only"}
             boatConflictMessages={fleetBoatMessages}
+            raceTimeAction={updateLineupBoatRaceTimeAdminAction}
           />
 
           {(currentRowerConflicts.length > 0 || Object.keys(currentBoatMessages).length > 0) ? <Card subtle className="stack">
@@ -144,24 +156,6 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             {currentRowerConflicts.map((conflict) => <p key={`${conflict.resourceId}-${conflict.first.raceId}-${conflict.second.raceId}`} className="error">⚠ {nameByMember.get(conflict.resourceId) ?? "Rower"}: {conflict.first.raceTitle} {formatTime(conflict.first.raceTime)} / {conflict.second.raceTitle} {formatTime(conflict.second.raceTime)} ({conflict.minutesApart} min apart)</p>)}
           </Card> : null}
 
-          <div className="stack lineup-race-times">
-            {detail.boats.map((boat) => (
-              <form key={boat.id} action={updateLineupBoatRaceTimeAdminAction} className="inline-form">
-                <input type="hidden" name="lineup_boat_id" value={boat.id} />
-                <input type="hidden" name="return_to" value={returnTo} />
-                <Field label={`${boat.boat_name} race time`}>
-                  <input
-                    name="race_time"
-                    type="datetime-local"
-                    defaultValue={toEasternDateTimeLocalValue(boat.race_time ? String(boat.race_time) : null)}
-                  />
-                </Field>
-                <Button type="submit" variant="secondary">
-                  Save Time
-                </Button>
-              </form>
-            ))}
-          </div>
         </Card>
       </main>
     </>

@@ -1,11 +1,10 @@
 import { TopNav } from "@/components/TopNav";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Card } from "@/components/ui/Card";
-import { Field } from "@/components/ui/Field";
-import { Button } from "@/components/ui/Button";
 import { saveRaceSignupAction } from "@/lib/actions";
 import { getRaceEventsWithMySignup } from "@/lib/queries";
 import { SignupRoster } from "@/components/SignupRoster";
+import { RaceSignupForm } from "@/components/racing/RaceSignupForm";
 
 export default async function RacingProgramPage() {
   const events = await getRaceEventsWithMySignup();
@@ -34,58 +33,7 @@ export default async function RacingProgramPage() {
                 </Card>
               ) : null}
 
-              <form action={saveRaceSignupAction} className="form-grid">
-                <input type="hidden" name="race_event_id" value={event.id} />
-
-                <Field label="Birthdate">
-                  <input name="birthdate" type="date" defaultValue={event.my_signup?.birthdate ?? ""} required />
-                </Field>
-
-                <Field label="Number of races">
-                  <select name="desired_race_count" defaultValue={String(event.my_signup?.desired_race_count ?? 1)}>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                  </select>
-                </Field>
-
-                <div className="row">
-                  <label>
-                    <input type="checkbox" name="wants_1x" value="true" defaultChecked={Boolean(event.my_signup?.wants_1x)} /> 1x
-                  </label>
-                  <label>
-                    <input type="checkbox" name="wants_2x" value="true" defaultChecked={Boolean(event.my_signup?.wants_2x)} /> 2x
-                  </label>
-                  <label>
-                    <input type="checkbox" name="wants_4x" value="true" defaultChecked={Boolean(event.my_signup?.wants_4x)} /> 4x
-                  </label>
-                </div>
-
-                <Field label="Comments (optional)">
-                  <textarea
-                    name="comments"
-                    rows={3}
-                    defaultValue={event.my_signup?.comments ?? ""}
-                    placeholder="Share lineup preferences, availability constraints, or anything coaches should know."
-                  />
-                </Field>
-
-                <div className="row">
-                  <input type="hidden" name="attending" value="true" />
-                  <Button type="submit">Save Race Signup</Button>
-                </div>
-              </form>
-
-              {event.my_signup ? (
-                <form action={saveRaceSignupAction}>
-                  <input type="hidden" name="race_event_id" value={event.id} />
-                  <input type="hidden" name="attending" value="false" />
-                  <Button type="submit" variant="secondary">
-                    Remove From This Race
-                  </Button>
-                </form>
-              ) : null}
+              <RaceSignupForm raceEventId={event.id} signup={event.my_signup} action={saveRaceSignupAction} />
             </Card>
           ))}
         </div>

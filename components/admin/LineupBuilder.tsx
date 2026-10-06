@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { useAppFreshness } from "@/components/AppFreshnessProvider";
+import { toEasternDateTimeLocalValue } from "@/lib/time";
 
 type RosterMember = {
   id: string;
@@ -22,6 +23,7 @@ type Boat = {
   boat_name: string;
   boat_class_id: string;
   fleet_boat_id?: string | null;
+  race_time?: string | null;
   seats: Seat[];
 };
 type ParticipantReservation = { id: string; boat_id: string; member_ids: string[] };
@@ -94,6 +96,7 @@ export function LineupBuilder({
   autoSaveAssignments = false,
   boatConflictMessages = {},
   boatOnly = false,
+  raceTimeAction,
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -114,6 +117,7 @@ export function LineupBuilder({
   autoSaveAssignments?: boolean;
   boatConflictMessages?: Record<string, string[]>;
   boatOnly?: boolean;
+  raceTimeAction?: (formData: FormData) => void;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
@@ -131,6 +135,7 @@ export function LineupBuilder({
   const saveFormRef = useRef<HTMLFormElement>(null);
   const publishFormRef = useRef<HTMLFormElement>(null);
   const hasMountedAssignmentsRef = useRef(false);
+  const autoSaveTimerRef = useRef<number | null>(null);
   const actionErrorDialogRef = useRef<HTMLDivElement>(null);
   const actionErrorReturnFocusRef = useRef<HTMLElement | null>(null);
   const reservationConfirmationPanelRef = useRef<HTMLDivElement>(null);
@@ -228,6 +233,7 @@ export function LineupBuilder({
       return;
     }
     const timer = window.setTimeout(() => {
+      autoSaveTimerRef.current = null;
       startSaving(async () => {
         try {
           if (!await ensureFresh()) return;
@@ -245,7 +251,11 @@ export function LineupBuilder({
         }
       });
     }, 350);
-    return () => window.clearTimeout(timer);
+    autoSaveTimerRef.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (autoSaveTimerRef.current === timer) autoSaveTimerRef.current = null;
+    };
   }, [action, assignmentsJson, autoSaveAssignments, ensureFresh, reportActionError, setLineupDirty]);
   const boatsWithOpenSeats = boatOnly ? [] : localBoats
     .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
@@ -400,6 +410,10 @@ export function LineupBuilder({
   function requestSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!saveFormRef.current) return;
+    if (autoSaveTimerRef.current !== null) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
     setActionError(null);
     startSaving(async () => {
       try {
@@ -476,13 +490,12 @@ export function LineupBuilder({
 
       <div className="card lineup-top-actions">
         <div className="row lineup-action-buttons">
-          {autoSaveAssignments ? <span className="muted" role="status">{isSaving ? "Saving rower…" : "Rower changes save automatically"}</span> : (
-            <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
-              <input type="hidden" name="assignments_json" value={assignmentsJson} />
-              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-              <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
-            </form>
-          )}
+          <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
+            <input type="hidden" name="assignments_json" value={assignmentsJson} />
+            {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+            <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
+          </form>
+          {autoSaveAssignments ? <span className="muted" role="status">{isSaving ? "Saving rower…" : hasUnsavedAssignments ? "Unsaved changes" : "Saved · rower changes also save automatically"}</span> : null}
           {!isPublished && saveAndPublishAction && lineupBoardId ? (
             <form ref={publishFormRef} onSubmit={requestPublish} className="inline-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
@@ -762,6 +775,24 @@ export function LineupBuilder({
       </div>
 
       {localBoats.length === 0 ? <p className="muted">No boats added yet.</p> : null}
+
+      {raceTimeAction ? (
+        <div className="stack lineup-race-times">
+          <h3>Race times</h3>
+          {localBoats.map((boat) => (
+            <form key={boat.id} action={raceTimeAction} className="inline-form" onSubmit={(event) => {
+              if (!hasUnsavedAssignments) return;
+              event.preventDefault();
+              showActionError("Save lineup changes first", "Race time changes reload this page. Save the current lineup changes first so no rower assignment is lost.");
+            }}>
+              <input type="hidden" name="lineup_boat_id" value={boat.id} />
+              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+              <Field label={`${boat.boat_name} race time`}><input name="race_time" type="datetime-local" defaultValue={toEasternDateTimeLocalValue(boat.race_time ?? null)} /></Field>
+              <Button type="submit" variant="secondary">Save Time</Button>
+            </form>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

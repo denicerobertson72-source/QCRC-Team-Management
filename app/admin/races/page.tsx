@@ -5,7 +5,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { addRaceEventAdminAction, updateRaceEventAdminAction, updateRaceSignupAdminAction, updateRacingPlanningSettingsAdminAction } from "@/lib/actions";
+import { addRaceEventAdminAction, updateRaceEventAdminAction, updateRaceSignupAdminAction, updateRacingPlanningSettingsAdminAction, addRaceSignupAdminFormAction, removeRaceSignupAdminFormAction } from "@/lib/actions";
 
 export default async function AdminRacesPage() {
   const { supabase } = await ensureAdminProfile();
@@ -19,11 +19,12 @@ export default async function AdminRacesPage() {
     ? (
         await supabase
           .from("race_signups")
-          .select("id, race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(full_name)")
+          .select("id, race_event_id, birthdate, desired_race_count, wants_1x, wants_2x, wants_4x, wants_8x, comments, profiles(id, full_name)")
           .in("race_event_id", raceIds)
       ).data ?? []
     : [];
   const { data: planningSettings } = await supabase.from("racing_planning_settings").select("minimum_race_turnaround_minutes").eq("id", true).maybeSingle();
+  const { data: members } = await supabase.from("profiles").select("id, full_name").eq("status", "active").order("full_name");
 
   return (
     <>
@@ -60,6 +61,7 @@ export default async function AdminRacesPage() {
 
           {(races ?? []).map((race) => {
             const raceSignups = signups.filter((s) => s.race_event_id === race.id);
+            const signedUpMemberIds = new Set(raceSignups.map((signup) => (Array.isArray(signup.profiles) ? signup.profiles[0] : signup.profiles)?.id).filter(Boolean));
 
             return (
               <Card key={race.id} className="stack">
@@ -80,6 +82,12 @@ export default async function AdminRacesPage() {
                   <Field label="Notes"><input name="notes" defaultValue={race.notes ?? ""} /></Field>
                   <Field label="Visible to rower skill levels"><div className="row" style={{ flexWrap: "wrap" }}>{["LTR", "Beginner", "Intermediate", "Advanced", "Elite"].map((level) => <label key={level}><input type="checkbox" name="eligible_skill_levels" value={level} defaultChecked={(race.eligible_skill_levels ?? ["LTR", "Beginner", "Intermediate", "Advanced", "Elite"]).includes(level)} /> {level}</label>)}</div></Field>
                   <Button type="submit" variant="secondary">Save Race Posting</Button>
+                </form>
+                <form action={addRaceSignupAdminFormAction} className="card-subtle inline-form">
+                  <input type="hidden" name="race_event_id" value={race.id} />
+                  <Field label="Add rower"><select name="member_id" required defaultValue=""><option value="" disabled>Select a member</option>{(members ?? []).filter((member) => !signedUpMemberIds.has(member.id)).map((member) => <option key={member.id} value={member.id}>{member.full_name}</option>)}</select></Field>
+                  <Field label="Birthdate"><input name="birthdate" type="date" required /></Field>
+                  <Button type="submit" variant="secondary">Add to Race</Button>
                 </form>
                 <table>
                   <thead>
@@ -113,7 +121,12 @@ export default async function AdminRacesPage() {
                                   <label><input type="checkbox" name="wants_4x" value="true" defaultChecked={signup.wants_4x} /> 4x</label>
                                 </div>
                                 <Field label="Comments"><input name="comments" defaultValue={signup.comments ?? ""} /></Field>
-                                <Button type="submit" variant="secondary">Save {profile?.full_name ?? "Signup"}</Button>
+                                <Button type="submit" variant="secondary">Update {profile?.full_name ?? "Signup"}</Button>
+                              </form>
+                              <form action={removeRaceSignupAdminFormAction} className="inline-form">
+                                <input type="hidden" name="race_event_id" value={race.id} />
+                                <input type="hidden" name="member_id" value={(profile as { id?: string } | null)?.id ?? ""} />
+                                <Button type="submit" variant="secondary">Remove from Race</Button>
                               </form>
                             </td>
                           </tr>

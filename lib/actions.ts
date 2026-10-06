@@ -2849,26 +2849,50 @@ export async function updateRacingPlanningSettingsAdminAction(formData: FormData
   revalidatePath("/admin/races");
 }
 
-export async function saveRaceSignupAction(formData: FormData) {
-  const { supabase, user } = await ensureProfile();
+export async function updateRaceEntryTypeAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
   const raceEventId = String(formData.get("race_event_id") ?? "");
-  const attending = String(formData.get("attending") ?? "true") === "true";
-  const birthdate = String(formData.get("birthdate") ?? "");
-  const desiredRaceCount = Number(formData.get("desired_race_count") ?? 1);
-  const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
-  const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
-  const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
-  const comments = String(formData.get("comments") ?? "").trim();
+  const entryType = String(formData.get("entry_type") ?? "");
+  const returnTo = String(formData.get("return_to") ?? "");
+  if (!raceEventId || !["masters", "youth_boat_only"].includes(entryType)) throw new Error("Choose a valid race lineup type.");
+  const { error } = await supabase.from("race_events").update({ entry_type: entryType }).eq("id", raceEventId);
+  if (error) throw error;
+  revalidatePath("/admin/races");
+  if (returnTo.startsWith("/")) redirect(returnTo);
+}
 
-  if (!attending) {
-    const { error } = await supabase
-      .from("race_signups")
-      .delete()
-      .eq("race_event_id", raceEventId)
-      .eq("member_id", user.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from("race_signups").upsert(
+export async function saveRaceSignupAction(formData: FormData): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { supabase, user } = await ensureProfile();
+    const raceEventId = String(formData.get("race_event_id") ?? "");
+    const attending = String(formData.get("attending") ?? "true") === "true";
+    const birthdate = String(formData.get("birthdate") ?? "");
+    const desiredRaceCount = Number(formData.get("desired_race_count") ?? 1);
+    const wants1x = String(formData.get("wants_1x") ?? "false") === "true";
+    const wants2x = String(formData.get("wants_2x") ?? "false") === "true";
+    const wants4x = String(formData.get("wants_4x") ?? "false") === "true";
+    const comments = String(formData.get("comments") ?? "").trim();
+    if (!raceEventId) throw new Error("Race not found.");
+
+    if (!attending) {
+      const { data: boards, error: boardError } = await supabase.from("lineup_boards").select("id").eq("board_type", "racing").eq("race_event_id", raceEventId);
+      if (boardError) throw boardError;
+      const boardIds = (boards ?? []).map((board) => board.id);
+      if (boardIds.length) {
+        const { data: boats, error: boatError } = await supabase.from("lineup_boats").select("id").in("lineup_board_id", boardIds);
+        if (boatError) throw boatError;
+        const boatIds = (boats ?? []).map((boat) => boat.id);
+        if (boatIds.length) {
+          const { data: seats, error: seatError } = await supabase.from("lineup_seats").select("id").in("lineup_boat_id", boatIds).eq("member_id", user.id).limit(1);
+          if (seatError) throw seatError;
+          if ((seats ?? []).length) throw new Error("Remove this rower from the lineup before removing their race signup.");
+        }
+      }
+      const { error } = await supabase.from("race_signups").delete().eq("race_event_id", raceEventId).eq("member_id", user.id);
+      if (error) throw error;
+    } else {
+      if (!birthdate) throw new Error("Enter a birthdate before joining this race.");
+      const { error } = await supabase.from("race_signups").upsert(
       {
         race_event_id: raceEventId,
         member_id: user.id,
@@ -2882,12 +2906,15 @@ export async function saveRaceSignupAction(formData: FormData) {
       },
       { onConflict: "race_event_id,member_id" },
     );
-    if (error) throw error;
+      if (error) throw error;
+    }
+    revalidatePath("/programs/racing");
+    revalidatePath("/admin/races");
+    revalidatePath("/admin/lineups");
+    return { ok: true, message: attending ? "Added" : "Removed" };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Race signup could not be saved." };
   }
-
-  revalidatePath("/programs/racing");
-  revalidatePath("/admin/races");
-  revalidatePath("/admin/lineups");
 }
 
 export async function updateRaceSignupAdminAction(formData: FormData) {
@@ -2904,6 +2931,56 @@ export async function updateRaceSignupAdminAction(formData: FormData) {
   if (error) throw error;
   revalidatePath("/admin/races");
   revalidatePath("/programs/racing");
+}
+
+export async function addRaceSignupAdminAction(formData: FormData): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { supabase } = await assertAdmin();
+    const raceEventId = String(formData.get("race_event_id") ?? "");
+    const memberId = String(formData.get("member_id") ?? "");
+    const birthdate = String(formData.get("birthdate") ?? "");
+    if (!raceEventId || !memberId || !birthdate) throw new Error("Choose a rower and enter their birthdate.");
+    const { error } = await supabase.from("race_signups").upsert({ race_event_id: raceEventId, member_id: memberId, birthdate, desired_race_count: 1, wants_1x: false, wants_2x: false, wants_4x: false, wants_8x: false }, { onConflict: "race_event_id,member_id" });
+    if (error) throw error;
+    revalidatePath("/admin/races");
+    return { ok: true, message: "Added" };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Rower could not be added." };
+  }
+}
+
+export async function removeRaceSignupAdminAction(formData: FormData): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { supabase } = await assertAdmin();
+    const raceEventId = String(formData.get("race_event_id") ?? "");
+    const memberId = String(formData.get("member_id") ?? "");
+    if (!raceEventId || !memberId) throw new Error("Race signup not found.");
+    const { data: boards, error: boardError } = await supabase.from("lineup_boards").select("id").eq("board_type", "racing").eq("race_event_id", raceEventId);
+    if (boardError) throw boardError;
+    const { data: boats, error: boatError } = (boards ?? []).length ? await supabase.from("lineup_boats").select("id").in("lineup_board_id", boards!.map((board) => board.id)) : { data: [], error: null };
+    if (boatError) throw boatError;
+    if ((boats ?? []).length) {
+      const { data: seats, error: seatError } = await supabase.from("lineup_seats").select("id").in("lineup_boat_id", boats!.map((boat) => boat.id)).eq("member_id", memberId).limit(1);
+      if (seatError) throw seatError;
+      if ((seats ?? []).length) throw new Error("Remove this rower from the lineup before removing their race signup.");
+    }
+    const { error } = await supabase.from("race_signups").delete().eq("race_event_id", raceEventId).eq("member_id", memberId);
+    if (error) throw error;
+    revalidatePath("/admin/races");
+    return { ok: true, message: "Removed" };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Rower could not be removed." };
+  }
+}
+
+export async function addRaceSignupAdminFormAction(formData: FormData): Promise<void> {
+  const result = await addRaceSignupAdminAction(formData);
+  if (!result.ok) throw new Error(result.message);
+}
+
+export async function removeRaceSignupAdminFormAction(formData: FormData): Promise<void> {
+  const result = await removeRaceSignupAdminAction(formData);
+  if (!result.ok) throw new Error(result.message);
 }
 
 export async function createLineupBoardAdminAction(formData: FormData) {
