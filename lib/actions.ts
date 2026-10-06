@@ -3195,7 +3195,7 @@ export async function saveLineupAssignmentsAdminAction(formData: FormData) {
     const seatIds = assignments.map((item) => item.seatId);
     if (new Set(seatIds).size !== seatIds.length) throw new Error("Each lineup seat may only be submitted once.");
     const { data: submittedSeats, error: submittedSeatsError } = seatIds.length
-      ? await supabase.from("lineup_seats").select("id, lineup_boats!inner(lineup_board_id, lineup_boards!inner(board_type))").in("id", seatIds)
+      ? await supabase.from("lineup_seats").select("id, lineup_boat_id, lineup_boats!inner(lineup_board_id, lineup_boards!inner(board_type))").in("id", seatIds)
       : { data: [], error: null };
     if (submittedSeatsError) throw submittedSeatsError;
     if ((submittedSeats ?? []).length !== seatIds.length) throw new Error("One or more lineup seats no longer exist.");
@@ -3204,8 +3204,9 @@ export async function saveLineupAssignmentsAdminAction(formData: FormData) {
     if (boardIds.size > 1) throw new Error("Lineup assignments must belong to one board.");
     const isRaceBoard = (submittedSeats?.[0] as any)?.lineup_boats?.lineup_boards?.board_type === "racing";
     if (isRaceBoard) {
-      const memberIds = assignments.map((item) => item.memberId).filter((id): id is string => Boolean(id));
-      if (new Set(memberIds).size !== memberIds.length) throw new Error("A rower may only occupy one seat in a race lineup.");
+      const boatIdBySeat = new Map((submittedSeats ?? []).map((seat: any) => [seat.id, seat.lineup_boat_id]));
+      const assignmentKeys = assignments.filter((item) => item.memberId).map((item) => `${boatIdBySeat.get(item.seatId)}:${item.memberId}`);
+      if (new Set(assignmentKeys).size !== assignmentKeys.length) throw new Error("A rower may only occupy one seat in an event lineup.");
       // Clear first so a coach can safely swap two occupied seats without a transient duplicate.
       const { error: clearError } = await supabase.from("lineup_seats").update({ member_id: null }).in("id", seatIds);
       if (clearError) throw clearError;

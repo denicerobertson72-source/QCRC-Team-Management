@@ -50,7 +50,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
       <>
         <TopNav />
         <main className="stack">
-          <PageTitle title={`Race Lineup: ${race.title}`} subtitle={race.event_date} />
+          <PageTitle title={`Regatta Lineups: ${race.title}`} subtitle={race.event_date} />
           <form action={createLineupBoardAdminAction} className="card form-grid">
             <input type="hidden" name="board_type" value="racing" />
             <input type="hidden" name="race_event_id" value={race.id} />
@@ -113,7 +113,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title={`Race Lineup: ${race.title}`} subtitle={race.event_date} />
+          <PageTitle title={`Regatta Lineups: ${race.title}`} subtitle={race.event_date} />
 
         <Card className="stack">
           <div className="page-title">
@@ -147,6 +147,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             boatOnly={race.entry_type === "youth_boat_only"}
             boatConflictMessages={fleetBoatMessages}
             raceTimeAction={updateLineupBoatRaceTimeAdminAction}
+            eventScopedAssignments
           />
 
           {(currentRowerConflicts.length > 0 || Object.keys(currentBoatMessages).length > 0) ? <Card subtle className="stack">

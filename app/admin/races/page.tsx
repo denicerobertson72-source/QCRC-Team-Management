@@ -30,7 +30,7 @@ export default async function AdminRacesPage() {
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Racing" subtitle="Create races and review rower signups." />
+        <PageTitle title="Admin: Regattas" subtitle="Create regattas and manage participant pools." />
 
         <form action={updateRacingPlanningSettingsAdminAction} className="card inline-form">
           <Field label="Race resource turnaround (minutes)"><input name="minimum_race_turnaround_minutes" type="number" min={1} max={240} defaultValue={planningSettings?.minimum_race_turnaround_minutes ?? 30} required /></Field>
@@ -38,8 +38,8 @@ export default async function AdminRacesPage() {
         </form>
 
         <form action={addRaceEventAdminAction} className="card form-grid">
-          <h3>Add Race</h3>
-          <Field label="Race title">
+          <h3>Add Regatta</h3>
+          <Field label="Regatta name">
             <input name="title" required />
           </Field>
           <Field label="Race date">
@@ -53,7 +53,7 @@ export default async function AdminRacesPage() {
             <input name="notes" />
           </Field>
           <Field label="Visible to rower skill levels"><div className="row" style={{ flexWrap: "wrap" }}>{["LTR", "Beginner", "Intermediate", "Advanced", "Elite"].map((level) => <label key={level}><input type="checkbox" name="eligible_skill_levels" value={level} defaultChecked /> {level}</label>)}</div></Field>
-          <Button type="submit">Create Race</Button>
+          <Button type="submit">Create Regatta</Button>
         </form>
 
         <div className="stack">
@@ -69,7 +69,7 @@ export default async function AdminRacesPage() {
               <Card key={race.id} className="stack">
                 <div className="page-title">
                   <h3>{race.title}</h3>
-                  <Link href={`/admin/races/${race.id}/lineup`}>Build Lineup</Link>
+                  <Link href={`/admin/races/${race.id}/lineup`}>Build Event Lineups</Link>
                 </div>
                 <p className="muted">
                   {race.event_date}
@@ -77,7 +77,7 @@ export default async function AdminRacesPage() {
                 </p>
                 <form action={updateRaceEventAdminAction} className="form-grid">
                   <input type="hidden" name="race_event_id" value={race.id} />
-                  <Field label="Race title"><input name="title" defaultValue={race.title} required /></Field>
+                  <Field label="Regatta name"><input name="title" defaultValue={race.title} required /></Field>
                   <Field label="Race date"><input name="event_date" type="date" defaultValue={race.event_date} required /></Field>
                   <Field label="Race type"><select name="entry_type" defaultValue={race.entry_type ?? "masters"}><option value="masters">Masters / QCRC lineup</option><option value="youth_boat_only">Youth boat-only use</option></select></Field>
                   <Field label="Location"><input name="location" defaultValue={race.location ?? ""} /></Field>
@@ -87,9 +87,9 @@ export default async function AdminRacesPage() {
                 </form>
                 <form action={addRaceSignupAdminFormAction} className="card-subtle inline-form">
                   <input type="hidden" name="race_event_id" value={race.id} />
-                  <Field label="Add rower"><select name="member_id" required defaultValue=""><option value="" disabled>Select a member</option>{(members ?? []).filter((member) => !currentRaceSignupIds.has(member.id)).map((member) => <option key={member.id} value={member.id}>{member.full_name}</option>)}</select></Field>
+                  <Field label="Add participant"><select name="member_id" required defaultValue=""><option value="" disabled>Select a member</option>{(members ?? []).filter((member) => !currentRaceSignupIds.has(member.id)).map((member) => <option key={member.id} value={member.id}>{member.full_name}</option>)}</select></Field>
                   <Field label="Birthdate"><input name="birthdate" type="date" required /></Field>
-                  <Button type="submit" variant="secondary">Add to Race</Button>
+                  <Button type="submit" variant="secondary">Add to Regatta</Button>
                 </form>
                 <table>
                   <thead>
@@ -116,7 +116,7 @@ export default async function AdminRacesPage() {
                                 <input type="hidden" name="signup_id" value={signup.id} />
                                 <strong>{profile?.full_name ?? "Unknown"}</strong>
                                 <Field label="Birthdate"><input name="birthdate" type="date" defaultValue={signup.birthdate} required /></Field>
-                                <Field label="Number of races"><select name="desired_race_count" defaultValue={String(signup.desired_race_count ?? 1)}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}</select></Field>
+                                <Field label="Desired number of events"><select name="desired_race_count" defaultValue={String(signup.desired_race_count ?? 1)}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}</select></Field>
                                 <div className="row" style={{ flexWrap: "wrap" }}>
                                   <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={signup.wants_1x} /> 1x</label>
                                   <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={signup.wants_2x} /> 2x</label>
@@ -128,7 +128,7 @@ export default async function AdminRacesPage() {
                               <form action={removeRaceSignupAdminFormAction} className="inline-form">
                                 <input type="hidden" name="race_event_id" value={race.id} />
                                 <input type="hidden" name="member_id" value={(profile as { id?: string } | null)?.id ?? ""} />
-                                <Button type="submit" variant="secondary">Remove from Race</Button>
+                                <Button type="submit" variant="secondary">Remove from Regatta</Button>
                               </form>
                             </td>
                           </tr>

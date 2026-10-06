@@ -48,7 +48,7 @@ export function RaceSignupForm({ raceEventId, signup, action }: { raceEventId: s
         <input type="hidden" name="race_event_id" value={raceEventId} />
         <input type="hidden" name="attending" value="true" />
         <Field label="Birthdate"><input name="birthdate" type="date" defaultValue={signup?.birthdate ?? ""} required /></Field>
-        <Field label="Number of races"><select name="desired_race_count" defaultValue={String(signup?.desired_race_count ?? 1)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></Field>
+        <Field label="Desired number of events"><select name="desired_race_count" defaultValue={String(signup?.desired_race_count ?? 1)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></Field>
         <div className="row">
           <label><input type="checkbox" name="wants_1x" value="true" defaultChecked={Boolean(signup?.wants_1x)} /> 1x</label>
           <label><input type="checkbox" name="wants_2x" value="true" defaultChecked={Boolean(signup?.wants_2x)} /> 2x</label>

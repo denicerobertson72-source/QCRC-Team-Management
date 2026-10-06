@@ -13,7 +13,7 @@ export default async function RacingProgramPage() {
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Racing Signups" subtitle="Pick races, enter birthdate, choose preferred boat classes, and note how many races you want to row." />
+        <PageTitle title="Regatta Signups" subtitle="Join a regatta once, then share boat preferences and how many events you would like to race." />
 
         <div className="stack">
           {events.length === 0 ? <Card subtle>No upcoming races posted.</Card> : null}

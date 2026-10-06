@@ -97,6 +97,7 @@ export function LineupBuilder({
   boatConflictMessages = {},
   boatOnly = false,
   raceTimeAction,
+  eventScopedAssignments = false,
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -118,6 +119,8 @@ export function LineupBuilder({
   boatConflictMessages?: Record<string, string[]>;
   boatOnly?: boolean;
   raceTimeAction?: (formData: FormData) => void;
+  /** Racing boards are regattas: each boat is an independent event assignment. */
+  eventScopedAssignments?: boolean;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
@@ -168,6 +171,8 @@ export function LineupBuilder({
 
       if (!allowMultiSeat) {
         for (const boat of next) {
+          const containsTargetSeat = boat.seats.some((seat) => seat.id === seatId);
+          if (eventScopedAssignments && !containsTargetSeat) continue;
           for (const seat of boat.seats) {
             if (seat.member_id === memberId) {
               seat.member_id = null;
@@ -208,8 +213,11 @@ export function LineupBuilder({
     );
   }
 
-  function seatOptions(currentMemberId: string | null) {
-    return sortedRoster.filter((member) => !assignedMemberIds.has(member.id) || member.id === currentMemberId);
+  function seatOptions(boatId: string, currentMemberId: string | null) {
+    const assignedInScope = eventScopedAssignments
+      ? new Set(localBoats.find((boat) => boat.id === boatId)?.seats.map((seat) => seat.member_id).filter(Boolean))
+      : assignedMemberIds;
+    return sortedRoster.filter((member) => !assignedInScope.has(member.id) || member.id === currentMemberId);
   }
 
   const assignmentsJson = JSON.stringify(
@@ -521,7 +529,7 @@ export function LineupBuilder({
             <form onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-          <h3>Add Boats</h3>
+          <h3>{eventScopedAssignments ? "Add Event Boat" : "Add Boats"}</h3>
           <div className="lineup-add-boat-fields">
             <div>
               <label className="field-label">Boat size</label>
@@ -668,7 +676,7 @@ export function LineupBuilder({
         </div>
       ) : null}
 
-      {!allowMultiSeat ? (
+      {!allowMultiSeat && !eventScopedAssignments ? (
         <div className="card stack lineup-unassigned-box">
           <div className="page-title">
             <h3>Unassigned Rowers</h3>
@@ -714,7 +722,7 @@ export function LineupBuilder({
             <summary className="lineup-boat-summary">
               <div className="stack">
                 <h3>
-                  {boat.boat_name} ({boat.boat_class_id})
+                  {eventScopedAssignments ? `Event · ${boat.boat_name} (${boat.boat_class_id})` : `${boat.boat_name} (${boat.boat_class_id})`}
                 </h3>
                 <span className="muted">{boatOnly ? "Youth boat use · no QCRC rower lineup required" : `${boat.seats.filter((seat) => seat.member_id).length}/${boat.seats.length} seats assigned`}</span>
               </div>
@@ -755,7 +763,7 @@ export function LineupBuilder({
                     }}
                   >
                     <option value="">Select a rower</option>
-                    {seatOptions(seat.member_id).map((member) => (
+                    {seatOptions(boat.id, seat.member_id).map((member) => (
                       <option key={member.id} value={member.id}>
                         {member.full_name}
                       </option>
