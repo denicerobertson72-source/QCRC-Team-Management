@@ -91,6 +91,9 @@ export function LineupBuilder({
   participantReservations = [],
   isCoachedTraining = false,
   isAdvancedTraining = false,
+  autoSaveAssignments = false,
+  boatConflictMessages = {},
+  boatOnly = false,
 }: {
   boats: Boat[];
   roster: RosterMember[];
@@ -107,6 +110,10 @@ export function LineupBuilder({
   participantReservations?: ParticipantReservation[];
   isCoachedTraining?: boolean;
   isAdvancedTraining?: boolean;
+  /** Race seats save immediately; other lineup modes retain their explicit save flow. */
+  autoSaveAssignments?: boolean;
+  boatConflictMessages?: Record<string, string[]>;
+  boatOnly?: boolean;
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
@@ -123,6 +130,7 @@ export function LineupBuilder({
   const [isPublishing, startPublishing] = useTransition();
   const saveFormRef = useRef<HTMLFormElement>(null);
   const publishFormRef = useRef<HTMLFormElement>(null);
+  const hasMountedAssignmentsRef = useRef(false);
   const actionErrorDialogRef = useRef<HTMLDivElement>(null);
   const actionErrorReturnFocusRef = useRef<HTMLElement | null>(null);
   const reservationConfirmationPanelRef = useRef<HTMLDivElement>(null);
@@ -212,7 +220,34 @@ export function LineupBuilder({
     setLineupDirty(hasUnsavedAssignments);
     return () => setLineupDirty(false);
   }, [hasUnsavedAssignments, setLineupDirty]);
-  const boatsWithOpenSeats = localBoats
+
+  useEffect(() => {
+    if (!autoSaveAssignments) return;
+    if (!hasMountedAssignmentsRef.current) {
+      hasMountedAssignmentsRef.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      startSaving(async () => {
+        try {
+          if (!await ensureFresh()) return;
+          const formData = new FormData();
+          formData.set("assignments_json", assignmentsJson);
+          const result = await action(formData);
+          if (!result.ok) {
+            showActionError("Unable to save rower", result.message ?? "The rower assignment could not be saved. Please try again.");
+            return;
+          }
+          setLineupDirty(false);
+        } catch (error) {
+          if (reportActionError(error)) return;
+          showActionError("Unable to save rower", "The rower assignment could not be saved. Please try again.");
+        }
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [action, assignmentsJson, autoSaveAssignments, ensureFresh, reportActionError, setLineupDirty]);
+  const boatsWithOpenSeats = boatOnly ? [] : localBoats
     .map((boat) => ({ boat, openSeats: boat.seats.filter((seat) => !seat.member_id).length }))
     .filter((item) => item.openSeats > 0);
   const publishReconciliations = useMemo(() => {
@@ -441,11 +476,13 @@ export function LineupBuilder({
 
       <div className="card lineup-top-actions">
         <div className="row lineup-action-buttons">
-          <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
-            <input type="hidden" name="assignments_json" value={assignmentsJson} />
-            {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-            <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
-          </form>
+          {autoSaveAssignments ? <span className="muted" role="status">{isSaving ? "Saving rower…" : "Rower changes save automatically"}</span> : (
+            <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
+              <input type="hidden" name="assignments_json" value={assignmentsJson} />
+              {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+              <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
+            </form>
+          )}
           {!isPublished && saveAndPublishAction && lineupBoardId ? (
             <form ref={publishFormRef} onSubmit={requestPublish} className="inline-form">
               <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
@@ -497,6 +534,7 @@ export function LineupBuilder({
                   />
                   <span>
                     {boat.name}
+                    {boatConflictMessages[boat.id]?.map((message) => <small key={message} className="error">⚠ {message}</small>)}
                     {boat.status === "reserved_by_participant" ? <small>Reserved by {boat.reservation?.member_name ?? "a training participant"} · Training participant</small> : null}
                     {boat.status === "reserved_by_nonparticipant" ? <small>Reserved by {boat.reservation?.member_name ?? "another member"} · Not in coached training</small> : null}
                     {boat.status === "held_for_advanced_training" ? <small>Held for Advanced Training</small> : null}
@@ -665,13 +703,9 @@ export function LineupBuilder({
                 <h3>
                   {boat.boat_name} ({boat.boat_class_id})
                 </h3>
-                <span className="muted">
-                  {boat.seats.filter((seat) => seat.member_id).length}/{boat.seats.length} seats assigned
-                </span>
+                <span className="muted">{boatOnly ? "Youth boat use · no QCRC rower lineup required" : `${boat.seats.filter((seat) => seat.member_id).length}/${boat.seats.length} seats assigned`}</span>
               </div>
-              <span className={openSeats > 0 ? "error" : "member-summary-hint"}>
-                {openSeats > 0 ? `${openSeats} open` : "Assigned · expand"}
-              </span>
+              <span className={boatOnly ? "member-summary-hint" : openSeats > 0 ? "error" : "member-summary-hint"}>{boatOnly ? "Boat committed" : openSeats > 0 ? `${openSeats} open` : "Assigned · expand"}</span>
             </summary>
             <div className="lineup-boat-details stack">
               <form action={removeBoatAction} className="inline-form lineup-boat-remove">
@@ -681,7 +715,7 @@ export function LineupBuilder({
                   Remove Boat
                 </Button>
               </form>
-            {orderedSeats(boat.boat_class_id, boat.seats).map((seat) => (
+            {!boatOnly && orderedSeats(boat.boat_class_id, boat.seats).map((seat) => (
               <div
                 key={seat.id}
                 className="card-subtle row lineup-seat-card"

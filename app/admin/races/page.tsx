@@ -5,13 +5,13 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { addRaceEventAdminAction, updateRaceEventAdminAction, updateRaceSignupAdminAction } from "@/lib/actions";
+import { addRaceEventAdminAction, updateRaceEventAdminAction, updateRaceSignupAdminAction, updateRacingPlanningSettingsAdminAction } from "@/lib/actions";
 
 export default async function AdminRacesPage() {
   const { supabase } = await ensureAdminProfile();
   const { data: races } = await supabase
     .from("race_events")
-    .select("id, title, event_date, location, notes, eligible_skill_levels")
+    .select("id, title, event_date, location, notes, eligible_skill_levels, entry_type")
     .order("event_date", { ascending: false });
 
   const raceIds = (races ?? []).map((r) => r.id);
@@ -23,12 +23,18 @@ export default async function AdminRacesPage() {
           .in("race_event_id", raceIds)
       ).data ?? []
     : [];
+  const { data: planningSettings } = await supabase.from("racing_planning_settings").select("minimum_race_turnaround_minutes").eq("id", true).maybeSingle();
 
   return (
     <>
       <TopNav />
       <main className="stack">
         <PageTitle title="Admin: Racing" subtitle="Create races and review rower signups." />
+
+        <form action={updateRacingPlanningSettingsAdminAction} className="card inline-form">
+          <Field label="Race resource turnaround (minutes)"><input name="minimum_race_turnaround_minutes" type="number" min={1} max={240} defaultValue={planningSettings?.minimum_race_turnaround_minutes ?? 30} required /></Field>
+          <Button type="submit" variant="secondary">Save planning setting</Button>
+        </form>
 
         <form action={addRaceEventAdminAction} className="card form-grid">
           <h3>Add Race</h3>
@@ -38,6 +44,7 @@ export default async function AdminRacesPage() {
           <Field label="Race date">
             <input name="event_date" type="date" required />
           </Field>
+          <Field label="Race type"><select name="entry_type" defaultValue="masters"><option value="masters">Masters / QCRC lineup</option><option value="youth_boat_only">Youth boat-only use</option></select></Field>
           <Field label="Location">
             <input name="location" />
           </Field>
@@ -68,6 +75,7 @@ export default async function AdminRacesPage() {
                   <input type="hidden" name="race_event_id" value={race.id} />
                   <Field label="Race title"><input name="title" defaultValue={race.title} required /></Field>
                   <Field label="Race date"><input name="event_date" type="date" defaultValue={race.event_date} required /></Field>
+                  <Field label="Race type"><select name="entry_type" defaultValue={race.entry_type ?? "masters"}><option value="masters">Masters / QCRC lineup</option><option value="youth_boat_only">Youth boat-only use</option></select></Field>
                   <Field label="Location"><input name="location" defaultValue={race.location ?? ""} /></Field>
                   <Field label="Notes"><input name="notes" defaultValue={race.notes ?? ""} /></Field>
                   <Field label="Visible to rower skill levels"><div className="row" style={{ flexWrap: "wrap" }}>{["LTR", "Beginner", "Intermediate", "Advanced", "Elite"].map((level) => <label key={level}><input type="checkbox" name="eligible_skill_levels" value={level} defaultChecked={(race.eligible_skill_levels ?? ["LTR", "Beginner", "Intermediate", "Advanced", "Elite"]).includes(level)} /> {level}</label>)}</div></Field>

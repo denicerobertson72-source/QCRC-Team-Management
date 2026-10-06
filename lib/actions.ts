@@ -2803,8 +2803,9 @@ export async function addRaceEventAdminAction(formData: FormData) {
   const eventDate = String(formData.get("event_date") ?? "");
   const location = String(formData.get("location") ?? "");
   const notes = String(formData.get("notes") ?? "");
+  const entryType = String(formData.get("entry_type") ?? "masters");
   const eligibleSkillLevels = formData.getAll("eligible_skill_levels").map(String).filter(Boolean);
-  if (eligibleSkillLevels.length === 0) throw new Error("Choose at least one rower skill level.");
+  if (eligibleSkillLevels.length === 0 || !["masters", "youth_boat_only"].includes(entryType)) throw new Error("Choose at least one rower skill level and a valid race type.");
 
   const { error } = await supabase.from("race_events").insert({
     title,
@@ -2812,6 +2813,7 @@ export async function addRaceEventAdminAction(formData: FormData) {
     location: location || null,
     notes: notes || null,
     eligible_skill_levels: eligibleSkillLevels,
+    entry_type: entryType,
     created_by: user.id,
   });
   if (error) throw error;
@@ -2827,11 +2829,23 @@ export async function updateRaceEventAdminAction(formData: FormData) {
   const eventDate = String(formData.get("event_date") ?? "");
   const location = String(formData.get("location") ?? "");
   const notes = String(formData.get("notes") ?? "");
+  const entryType = String(formData.get("entry_type") ?? "masters");
   const eligibleSkillLevels = formData.getAll("eligible_skill_levels").map(String).filter(Boolean);
-  if (!raceEventId || !title || !eventDate || eligibleSkillLevels.length === 0) throw new Error("Enter a title, date, and at least one rower skill level.");
-  const { error } = await supabase.from("race_events").update({ title, event_date: eventDate, location: location || null, notes: notes || null, eligible_skill_levels: eligibleSkillLevels }).eq("id", raceEventId);
+  if (!raceEventId || !title || !eventDate || eligibleSkillLevels.length === 0 || !["masters", "youth_boat_only"].includes(entryType)) throw new Error("Enter a title, date, race type, and at least one rower skill level.");
+  const { error } = await supabase.from("race_events").update({ title, event_date: eventDate, location: location || null, notes: notes || null, eligible_skill_levels: eligibleSkillLevels, entry_type: entryType }).eq("id", raceEventId);
   if (error) throw error;
   revalidatePath("/programs/racing");
+  revalidatePath("/admin/races");
+}
+
+export async function updateRacingPlanningSettingsAdminAction(formData: FormData) {
+  const { supabase } = await assertAdmin();
+  const minimumRaceTurnaroundMinutes = Number(formData.get("minimum_race_turnaround_minutes"));
+  if (!Number.isInteger(minimumRaceTurnaroundMinutes) || minimumRaceTurnaroundMinutes < 1 || minimumRaceTurnaroundMinutes > 240) {
+    throw new Error("Race turnaround must be between 1 and 240 minutes.");
+  }
+  const { error } = await supabase.from("racing_planning_settings").upsert({ id: true, minimum_race_turnaround_minutes: minimumRaceTurnaroundMinutes });
+  if (error) throw error;
   revalidatePath("/admin/races");
 }
 
@@ -3097,6 +3111,28 @@ export async function saveLineupAssignmentsAdminAction(formData: FormData) {
     const { supabase } = await assertAdmin();
     const assignmentJson = String(formData.get("assignments_json") ?? "[]");
     const assignments = JSON.parse(assignmentJson) as { seatId: string; memberId: string | null }[];
+
+    if (!Array.isArray(assignments) || assignments.some((item) => !item || typeof item.seatId !== "string" || (item.memberId !== null && typeof item.memberId !== "string"))) {
+      throw new Error("Invalid lineup assignments.");
+    }
+    const seatIds = assignments.map((item) => item.seatId);
+    if (new Set(seatIds).size !== seatIds.length) throw new Error("Each lineup seat may only be submitted once.");
+    const { data: submittedSeats, error: submittedSeatsError } = seatIds.length
+      ? await supabase.from("lineup_seats").select("id, lineup_boats!inner(lineup_board_id, lineup_boards!inner(board_type))").in("id", seatIds)
+      : { data: [], error: null };
+    if (submittedSeatsError) throw submittedSeatsError;
+    if ((submittedSeats ?? []).length !== seatIds.length) throw new Error("One or more lineup seats no longer exist.");
+
+    const boardIds = new Set((submittedSeats ?? []).map((seat: any) => seat.lineup_boats?.lineup_board_id));
+    if (boardIds.size > 1) throw new Error("Lineup assignments must belong to one board.");
+    const isRaceBoard = (submittedSeats?.[0] as any)?.lineup_boats?.lineup_boards?.board_type === "racing";
+    if (isRaceBoard) {
+      const memberIds = assignments.map((item) => item.memberId).filter((id): id is string => Boolean(id));
+      if (new Set(memberIds).size !== memberIds.length) throw new Error("A rower may only occupy one seat in a race lineup.");
+      // Clear first so a coach can safely swap two occupied seats without a transient duplicate.
+      const { error: clearError } = await supabase.from("lineup_seats").update({ member_id: null }).in("id", seatIds);
+      if (clearError) throw clearError;
+    }
 
     for (const item of assignments) {
       const { error } = await supabase
