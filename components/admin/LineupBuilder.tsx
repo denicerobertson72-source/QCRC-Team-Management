@@ -24,6 +24,7 @@ type Boat = {
   boat_class_id: string;
   fleet_boat_id?: string | null;
   race_time?: string | null;
+  entry_type?: "masters" | "youth_boat_only" | string;
   seats: Seat[];
 };
 type ParticipantReservation = { id: string; boat_id: string; member_ids: string[] };
@@ -124,6 +125,7 @@ export function LineupBuilder({
 }) {
   const [localBoats, setLocalBoats] = useState<Boat[]>(boats);
   const [newBoatClass, setNewBoatClass] = useState("4x");
+  const [newEntryType, setNewEntryType] = useState<"masters" | "youth_boat_only">("masters");
   const [privateBoatQuantity, setPrivateBoatQuantity] = useState(1);
   const [selectedFleetBoatIds, setSelectedFleetBoatIds] = useState<Set<string>>(new Set());
   const [fleetSelectionError, setFleetSelectionError] = useState(false);
@@ -134,6 +136,8 @@ export function LineupBuilder({
   const [reservationConfirmationErrorSignature, setReservationConfirmationErrorSignature] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null);
   const [isSaving, startSaving] = useTransition();
+  const [isAddingBoats, setIsAddingBoats] = useState(false);
+  const [addStatus, setAddStatus] = useState("");
   const [isPublishing, startPublishing] = useTransition();
   const saveFormRef = useRef<HTMLFormElement>(null);
   const publishFormRef = useRef<HTMLFormElement>(null);
@@ -360,39 +364,52 @@ export function LineupBuilder({
 
   async function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAddingBoats) return;
+    setIsAddingBoats(true);
+    setAddStatus("");
     const formData = new FormData(event.currentTarget);
     if (selectedFleetBoatIds.size === 0) {
       setFleetSelectionError(true);
+      setIsAddingBoats(false);
       return;
     }
-    if (!await ensureFresh()) return;
     try {
+      if (!await ensureFresh()) return;
       const result = await addBoatAction(formData);
       if (!result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
       }
-      refreshOperationalData();
+      setAddStatus("Added");
+      window.setTimeout(refreshOperationalData, 250);
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
+    } finally {
+      setIsAddingBoats(false);
     }
   }
 
   async function requestPrivateBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAddingBoats) return;
+    setIsAddingBoats(true);
+    setAddStatus("");
     const formData = new FormData(event.currentTarget);
-    if (!await ensureFresh()) return;
     try {
+      if (!await ensureFresh()) return;
       const result = await addBoatAction(formData);
       if (!result.ok) {
         showActionError("Unable to add boats", result.message ?? "Server Action returned no diagnostic message. Check [advanced-add-boats] server logs.");
         return;
       }
-      refreshOperationalData();
+      setAddStatus("Added");
+      window.setTimeout(refreshOperationalData, 250);
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
+    } finally {
+      setIsAddingBoats(false);
     }
   }
 
@@ -528,9 +545,11 @@ export function LineupBuilder({
         <>
             <form onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
+          <input type="hidden" name="entry_type" value={newEntryType} />
           {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
           <h3>{eventScopedAssignments ? "Add Event Boat" : "Add Boats"}</h3>
           <div className="lineup-add-boat-fields">
+            {eventScopedAssignments ? <div><label className="field-label">Event use</label><select value={newEntryType} onChange={(event) => setNewEntryType(event.target.value as "masters" | "youth_boat_only")}><option value="masters">Masters / QCRC event</option><option value="youth_boat_only">Youth boat-only</option></select></div> : null}
             <div>
               <label className="field-label">Boat size</label>
               <select name="boat_class_id" value={newBoatClass} onChange={(event) => setNewBoatClass(event.target.value)}>
@@ -577,7 +596,8 @@ export function LineupBuilder({
               ) : null}
             </div>
           </details>
-            <Button type="submit">Add Selected Boats</Button>
+            <Button type="submit" disabled={isAddingBoats}>{isAddingBoats ? "Adding…" : "Add Selected Boats"}</Button>
+            {addStatus ? <span className="muted" role="status">{addStatus}</span> : null}
           </form>
 
           {canAddAdvancedPrivateBoat ? (
@@ -603,7 +623,7 @@ export function LineupBuilder({
                     }}
                   />
                 </Field>
-                <Button type="submit">Add {privateBoatQuantity} Private Single{privateBoatQuantity === 1 ? "" : "s"}</Button>
+                <Button type="submit" disabled={isAddingBoats}>{isAddingBoats ? "Adding…" : `Add ${privateBoatQuantity} Private Single${privateBoatQuantity === 1 ? "" : "s"}`}</Button>
               </div>
               <span className="muted">Private boats are lineup-only and do not need a QCRC hold or reservation.</span>
             </form>

@@ -3045,6 +3045,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const confirmedOverrideReservationIds = formData.getAll("confirmed_override_reservation_ids").map(String).filter(Boolean);
   const includePrivateBoat = String(formData.get("private_boat") ?? "false") === "true";
   const privateBoatQuantity = Number(formData.get("private_boat_quantity") ?? "1");
+  const entryType = String(formData.get("entry_type") ?? "masters");
   const returnTo = String(formData.get("return_to") ?? "");
   console.info("[advanced-add-boats] form parsed", {
     hasLineupBoardId: Boolean(lineupBoardId),
@@ -3057,7 +3058,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   stage = "load-board";
   const { data: board, error: boardError } = await supabase
     .from("lineup_boards")
-    .select("session_id, sessions(session_type)")
+    .select("board_type, session_id, sessions(session_type)")
     .eq("id", lineupBoardId)
     .maybeSingle();
   if (boardError || !board) {
@@ -3068,6 +3069,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
   const isAdvancedTraining = session?.session_type === "coached_training_advanced";
   const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
+  const isYouthBoatOnly = board.board_type === "racing" && entryType === "youth_boat_only";
   console.info("[advanced-add-boats] board resolved", { isAdvancedTraining, isCoachedTraining });
   stage = "validate";
   const canAddPrivateBoat = isAdvancedTraining || boatClassId === "1x";
@@ -3147,7 +3149,8 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   if (fleetError) throw fleetError;
   const selectedBoats = (fleetBoats ?? []).filter((boat) => boat.boat_class_id === boatClassId && boat.status === "available");
   if (selectedBoats.length !== boatIds.length) throw new Error("One or more selected fleet boats are unavailable or do not match that boat size.");
-  const entries = [...selectedBoats.map((boat) => ({ boat_name: boat.name, boat_class_id: boat.boat_class_id, fleet_boat_id: boat.id })), ...(includePrivateBoat ? [{ boat_name: "Private boat", boat_class_id: "1x", fleet_boat_id: null }] : [])];
+  if (!["masters", "youth_boat_only"].includes(entryType)) throw new Error("Choose a valid event use.");
+  const entries = [...selectedBoats.map((boat) => ({ boat_name: boat.name, boat_class_id: boat.boat_class_id, fleet_boat_id: boat.id, entry_type: isYouthBoatOnly ? "youth_boat_only" : "masters" })), ...(includePrivateBoat ? [{ boat_name: "Private boat", boat_class_id: "1x", fleet_boat_id: null, entry_type: "masters" }] : [])];
 
   const { data: existingBoats, error: existingError } = await supabase
     .from("lineup_boats")
@@ -3161,12 +3164,14 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const { data, error } = await supabase
     .from("lineup_boats")
     .insert(entries.map((entry, index) => ({ lineup_board_id: lineupBoardId, ...entry, sort_order: nextSortOrder + index })))
-    .select("id, boat_class_id");
+    .select("id, boat_class_id, entry_type");
   if (error) throw error;
-  const seatRows = (data ?? []).flatMap((boat) => Array.from({ length: seatCountFromClass(boat.boat_class_id) }, (_, idx) => ({ lineup_boat_id: boat.id, seat_number: idx + 1, member_id: null as string | null })));
+  const seatRows = (data ?? []).filter((boat) => boat.entry_type !== "youth_boat_only").flatMap((boat) => Array.from({ length: seatCountFromClass(boat.boat_class_id) }, (_, idx) => ({ lineup_boat_id: boat.id, seat_number: idx + 1, member_id: null as string | null })));
 
-  const { error: seatError } = await supabase.from("lineup_seats").insert(seatRows);
-  if (seatError) throw seatError;
+  if (seatRows.length) {
+    const { error: seatError } = await supabase.from("lineup_seats").insert(seatRows);
+    if (seatError) throw seatError;
+  }
   }
 
   stage = "revalidate";

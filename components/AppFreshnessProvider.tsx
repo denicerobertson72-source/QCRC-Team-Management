@@ -16,6 +16,7 @@ type FreshnessContextValue = {
 
 const FreshnessContext = createContext<FreshnessContextValue | null>(null);
 const RESUME_REFRESH_MS = 5 * 60 * 1000;
+const FRESH_CHECK_CACHE_MS = 45 * 1000;
 
 export function useAppFreshness() {
   const value = useContext(FreshnessContext);
@@ -29,12 +30,14 @@ export function AppFreshnessProvider({ clientBuild, children }: { clientBuild: s
   const dirtyRef = useRef(false);
   const hiddenAtRef = useRef<number | null>(null);
   const checkInFlightRef = useRef<Promise<boolean> | null>(null);
+  const lastFreshAtRef = useRef(0);
   const [staleReason, setStaleReason] = useState<"deployment" | "action" | "worker" | null>(null);
   const [staleDataNotice, setStaleDataNotice] = useState(false);
   const isOperationalLineup = pathname.startsWith("/admin/lineups/session/");
 
-  const ensureFresh = useCallback(async () => {
+  const ensureFresh = useCallback(async (force = false) => {
     if (staleReason) return false;
+    if (!force && Date.now() - lastFreshAtRef.current < FRESH_CHECK_CACHE_MS) return true;
     if (checkInFlightRef.current) return checkInFlightRef.current;
     checkInFlightRef.current = fetch("/api/app-version", { cache: "no-store", headers: { "Cache-Control": "no-cache" } })
       .then(async (response) => {
@@ -45,9 +48,13 @@ export function AppFreshnessProvider({ clientBuild, children }: { clientBuild: s
           setStaleReason("deployment");
           return false;
         }
+        lastFreshAtRef.current = Date.now();
         return true;
       })
-      .catch(() => true)
+      .catch(() => {
+        lastFreshAtRef.current = Date.now();
+        return true;
+      })
       .finally(() => { checkInFlightRef.current = null; });
     return checkInFlightRef.current;
   }, [clientBuild, staleReason]);
@@ -64,7 +71,7 @@ export function AppFreshnessProvider({ clientBuild, children }: { clientBuild: s
 
   useEffect(() => {
     void ensureFresh();
-    const onFocus = () => { void ensureFresh(); };
+    const onFocus = () => { void ensureFresh(true); };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
         hiddenAtRef.current = Date.now();
@@ -72,7 +79,7 @@ export function AppFreshnessProvider({ clientBuild, children }: { clientBuild: s
       }
       const hiddenFor = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
       hiddenAtRef.current = null;
-      void ensureFresh().then((fresh) => {
+      void ensureFresh(true).then((fresh) => {
         if (!fresh || !isOperationalLineup || hiddenFor < RESUME_REFRESH_MS) return;
         if (dirtyRef.current) setStaleDataNotice(true);
         else refreshOperationalData();
