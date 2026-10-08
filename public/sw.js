@@ -1,4 +1,4 @@
-const CACHE_VERSION = "qcrc-pwa-v8";
+const CACHE_VERSION = "qcrc-pwa-v9";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 const OFFLINE_URL = "/offline";
@@ -57,7 +57,11 @@ async function cacheFirstStaticAsset(request) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)));
+  event.waitUntil(
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener("activate", (event) => {

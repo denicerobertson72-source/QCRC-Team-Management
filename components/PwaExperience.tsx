@@ -62,15 +62,15 @@ export function PwaExperience() {
     }
 
     let cancelled = false;
-    const handleControllerChange = () => {
-      if (cancelled) return;
-      console.info("[qcrc-version] service worker controller changed");
-      notifyServiceWorkerUpdate();
+    const requestWorkerUpdate = () => {
+      void navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => undefined);
     };
+    const onFocus = () => requestWorkerUpdate();
+    const onVisibility = () => { if (document.visibilityState === "visible") requestWorkerUpdate(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
 
-    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-
-    void navigator.serviceWorker.register("/sw.js").then((registration) => {
+    void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => {
       if (cancelled) return;
       void registration.update().catch(() => undefined);
 
@@ -95,9 +95,10 @@ export function PwaExperience() {
 
     return () => {
       cancelled = true;
-      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [notifyServiceWorkerUpdate]);
 
   async function handleInstallClick() {
     if (!installEvent) return;
