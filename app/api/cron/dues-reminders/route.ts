@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
   const { data: profiles, error } = await admin
     .from("profiles")
-    .select("id, full_name, email, dues_renewal_date, boat_storage_fee_renewal_date, usrowing_membership_date, safesport_date, status")
+    .select("id, full_name, email, dues_renewal_date, usrowing_membership_date, safesport_date, status")
     .eq("status", "active")
     .neq("email", "");
 
@@ -76,32 +76,6 @@ export async function GET(request: Request) {
         renewal_date: profile.dues_renewal_date,
       });
       if (shouldSend) lines.push(`Annual dues renew on ${profile.dues_renewal_date}. This is your 1 week reminder.`);
-    }
-    if (profile.boat_storage_fee_renewal_date === in30) {
-      const shouldSend = await markNotification(
-        admin,
-        `storage-30:${profile.id}:${profile.boat_storage_fee_renewal_date}`,
-        profile.id,
-        {
-          category: "boat_storage_fee",
-          days_before: 30,
-          renewal_date: profile.boat_storage_fee_renewal_date,
-        },
-      );
-      if (shouldSend) lines.push(`Boat storage fee renews on ${profile.boat_storage_fee_renewal_date}. This is your 1 month reminder.`);
-    }
-    if (profile.boat_storage_fee_renewal_date === in7) {
-      const shouldSend = await markNotification(
-        admin,
-        `storage-7:${profile.id}:${profile.boat_storage_fee_renewal_date}`,
-        profile.id,
-        {
-          category: "boat_storage_fee",
-          days_before: 7,
-          renewal_date: profile.boat_storage_fee_renewal_date,
-        },
-      );
-      if (shouldSend) lines.push(`Boat storage fee renews on ${profile.boat_storage_fee_renewal_date}. This is your 1 week reminder.`);
     }
     if (profile.usrowing_membership_date) {
       const renewalDate = addYears(profile.usrowing_membership_date, 1);

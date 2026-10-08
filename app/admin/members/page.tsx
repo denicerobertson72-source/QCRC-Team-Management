@@ -72,7 +72,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, sms_opt_in, role, status, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date",
+        "id, full_name, email, phone, sms_opt_in, role, status, skill_level, weight_class, owns_private_boat",
       )
       .order("full_name"),
     supabase
@@ -184,7 +184,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
             <strong>Expected column names</strong>
             <p className="muted">
               `email`, `full_name`, `phone`, `role`, `status`, `skill_level`, `weight_class`,
-              `coached_training_group`, `owns_private_boat`, `boat_storage_fee_ok`, `boat_storage_fee_renewal_date`, `sms_opt_in`
+              `coached_training_group`, `owns_private_boat`, `sms_opt_in`
             </p>
             <p className="muted">
               Dates should be in `YYYY-MM-DD` format. Boolean fields accept `true/false`, `yes/no`, or `1/0`. Coached training group accepts `Beginner/Intermediate`, `BI`, `Advanced`, `None`, or blank.

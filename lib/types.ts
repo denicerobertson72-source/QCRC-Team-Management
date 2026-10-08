@@ -27,9 +27,6 @@ export type ProfileSummary = {
   usrowing_membership_date?: string | null;
   safesport_date?: string | null;
   owns_private_boat?: boolean;
-  boat_storage_fee_ok?: boolean;
-  boat_storage_fee_renewal_date?: string | null;
-  boat_storage_fee_last_paid_at?: string | null;
   membership_type: string;
   skill_level: "Beginner" | "Intermediate" | "Advanced" | "Elite" | string;
   weight_class: "Lightweight" | "Mid-weight" | "Heavyweight" | string;

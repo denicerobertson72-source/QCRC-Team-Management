@@ -6,7 +6,7 @@ import { ensureProfile, ensureSiteAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { easternLocalInputToIso, formatEasternDateTime, programMonthFromInput } from "@/lib/time";
-import { formatCurrencyStatusLine, sendTransactionalEmail } from "@/lib/email";
+import { sendTransactionalEmail } from "@/lib/email";
 import { deriveReservationEndLocal } from "@/lib/reservations";
 import { sendSms } from "@/lib/sms";
 import { appendCrewNamesToNotes, splitNotesAndCrew } from "@/lib/crew";
@@ -779,7 +779,7 @@ export async function importMembersCsvAdminAction(formData: FormData) {
   const { data: existingProfiles, error: existingProfilesError } = await admin
     .from("profiles")
     .select(
-      "id, email, full_name, phone, role, status, skill_level, weight_class, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date, sms_opt_in",
+      "id, email, full_name, phone, role, status, skill_level, weight_class, owns_private_boat, sms_opt_in",
     );
   if (existingProfilesError) throw existingProfilesError;
   const { data: existingTrainingAssignments, error: existingTrainingError } = await admin
@@ -856,9 +856,6 @@ export async function importMembersCsvAdminAction(formData: FormData) {
       skill_level: csvTextValue(record.skill_level) ?? existingProfile?.skill_level ?? "Beginner",
       weight_class: csvTextValue(record.weight_class) ?? existingProfile?.weight_class ?? "Mid-weight",
       owns_private_boat: csvBooleanValue(record.owns_private_boat) ?? existingProfile?.owns_private_boat ?? false,
-      boat_storage_fee_ok: csvBooleanValue(record.boat_storage_fee_ok) ?? existingProfile?.boat_storage_fee_ok ?? false,
-      boat_storage_fee_renewal_date:
-        csvTextValue(record.boat_storage_fee_renewal_date) ?? existingProfile?.boat_storage_fee_renewal_date ?? null,
       sms_opt_in: csvBooleanValue(record.sms_opt_in) ?? existingProfile?.sms_opt_in ?? false,
     };
 
@@ -1361,7 +1358,7 @@ export async function recordMarinaGateStatusAction(formData: FormData) {
 }
 
 export async function privateBoatLaunchAction(formData: FormData) {
-  const { supabase, user, profile } = await ensureProfile();
+  const { supabase, user } = await ensureProfile();
   const privateOutingId = String(formData.get("private_outing_id") ?? "");
   const location = String(formData.get("location") ?? "");
   const direction = String(formData.get("river_direction") ?? "");
@@ -1377,7 +1374,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
 
   const { data: privateBoatProfile, error: profileError } = await supabase
     .from("profiles")
-    .select("full_name, status, owns_private_boat, boat_storage_fee_ok")
+    .select("full_name, status, owns_private_boat")
     .eq("id", user.id)
     .single();
   if (profileError) throw profileError;
@@ -1432,7 +1429,7 @@ export async function privateBoatLaunchAction(formData: FormData) {
   }
 
   await notifyLaunchSubscribers(privateOutingId, user.id, {
-    rower_name: rowerNameFromProfile(profile),
+    rower_name: privateBoatProfile.full_name || "A QCRC member",
     launch_comment: launchComment || null,
     occurred_at: new Date().toISOString(),
   });
@@ -1844,9 +1841,6 @@ export async function updateMemberAdminAction(formData: FormData) {
   const phone = String(formData.get("phone") ?? "").trim();
   const smsOptIn = String(formData.get("sms_opt_in") ?? "false") === "true";
   const ownsPrivateBoat = String(formData.get("owns_private_boat") ?? "false") === "true";
-  const boatStorageFeeOk = String(formData.get("boat_storage_fee_ok") ?? "false") === "true";
-  const boatStorageFeeRenewalDateRaw = String(formData.get("boat_storage_fee_renewal_date") ?? "");
-  const boatStorageFeeRenewalDate = ownsPrivateBoat ? boatStorageFeeRenewalDateRaw || null : null;
   const skillLevel = String(formData.get("skill_level") ?? "Beginner");
   const weightClass = String(formData.get("weight_class") ?? "Mid-weight");
   const trainingGroupRaw = String(formData.get("training_group") ?? "").trim();
@@ -1858,7 +1852,7 @@ export async function updateMemberAdminAction(formData: FormData) {
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from("profiles")
-    .select("full_name, email, phone, sms_opt_in, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date")
+    .select("full_name, email, phone, sms_opt_in, owns_private_boat")
     .eq("id", memberId)
     .single();
   if (existingMemberError) throw existingMemberError;
@@ -1901,10 +1895,6 @@ export async function updateMemberAdminAction(formData: FormData) {
     skill_level: skillLevel,
     weight_class: weightClass,
     owns_private_boat: ownsPrivateBoat,
-    boat_storage_fee_ok: ownsPrivateBoat ? boatStorageFeeOk : false,
-    boat_storage_fee_renewal_date: boatStorageFeeRenewalDate,
-    boat_storage_fee_last_paid_at:
-      ownsPrivateBoat && boatStorageFeeOk && !existingMember.boat_storage_fee_ok ? new Date().toISOString() : ownsPrivateBoat ? undefined : null,
   };
 
   const { error } = await supabase
@@ -1939,26 +1929,6 @@ export async function updateMemberAdminAction(formData: FormData) {
       .eq("member_id", memberId)
       .eq("program_type", "coached_training");
     if (deleteError) throw deleteError;
-  }
-
-  const paymentLines: string[] = [];
-  if (ownsPrivateBoat && boatStorageFeeOk && !existingMember.boat_storage_fee_ok) {
-    paymentLines.push(formatCurrencyStatusLine("Boat storage fee", boatStorageFeeOk, boatStorageFeeRenewalDate));
-  }
-
-  if (existingMember.email && paymentLines.length > 0) {
-    try {
-      await sendTransactionalEmail({
-        to: existingMember.email,
-        subject: "QCRC payment confirmation",
-        text: `Hello ${existingMember.full_name},\n\nThe following payment status was confirmed by club admin:\n${paymentLines.join("\n")}\n\nThank you.\nQCRC`,
-        html: `<p>Hello ${existingMember.full_name},</p><p>The following payment status was confirmed by club admin:</p><ul>${paymentLines
-          .map((line) => `<li>${line}</li>`)
-          .join("")}</ul><p>Thank you.<br/>QCRC</p>`,
-      });
-    } catch {
-      // Payment updates should not fail because outbound email is unavailable.
-    }
   }
 
   revalidatePath("/admin/members");

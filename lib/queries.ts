@@ -197,7 +197,7 @@ export async function getMyProfileSummary() {
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, email, phone, sms_opt_in, sms_opt_in_at, role, status, dues_ok, dues_renewal_date, dues_last_paid_at, usrowing_membership_date, safesport_date, owns_private_boat, boat_storage_fee_ok, boat_storage_fee_renewal_date, boat_storage_fee_last_paid_at, membership_type, skill_level, weight_class",
+      "id, full_name, email, phone, sms_opt_in, sms_opt_in_at, role, status, dues_ok, dues_renewal_date, dues_last_paid_at, usrowing_membership_date, safesport_date, owns_private_boat, membership_type, skill_level, weight_class",
     )
     .eq("id", user.id)
     .single();

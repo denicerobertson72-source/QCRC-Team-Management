@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { updateMemberAdminAction } from "@/lib/actions";
@@ -15,8 +14,6 @@ type MemberAdminFormProps = {
     phone: string | null;
     sms_opt_in: boolean | null;
     owns_private_boat: boolean | null;
-    boat_storage_fee_ok: boolean | null;
-    boat_storage_fee_renewal_date: string | null;
     skill_level: string;
     weight_class: string;
     training_group?: string | null;
@@ -24,8 +21,6 @@ type MemberAdminFormProps = {
 };
 
 export function MemberAdminForm({ member }: MemberAdminFormProps) {
-  const [ownsPrivateBoat, setOwnsPrivateBoat] = useState(Boolean(member.owns_private_boat));
-
   return (
     <form action={updateMemberAdminAction} className="form-grid">
       <input type="hidden" name="member_id" value={member.id} />
@@ -69,32 +64,12 @@ export function MemberAdminForm({ member }: MemberAdminFormProps) {
       <Field label="Owns Private Boat">
         <select
           name="owns_private_boat"
-          defaultValue={ownsPrivateBoat ? "true" : "false"}
-          onChange={(event) => setOwnsPrivateBoat(event.target.value === "true")}
+          defaultValue={member.owns_private_boat ? "true" : "false"}
         >
           <option value="false">no</option>
           <option value="true">yes</option>
         </select>
       </Field>
-
-      {ownsPrivateBoat ? (
-        <>
-          <Field label="Boat Storage Fee">
-            <select name="boat_storage_fee_ok" defaultValue={member.boat_storage_fee_ok ? "true" : "false"}>
-              <option value="true">paid</option>
-              <option value="false">due</option>
-            </select>
-          </Field>
-
-          <Field label="Boat Storage Renewal Date">
-            <input
-              name="boat_storage_fee_renewal_date"
-              type="date"
-              defaultValue={member.boat_storage_fee_renewal_date ?? ""}
-            />
-          </Field>
-        </>
-      ) : null}
 
       <Field label="Skill Level">
         <select name="skill_level" defaultValue={member.skill_level}>
