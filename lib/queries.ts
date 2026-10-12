@@ -284,6 +284,37 @@ export async function getBoatAvailabilityBlocks() {
   return (data ?? []) as BoatAvailabilityBlock[];
 }
 
+export type ActiveRegattaBoatHold = {
+  id: string;
+  label: string;
+  created_at: string;
+  boats: Array<{ id: string; name: string }>;
+};
+
+export async function getActiveRegattaBoatHolds() {
+  const { supabase } = await ensureProfile();
+  const { data: holds, error: holdsError } = await supabase
+    .from("regatta_boat_holds")
+    .select("id, label, created_at")
+    .is("released_at", null)
+    .order("created_at", { ascending: false });
+  if (holdsError) throw holdsError;
+
+  const holdIds = (holds ?? []).map((hold) => hold.id);
+  const { data: heldBoats, error: heldBoatsError } = holdIds.length
+    ? await supabase.from("regatta_boat_hold_boats").select("regatta_boat_hold_id, boat_id, boats(id, name)").in("regatta_boat_hold_id", holdIds)
+    : { data: [], error: null };
+  if (heldBoatsError) throw heldBoatsError;
+
+  const boatsByHold = new Map<string, Array<{ id: string; name: string }>>();
+  for (const heldBoat of heldBoats ?? []) {
+    const boat = Array.isArray(heldBoat.boats) ? heldBoat.boats[0] : heldBoat.boats;
+    if (!boat) continue;
+    boatsByHold.set(heldBoat.regatta_boat_hold_id, [...(boatsByHold.get(heldBoat.regatta_boat_hold_id) ?? []), { id: boat.id, name: boat.name }]);
+  }
+  return (holds ?? []).map((hold) => ({ ...hold, boats: boatsByHold.get(hold.id) ?? [] })) as ActiveRegattaBoatHold[];
+}
+
 export async function getProgramSignupState() {
   const { supabase, user } = await ensureProfile();
   const { data, error } = await supabase

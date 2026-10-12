@@ -19,7 +19,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
     <>
       <TopNav />
       <main className="stack">
-        <PageTitle title="Admin: Boats" subtitle="Add boats and set out-of-service status." />
+        <PageTitle title="Admin: Boats" subtitle="Add boats and set their operational condition. Temporary restrictions, such as regatta holds, are managed separately in Availability." />
 
         {params.import_status && params.import_message ? (
           <FlashNotice
@@ -95,7 +95,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
               <option value="Heavyweight">Heavyweight</option>
             </select>
           </Field>
-          <Field label="Status">
+          <Field label="Boat condition">
             <select name="status" defaultValue="available">
               <option value="available">available</option>
               <option value="maintenance">out of service (maintenance)</option>
@@ -152,7 +152,7 @@ export default async function AdminBoatsPage({ searchParams }: { searchParams: S
                   <option value="Heavyweight">Heavyweight</option>
                 </select>
               </Field>
-              <Field label="Status">
+              <Field label="Boat condition">
                 <select name="status" defaultValue={boat.status}>
                   <option value="available">available</option>
                   <option value="maintenance">out of service (maintenance)</option>

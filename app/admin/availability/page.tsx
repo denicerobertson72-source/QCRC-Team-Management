@@ -8,7 +8,8 @@ import {
   deleteBoatAvailabilityBlockAdminAction,
   updateBoatAvailabilityBlockAdminAction,
 } from "@/lib/actions";
-import { getBoatAvailabilityBlocks } from "@/lib/queries";
+import { RegattaBoatHolds } from "@/components/admin/RegattaBoatHolds";
+import { getActiveRegattaBoatHolds, getBoatAvailabilityBlocks, getBoats } from "@/lib/queries";
 import { formatEasternDateTime, toEasternDateTimeLocalValue } from "@/lib/time";
 
 function toInputDateTime(value: string) {
@@ -21,7 +22,11 @@ const WEEKDAYS = [
 ] as const;
 
 export default async function AdminAvailabilityPage() {
-  const blocks = await getBoatAvailabilityBlocks();
+  const [blocks, boats, activeRegattaHolds] = await Promise.all([
+    getBoatAvailabilityBlocks(),
+    getBoats(),
+    getActiveRegattaBoatHolds(),
+  ]);
 
   return (
     <>
@@ -66,6 +71,8 @@ export default async function AdminAvailabilityPage() {
           </Field>
           <Button type="submit">Save Block</Button>
         </form>
+
+        <RegattaBoatHolds boats={boats} activeHolds={activeRegattaHolds} />
 
         <form action={addRecurringBoatAvailabilityBlocksAdminAction} className="card form-grid">
           <h3>Add Recurring Block Series</h3>

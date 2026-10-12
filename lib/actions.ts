@@ -2473,6 +2473,38 @@ export async function deleteBoatAvailabilityBlockAdminAction(formData: FormData)
   revalidatePath("/reserve");
 }
 
+export async function createRegattaBoatHoldAdminAction(formData: FormData) {
+  try {
+    const { supabase } = await assertAdmin();
+    const label = String(formData.get("label") ?? "").trim();
+    const boatIds = [...new Set(formData.getAll("boat_ids").map(String).filter(Boolean))];
+    const { error } = await supabase.rpc("create_regatta_boat_hold", {
+      p_label: label || "Regatta",
+      p_boat_ids: boatIds,
+    });
+    if (error) throw error;
+    revalidatePath("/admin/availability");
+    revalidatePath("/reserve");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to block the selected regatta boats." };
+  }
+}
+
+export async function releaseRegattaBoatHoldAdminAction(formData: FormData) {
+  try {
+    const { supabase } = await assertAdmin();
+    const holdId = String(formData.get("hold_id") ?? "");
+    const { error } = await supabase.rpc("release_regatta_boat_hold", { p_hold_id: holdId });
+    if (error) throw error;
+    revalidatePath("/admin/availability");
+    revalidatePath("/reserve");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unable to release this regatta hold." };
+  }
+}
+
 export async function saveProgramSignupAction(formData: FormData) {
   const { supabase, user } = await ensureProfile();
   const programType = String(formData.get("program_type") ?? "");
