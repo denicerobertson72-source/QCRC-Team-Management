@@ -123,6 +123,7 @@ export default async function RaceLineupPage({ params }: { params: Promise<{ rac
             <span className="muted">{detail.board.is_published ? "Currently published" : "Draft only"}</span>
           </div>
           <LineupBuilder
+            key={`${board.id}:${mastersBoats.map((boat) => `${boat.id}:${boat.seats.map((seat) => `${seat.id}:${seat.member_id ?? ""}`).join(",")}`).join("|")}`}
             boats={mastersBoats}
             roster={roster}
             action={saveLineupAssignmentsAdminAction}

@@ -3028,7 +3028,7 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   stage = "load-board";
   const { data: board, error: boardError } = await supabase
     .from("lineup_boards")
-    .select("board_type, session_id, sessions(session_type)")
+    .select("board_type, session_id, is_published, sessions(session_type)")
     .eq("id", lineupBoardId)
     .maybeSingle();
   if (boardError || !board) {
@@ -3039,6 +3039,9 @@ export async function addLineupBoatAdminAction(formData: FormData) {
   const session = Array.isArray(board.sessions) ? board.sessions[0] : board.sessions;
   const isAdvancedTraining = session?.session_type === "coached_training_advanced";
   const isCoachedTraining = session?.session_type === "coached_training_beginner_intermediate" || isAdvancedTraining;
+  if (isCoachedTraining && board.is_published) {
+    return { ok: false, message: "Unpublish this coached-training lineup before adding boats. Republish after editing so reservations can be reconciled safely." };
+  }
   const isYouthBoatOnly = board.board_type === "racing" && entryType === "youth_boat_only";
   console.info("[advanced-add-boats] board resolved", { isAdvancedTraining, isCoachedTraining });
   stage = "validate";
@@ -3170,13 +3173,18 @@ export async function saveLineupAssignmentsAdminAction(formData: FormData) {
     const seatIds = assignments.map((item) => item.seatId);
     if (new Set(seatIds).size !== seatIds.length) throw new Error("Each lineup seat may only be submitted once.");
     const { data: submittedSeats, error: submittedSeatsError } = seatIds.length
-      ? await supabase.from("lineup_seats").select("id, lineup_boat_id, lineup_boats!inner(lineup_board_id, lineup_boards!inner(board_type))").in("id", seatIds)
+      ? await supabase.from("lineup_seats").select("id, lineup_boat_id, lineup_boats!inner(lineup_board_id, lineup_boards!inner(board_type, is_published, sessions(session_type)))").in("id", seatIds)
       : { data: [], error: null };
     if (submittedSeatsError) throw submittedSeatsError;
     if ((submittedSeats ?? []).length !== seatIds.length) throw new Error("One or more lineup seats no longer exist.");
 
     const boardIds = new Set((submittedSeats ?? []).map((seat: any) => seat.lineup_boats?.lineup_board_id));
     if (boardIds.size > 1) throw new Error("Lineup assignments must belong to one board.");
+    const submittedBoard: any = (submittedSeats?.[0] as any)?.lineup_boats?.lineup_boards;
+    const submittedSession = Array.isArray(submittedBoard?.sessions) ? submittedBoard.sessions[0] : submittedBoard?.sessions;
+    const isPublishedCoachedTraining = submittedBoard?.is_published
+      && (submittedSession?.session_type === "coached_training_advanced" || submittedSession?.session_type === "coached_training_beginner_intermediate");
+    if (isPublishedCoachedTraining) throw new Error("Unpublish this coached-training lineup before changing assignments. Republish after editing so reservations can be reconciled safely.");
     const isRaceBoard = (submittedSeats?.[0] as any)?.lineup_boats?.lineup_boards?.board_type === "racing";
     if (isRaceBoard) {
       const boatIdBySeat = new Map((submittedSeats ?? []).map((seat: any) => [seat.id, seat.lineup_boat_id]));
@@ -3412,6 +3420,18 @@ export async function removeLineupBoatAdminAction(formData: FormData) {
   const { supabase } = await assertAdmin();
   const lineupBoatId = String(formData.get("lineup_boat_id") ?? "");
   const returnTo = String(formData.get("return_to") ?? "");
+
+  const { data: lineupBoat, error: lineupBoatError } = await supabase
+    .from("lineup_boats")
+    .select("lineup_boards!inner(is_published, sessions(session_type))")
+    .eq("id", lineupBoatId)
+    .maybeSingle();
+  if (lineupBoatError) throw lineupBoatError;
+  const lineupBoard: any = lineupBoat?.lineup_boards;
+  const lineupSession = Array.isArray(lineupBoard?.sessions) ? lineupBoard.sessions[0] : lineupBoard?.sessions;
+  if (lineupBoard?.is_published && (lineupSession?.session_type === "coached_training_advanced" || lineupSession?.session_type === "coached_training_beginner_intermediate")) {
+    throw new Error("Unpublish this coached-training lineup before removing boats. Republish after editing so reservations can be reconciled safely.");
+  }
 
   const { error } = await supabase.from("lineup_boats").delete().eq("id", lineupBoatId);
   if (error) throw error;

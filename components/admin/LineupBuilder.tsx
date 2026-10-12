@@ -227,11 +227,20 @@ export function LineupBuilder({
   const assignmentsJson = JSON.stringify(
     localBoats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id }))),
   );
-  const initialAssignmentsJson = useMemo(
+  const serverAssignmentsJson = useMemo(
     () => JSON.stringify(boats.flatMap((boat) => boat.seats.map((seat) => ({ seatId: seat.id, memberId: seat.member_id })))),
     [boats],
   );
-  const hasUnsavedAssignments = assignmentsJson !== initialAssignmentsJson;
+  const [persistedAssignmentsJson, setPersistedAssignmentsJson] = useState(serverAssignmentsJson);
+  const hasUnsavedAssignments = assignmentsJson !== persistedAssignmentsJson;
+  const editingLocked = isPublished && isCoachedTraining;
+
+  // A hard navigation is used after structural changes, but this also keeps the
+  // automatic Racing save indicator truthful without treating a saved assignment
+  // as permanently dirty until the next page load.
+  useEffect(() => {
+    setPersistedAssignmentsJson(serverAssignmentsJson);
+  }, [serverAssignmentsJson]);
 
   useEffect(() => {
     setLineupDirty(hasUnsavedAssignments);
@@ -256,7 +265,7 @@ export function LineupBuilder({
             showActionError("Unable to save rower", result.message ?? "The rower assignment could not be saved. Please try again.");
             return;
           }
-          setLineupDirty(false);
+          setPersistedAssignmentsJson(assignmentsJson);
         } catch (error) {
           if (reportActionError(error)) return;
           showActionError("Unable to save rower", "The rower assignment could not be saved. Please try again.");
@@ -365,6 +374,10 @@ export function LineupBuilder({
   async function requestAddSelectedBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isAddingBoats) return;
+    if (hasUnsavedAssignments) {
+      showActionError("Save lineup changes first", "Save the current rower assignments before adding boats so the new page load cannot discard unsaved changes.");
+      return;
+    }
     setIsAddingBoats(true);
     setAddStatus("");
     const formData = new FormData(event.currentTarget);
@@ -381,7 +394,7 @@ export function LineupBuilder({
         return;
       }
       setAddStatus("Added");
-      window.setTimeout(refreshOperationalData, 250);
+      window.setTimeout(() => window.location.assign(returnTo ?? window.location.href), 250);
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
@@ -393,6 +406,10 @@ export function LineupBuilder({
   async function requestPrivateBoats(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isAddingBoats) return;
+    if (hasUnsavedAssignments) {
+      showActionError("Save lineup changes first", "Save the current rower assignments before adding boats so the new page load cannot discard unsaved changes.");
+      return;
+    }
     setIsAddingBoats(true);
     setAddStatus("");
     const formData = new FormData(event.currentTarget);
@@ -404,7 +421,7 @@ export function LineupBuilder({
         return;
       }
       setAddStatus("Added");
-      window.setTimeout(refreshOperationalData, 250);
+      window.setTimeout(() => window.location.assign(returnTo ?? window.location.href), 250);
     } catch (error) {
       if (reportActionError(error)) return;
       showActionError("Unable to add boats", serverActionFailureMessage(error));
@@ -513,12 +530,18 @@ export function LineupBuilder({
         </div>
       ) : null}
 
+      {editingLocked ? (
+        <div className="card-subtle" role="status">
+          This coached-training lineup is published. Unpublish it before changing boats or rower assignments; republishing will safely reconcile the final reservations.
+        </div>
+      ) : null}
+
       <div className="card lineup-top-actions">
         <div className="row lineup-action-buttons">
           <form ref={saveFormRef} onSubmit={requestSave} className="inline-form">
             <input type="hidden" name="assignments_json" value={assignmentsJson} />
             {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-            <Button type="submit">{isSaving ? "Saving…" : "Save Assignments"}</Button>
+            <Button type="submit" disabled={editingLocked}>{isSaving ? "Saving…" : "Save Assignments"}</Button>
           </form>
           {autoSaveAssignments ? <span className="muted" role="status">{isSaving ? "Saving rower…" : hasUnsavedAssignments ? "Unsaved changes" : "Saved · rower changes also save automatically"}</span> : null}
           {!isPublished && saveAndPublishAction && lineupBoardId ? (
@@ -541,7 +564,7 @@ export function LineupBuilder({
         </div>
       </div>
 
-      {lineupBoardId ? (
+      {lineupBoardId && !editingLocked ? (
         <>
             <form onSubmit={requestAddSelectedBoats} className="card form-grid lineup-add-boat-form">
           <input type="hidden" name="lineup_board_id" value={lineupBoardId} />
@@ -752,7 +775,7 @@ export function LineupBuilder({
               <form action={removeBoatAction} className="inline-form lineup-boat-remove">
                 <input type="hidden" name="lineup_boat_id" value={boat.id} />
                 {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
-                <Button type="submit" variant="secondary">
+                <Button type="submit" variant="secondary" disabled={editingLocked}>
                   Remove Boat
                 </Button>
               </form>
@@ -760,8 +783,11 @@ export function LineupBuilder({
               <div
                 key={seat.id}
                 className="card-subtle row lineup-seat-card"
-                onDragOver={(event) => event.preventDefault()}
+                onDragOver={(event) => {
+                  if (!editingLocked) event.preventDefault();
+                }}
                 onDrop={(event) => {
+                  if (editingLocked) return;
                   event.preventDefault();
                   const memberId = event.dataTransfer.getData("text/member-id");
                   if (!memberId) return;
@@ -773,6 +799,7 @@ export function LineupBuilder({
                 <div className="stack lineup-seat-controls">
                   <select
                     value={seat.member_id ?? ""}
+                    disabled={editingLocked}
                     onChange={(event) => {
                       const nextMemberId = event.target.value;
                       if (!nextMemberId) {
@@ -791,7 +818,7 @@ export function LineupBuilder({
                   </select>
                   <span className="muted">{seat.member_id ? `Assigned: ${memberNameById.get(seat.member_id) ?? seat.member_name}` : "No rower assigned yet."}</span>
                 </div>
-                <Button type="button" variant="secondary" className="lineup-seat-clear" onClick={() => clearSeat(seat.id)}>
+                <Button type="button" variant="secondary" className="lineup-seat-clear" onClick={() => clearSeat(seat.id)} disabled={editingLocked}>
                   Clear
                 </Button>
               </div>
